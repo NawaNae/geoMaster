@@ -24,6 +24,11 @@ jobs:
         run: |
           git gc --prune=now
 
+      - name: 打包乾淨原始碼快照 ZIP (不含 .git)
+        run: |
+          NAME="geoMaster-latest"
+          git archive --format=zip -o "${NAME}.zip" HEAD
+
       - name: 安裝 rclone
         run: sudo apt-get install -y rclone
 
@@ -76,7 +81,7 @@ jobs:
       - name: 增量同步檔案到 Google Drive
         run: |
           # rclone sync 會增量比對，只更新有變動的檔案（diff）
-          # 包含完整 .git 歷史，排除 .github workflow 本身
+          # 包含完整 .git 歷史與最新版 ZIP 快照，排除 .github workflow 本身
           rclone sync . gdrive: \
             --fast-list \
             --drive-use-trash=false \
