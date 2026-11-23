@@ -1416,6 +1416,17 @@ function computePolygonStyle(townObj) {
       };
     }
     const isTile = state.mapLayer !== "vector";
+    if (!state.showDistrictBorders && !isTile) {
+      // Seal sub-pixel HTML5 Canvas seams between adjacent townships with matching stroke+fill so zero district shapes leak at any zoom
+      return {
+        stroke: true,
+        color: "#253e63",
+        opacity: 1,
+        weight: 1.1,
+        fillColor: "#253e63",
+        fillOpacity: 1
+      };
+    }
     return {
       stroke: state.showDistrictBorders,
       color: state.showDistrictBorders

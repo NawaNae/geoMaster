@@ -556,9 +556,19 @@ runSection("3.PinDropGameplayAndAntiSpoiler", () => {
   s.missedTowns.add(xiulin.id);
   const stFangyuanPlacing = sb.computePolygonStyle(fangyuan);
   const stXiulinPlacing = sb.computePolygonStyle(xiulin);
-  check(stFangyuanPlacing.stroke === false && stXiulinPlacing.stroke === false, "3c.AntiSpoiler.PolygonStrokeHidden", "Polygon strokes must be hidden when showDistrictBorders is false in pin_drop");
+  check(
+    stFangyuanPlacing.color === stFangyuanPlacing.fillColor &&
+      stXiulinPlacing.color === stXiulinPlacing.fillColor &&
+      stFangyuanPlacing.fillColor === "#253e63" &&
+      stFangyuanPlacing.fillOpacity === 1,
+    "3c.AntiSpoiler.VectorSeamSealed",
+    `Vector silhouette with borders off must seal sub-pixel Canvas seams using matching stroke+fill #253e63 @ 1.0, got stroke=${stFangyuanPlacing.color} fill=${stFangyuanPlacing.fillColor} @ ${stFangyuanPlacing.fillOpacity}`
+  );
   check(stFangyuanPlacing.fillColor === stXiulinPlacing.fillColor, "3c.AntiSpoiler.NoUnlockedOrMissedFillLeak", "Unlocked/missed polygon fills must be suppressed during pin_drop placing");
-  check(stFangyuanPlacing.fillColor === "#253e63" && stFangyuanPlacing.fillOpacity === 0.96, "3c.VectorSilhouetteContrast", `Expected high-contrast vector fill #253e63 @ 0.96, got ${stFangyuanPlacing.fillColor} @ ${stFangyuanPlacing.fillOpacity}`);
+  s.mapLayer = "satellite";
+  const stFangyuanSat = sb.computePolygonStyle(fangyuan);
+  check(stFangyuanSat.stroke === false, "3c.AntiSpoiler.TilePolygonStrokeHidden", "Tile basemap polygon strokes must be hidden when showDistrictBorders is false in pin_drop");
+  s.mapLayer = "vector";
   check(elements["map-rail-control-pill"].classList.contains("hidden") && elements["btn-leader-mode"].classList.contains("hidden"), "3c.Declutter.MapToolbarControlsHidden", "Non-applicable Free-Mode toolbar controls must be hidden during pin_drop");
 
   // 5. Answer text input dock hidden, Pin-Drop control bar visible, Confirm button disabled before click
