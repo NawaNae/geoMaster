@@ -703,9 +703,12 @@ async function switchActiveMapPack(packId, options = {}) {
     renderMapPackSwitcherUI();
   }
 
-  // 12. Pick target if currently in random/satellite quiz mode
+  // 12. Pick target or restart Pin-Drop if currently in an active guided/pin-drop mode
   if (!options.skipReset && typeof state !== "undefined" && state) {
-    if (state.playMode === "target_random" || state.playMode === "satellite_quiz") {
+    if (state.playMode === "pin_drop") {
+      if (typeof clearPinDropLayers === "function") clearPinDropLayers();
+      if (typeof startPinDropGame === "function") startPinDropGame();
+    } else if (state.playMode === "target_random" || state.playMode === "satellite_quiz") {
       if (typeof pickNextTargetRegion === "function") {
         pickNextTargetRegion();
       }

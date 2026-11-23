@@ -11,7 +11,7 @@ const path = require("path");
 const vm = require("vm");
 
 const root = process.argv[2] || path.resolve(__dirname, "..");
-const read = (p) => fs.readFileSync(path.join(root, p), "utf8");
+const read = (p) => fs.readFileSync(path.join(root, p), "utf8").replace(/\r\n/g, "\n");
 
 // 1. Load computeMapZoomScaleMetrics & applyMapZoomVisualVars from js/map-engine.js
 const mapJs = read("js/map-engine.js");

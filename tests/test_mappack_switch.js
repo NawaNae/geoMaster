@@ -376,6 +376,7 @@ function createFullSandbox() {
     "js/poi-engine.js",
     "js/label-engine.js",
     "js/game-logic.js",
+    "js/pindrop-engine.js",
     "js/dashboard-ui.js",
     "js/p2p-engine.js",
     "js/ui-controls.js"
@@ -738,6 +739,16 @@ async function main() {
       `Expected 2/2 groups and 3 unlocked items, got ${stats.completedCounties}/${stats.totalScopeCounties}`
     );
     check(vm.runInContext("state.isGameOver", sandbox) === true, "4.GameplayMock", "Victory triggered at 3/3 in mock_pack");
+
+    // Pin-Drop + MapPack integration: scaleKm, single-layer prompt & candidate pool
+    check(vm.runInContext(`getPinDropScaleKm({ kind: "town" })`, sandbox) === 500, "4.GameplayMock", "Pin-Drop uses mock_pack.mapView.pinDropScaleKm (500)");
+    const pdTarget = vm.runInContext(`buildPinDropTargetFromTown(getActiveItems()[0])`, sandbox);
+    check(
+      pdTarget && pdTarget.promptTitle === "📍 請在地圖上標出：阿爾法" && pdTarget.categoryLabel === "國家",
+      "4.GameplayMock",
+      `Single-layer Pin-Drop target should omit group prefix & use unitLabels.item: ${JSON.stringify(pdTarget)}`
+    );
+    check(vm.runInContext(`buildPinDropCandidatePool().length`, sandbox) === 3, "4.GameplayMock", "Pin-Drop candidate pool matches 3 mock items");
   });
 
   await runSection("5.SuffixCapableSingleLayerPack", async () => {

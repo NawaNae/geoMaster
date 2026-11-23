@@ -23,6 +23,7 @@ function renderSmartLabelsAndLeaderLines() {
 
   svgEl.replaceChildren();
   domEl.replaceChildren();
+  if (state.playMode === "pin_drop") return;
 
   const mapSize = map.getSize();
   const zoom = lastRenderZoom;

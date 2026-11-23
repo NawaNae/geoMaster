@@ -471,6 +471,12 @@ function initMap() {
     renderSmartLabelsAndLeaderLines();
   });
 
+  map.on("click", (ev) => {
+    if (state.playMode === "pin_drop" && typeof handlePinDropMapClick === "function" && ev && ev.latlng) {
+      handlePinDropMapClick(ev.latlng);
+    }
+  });
+
   // Mobile Virtual Keyboard Detection & Dynamic Full-Bleed Viewport Controller
   // Automatically detects when mobile virtual keyboard pops up via visualViewport API:
   // - When keyboard is OPEN: hides the reservable bottom status strip, shrinks #map-container to fit 100% between header and input dock right above the keyboard, and locks scroll at top so map & buttons never drift off-screen!
@@ -1281,6 +1287,29 @@ function unlockMapViewportToTaiwan(options = {}) {
 function setMapBaseLayer(layerKey, forceBypassLock = false) {
   if (
     !forceBypassLock &&
+    state.playMode === "pin_drop" &&
+    !["vector", "terrain", "satellite"].includes(layerKey)
+  ) {
+    if (typeof setFeedback === "function") {
+      setFeedback("📍 標座標模式僅支援無字底圖（純淨向量、無字地形或無字衛星）！", "warn");
+    }
+    return;
+  }
+  if (
+    !forceBypassLock &&
+    state.playMode === "pin_drop" &&
+    state.pinDropLockBaseLayer &&
+    layerKey !== (state.pinDropBaseLayer || "satellite")
+  ) {
+    if (typeof setFeedback === "function") {
+      const layerNames = { satellite: "無字衛星影像", terrain: "無字山地地形", vector: "純淨向量底圖" };
+      const lockedName = layerNames[state.pinDropBaseLayer || "satellite"] || state.pinDropBaseLayer;
+      setFeedback(`🔒 標座標模式已強制鎖定使用「${lockedName}」，無法自由切換！`, "warn");
+    }
+    return;
+  }
+  if (
+    !forceBypassLock &&
     state.playMode === "satellite_quiz" &&
     !state.isGameOver &&
     state.role !== "spectator" &&
@@ -1297,6 +1326,16 @@ function setMapBaseLayer(layerKey, forceBypassLock = false) {
   }
 
   state.mapLayer = layerKey;
+  if (
+    state.playMode === "pin_drop" &&
+    ["vector", "terrain", "satellite"].includes(layerKey) &&
+    (!state.pinDropLockBaseLayer || forceBypassLock)
+  ) {
+    state.pinDropBaseLayer = layerKey;
+    if (typeof syncConfigButtonsUI === "function") {
+      syncConfigButtonsUI();
+    }
+  }
   activeTileLayers.forEach((tl) => map.removeLayer(tl));
   activeTileLayers = [];
 
@@ -1517,11 +1556,13 @@ function rebuildMapLayers(topoData) {
     t.bounds = null;
     t.mainBounds = null;
     t.mainPoint = null;
+    t.geojsonGeometry = null;
   });
   activeGroups.forEach((c) => {
     c.bounds = null;
     c.mainBounds = null;
     c.mainPoint = null;
+    c.geojsonGeometry = null;
   });
 
   if (loadedTopoData && loadedTopoData.townsGeo && Array.isArray(loadedTopoData.townsGeo.features)) {
@@ -1532,6 +1573,16 @@ function rebuildMapLayers(topoData) {
           ? activePack.matchFeatureToItem(p, feat)
           : matchFeatureToTownObj(p);
       if (!townObj) return;
+      if (feat.geometry) {
+        if (!townObj.geojsonGeometry) {
+          townObj.geojsonGeometry = feat.geometry;
+        } else {
+          const prev = townObj.geojsonGeometry;
+          const prevPolys = prev.type === "MultiPolygon" ? prev.coordinates : prev.type === "Polygon" ? [prev.coordinates] : [];
+          const nextPolys = feat.geometry.type === "MultiPolygon" ? feat.geometry.coordinates : feat.geometry.type === "Polygon" ? [feat.geometry.coordinates] : [];
+          townObj.geojsonGeometry = { type: "MultiPolygon", coordinates: [...prevPolys, ...nextPolys] };
+        }
+      }
 
       const polyLayer = L.geoJSON(feat, {
         renderer: canvasRenderer,
@@ -1580,6 +1631,34 @@ function rebuildMapLayers(topoData) {
       const cPt = computeCountyMainPoint(cObj.name);
       if (cPt && Number.isFinite(cPt.lat) && Number.isFinite(cPt.lng)) {
         cObj.mainPoint = cPt;
+      }
+    });
+
+    const normGroup = typeof normalizeActiveInput === "function" ? normalizeActiveInput : normTw;
+    if (loadedTopoData.countiesGeo && Array.isArray(loadedTopoData.countiesGeo.features)) {
+      loadedTopoData.countiesGeo.features.forEach((cFeat) => {
+        const cp = cFeat.properties || {};
+        const rawC = cp.COUNTYNAME || cp.county || cp.name || cp.COUNTY || "";
+        const cNorm = normGroup(rawC);
+        const cObj = activeGroups.find((c) => normGroup(c.name) === cNorm);
+        if (cObj && cFeat.geometry) {
+          cObj.geojsonGeometry = cFeat.geometry;
+        }
+      });
+    }
+    activeGroups.forEach((cObj) => {
+      if (cObj.geojsonGeometry) return;
+      const polyCoords = [];
+      activeItems.forEach((t) => {
+        if (t.countyName !== cObj.name || !t.geojsonGeometry) return;
+        if (t.geojsonGeometry.type === "Polygon" && Array.isArray(t.geojsonGeometry.coordinates)) {
+          polyCoords.push(t.geojsonGeometry.coordinates);
+        } else if (t.geojsonGeometry.type === "MultiPolygon" && Array.isArray(t.geojsonGeometry.coordinates)) {
+          polyCoords.push(...t.geojsonGeometry.coordinates);
+        }
+      });
+      if (polyCoords.length > 0) {
+        cObj.geojsonGeometry = { type: "MultiPolygon", coordinates: polyCoords };
       }
     });
 
@@ -1646,8 +1725,8 @@ function rebuildMapLayers(topoData) {
 }
 
 function bindPolygonEvents(layer, townObj) {
-  layer.on("click", () => {
-    handlePolygonClick(townObj);
+  layer.on("click", (ev) => {
+    handlePolygonClick(townObj, ev);
   });
 }
 
@@ -1659,6 +1738,38 @@ function isTownInScope(townObj) {
 }
 
 function computePolygonStyle(townObj) {
+  if (state.playMode === "pin_drop") {
+    if (typeof isPinDropTargetPolygon === "function" && isPinDropTargetPolygon(townObj)) {
+      return {
+        stroke: true,
+        color: "#6ee7b7",
+        weight: 2.8,
+        fillColor: "#10b981",
+        fillOpacity: 0.48
+      };
+    }
+    const isTile = state.mapLayer !== "vector";
+    if (!state.showDistrictBorders && !isTile) {
+      // Seal sub-pixel HTML5 Canvas seams between adjacent townships with matching stroke+fill so zero district shapes leak at any zoom
+      return {
+        stroke: true,
+        color: "#253e63",
+        opacity: 1,
+        weight: 1.1,
+        fillColor: "#253e63",
+        fillOpacity: 1
+      };
+    }
+    return {
+      stroke: state.showDistrictBorders,
+      color: state.showDistrictBorders
+        ? (isTile ? "rgba(255, 255, 255, 0.52)" : "rgba(148, 163, 184, 0.42)")
+        : "transparent",
+      weight: state.showDistrictBorders ? 0.75 : 0,
+      fillColor: isTile ? "#0f172a" : "#253e63",
+      fillOpacity: isTile ? 0.08 : 0.96
+    };
+  }
   const vState = typeof getActiveViewState === "function" ? getActiveViewState() : state;
   const inScope = isTownInScope(townObj);
   if (!inScope) {

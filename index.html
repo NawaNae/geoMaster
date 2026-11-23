@@ -50,9 +50,9 @@
       <!-- Center: Score, Timer & Top Give-Up Button -->
       <div class="flex items-center gap-1 sm:gap-2 bg-slate-900/90 border border-slate-700/70 rounded-xl sm:rounded-2xl px-2 sm:px-3 py-0.5 sm:py-1 shadow-inner">
         <div class="flex items-center gap-1" data-tip="當前挑戰答對題數與總完成率">
-          <span id="top-metric-label" class="hidden md:inline text-[11px] text-slate-400">進度</span>
-          <span id="top-score-display" class="font-mono-num text-xs sm:text-sm font-bold text-emerald-400">0 / 368</span>
-          <span id="top-percent-display" class="font-mono-num text-[10px] sm:text-xs px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300">0.0%</span>
+          <span id="top-metric-label" class="hidden md:inline text-[11px] text-slate-400 whitespace-nowrap">進度</span>
+          <span id="top-score-display" class="font-mono-num text-xs sm:text-sm font-bold text-emerald-400 whitespace-nowrap">0 / 368</span>
+          <span id="top-percent-display" class="font-mono-num text-[10px] sm:text-xs px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 whitespace-nowrap">0.0%</span>
         </div>
         <div class="h-3.5 w-[1px] bg-slate-700"></div>
         <div class="flex items-center gap-1" data-tip="點擊右側按鈕可切換正計時或倒數計時">
@@ -351,6 +351,24 @@
               </button>
             </form>
 
+            <!-- Pin-Drop Mode Bottom Control Bar (Two-Step Mobile-Friendly Confirm / Next) -->
+            <div id="pindrop-dock-bar" class="hidden flex flex-wrap items-center justify-between gap-2 py-1">
+              <div id="pindrop-coord-status" class="text-xs sm:text-sm font-bold text-sky-300 truncate">
+                👆 請先在地圖上點擊放置預覽圖釘
+              </div>
+              <div class="flex items-center gap-1.5 shrink-0">
+                <button id="btn-pindrop-finish-endless" type="button" class="hidden px-3 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/35 text-amber-200 border border-amber-400/50 font-bold text-xs transition whitespace-nowrap">
+                  🏁 結束並結算
+                </button>
+                <button id="btn-pindrop-confirm" type="button" disabled class="px-4 py-2 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-extrabold text-xs sm:text-sm shadow-lg transition whitespace-nowrap">
+                  📍 確認標記 (Space / Enter)
+                </button>
+                <button id="btn-pindrop-next" type="button" class="hidden px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs sm:text-sm shadow-lg transition whitespace-nowrap">
+                  ➡️ 下一題 (Space / Enter)
+                </button>
+              </div>
+            </div>
+
             <!-- Status Toast & Quick Actions Bar -->
             <div id="input-occludable-footer" class="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
               <div id="feedback-message" class="text-slate-300 font-medium flex items-center gap-1.5 truncate">
@@ -478,7 +496,7 @@
         <div id="multi-category-progress-bars" class="space-y-1.5 my-2.5 p-2.5 rounded-xl bg-slate-950/70 border border-slate-800/90"></div>
 
         <!-- Quick-Jump Unlocked County Chips -->
-        <div class="pt-2 border-t border-slate-800/80">
+        <div id="quick-zoom-counties-section" class="pt-2 border-t border-slate-800/80">
           <div class="flex items-center justify-between text-[11px] text-slate-400 mb-1.5">
             <span id="quick-zoom-group-label">📍 點選已解鎖縣市定位：</span>
             <button id="btn-reset-view-side" type="button" class="text-sky-400 hover:text-sky-300 font-semibold">
@@ -966,6 +984,38 @@
                     <button type="button" data-playmode="target_random" class="playmode-btn px-2 py-1 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-950 text-slate-300" data-tip="由系統隨機高亮指定一個區塊作答">🎯 隨機</button>
                     <button type="button" data-playmode="target_click" class="playmode-btn px-2 py-1 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-950 text-slate-300" data-tip="自己點選地圖區塊作答">👆 點選</button>
                     <button id="btn-playmode-satellite" type="button" data-playmode="satellite_quiz" class="playmode-btn px-2 py-1 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-950 text-slate-300" data-tip="自動對準目標衛星外接框並隱藏區界與地名，支援日間、夜間燈火與日夜混合盲猜">🛰️ 衛星</button>
+                    <button id="btn-playmode-pindrop" type="button" data-playmode="pin_drop" class="playmode-btn px-2 py-1 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-950 text-slate-300" data-tip="給地名標座標模式（類 GeoGuessr）：點擊地圖放置預覽圖釘，確認後計算最近邊界距離與 0–5000 分">📍 給地名標座標</button>
+                  </div>
+                </div>
+                <div id="pindrop-quiz-options-panel" class="hidden p-2.5 rounded-xl bg-slate-950/85 border border-amber-500/35 space-y-2">
+                  <div class="flex flex-wrap items-center justify-between gap-1.5">
+                    <span class="text-[11px] font-extrabold text-amber-300">📍 每局出題回合數</span>
+                    <div class="flex flex-wrap items-center gap-1">
+                      <button type="button" data-pindrop-rounds="5" class="pindrop-rounds-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">5 題</button>
+                      <button type="button" data-pindrop-rounds="10" class="pindrop-rounds-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border transition bg-amber-500/25 border-amber-400 text-amber-200 shadow">10 題</button>
+                      <button type="button" data-pindrop-rounds="20" class="pindrop-rounds-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">20 題</button>
+                      <button type="button" data-pindrop-rounds="0" class="pindrop-rounds-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">♾️ 無盡</button>
+                    </div>
+                  </div>
+                  <div class="flex flex-wrap items-center justify-between gap-1.5 pt-1 border-t border-slate-800/80">
+                    <span class="text-[11px] font-extrabold text-sky-300">🗺️ 無字底圖選擇</span>
+                    <div class="flex flex-wrap items-center gap-1">
+                      <button type="button" data-pindrop-layer="satellite" class="pindrop-layer-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border transition bg-sky-500/25 border-sky-400 text-sky-200 shadow">🛰️ 無字衛星</button>
+                      <button type="button" data-pindrop-layer="terrain" class="pindrop-layer-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">⛰️ 無字地形</button>
+                      <button type="button" data-pindrop-layer="vector" class="pindrop-layer-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">🗺️ 純輪廓</button>
+                    </div>
+                  </div>
+                  <div class="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800/80 text-[11px]">
+                    <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="勾選後強制鎖定上方指定的底圖，作答期間不可自由切換；不勾選時可隨時切換且每題會沿用上一題底圖">
+                      <input id="chk-pindrop-lock-layer" type="checkbox" class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-rose-500 accent-rose-400 cursor-pointer" />
+                      <span class="font-bold text-rose-200">🔒 強制鎖定底圖（遊玩中不可切換）</span>
+                    </label>
+                  </div>
+                  <div class="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800/80 text-[11px]">
+                    <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="預設關閉區界（僅留台灣海岸線外輪廓），開啟後將顯示鄉鎮市區邊界格線">
+                      <input id="chk-pindrop-show-borders" type="checkbox" class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-amber-500 accent-amber-400 cursor-pointer" />
+                      <span class="font-bold text-amber-200">📐 顯示鄉鎮市區界線（預設隱藏防看形狀秒殺）</span>
+                    </label>
                   </div>
                 </div>
                 <div id="satellite-quiz-options-panel" class="hidden p-2.5 rounded-xl bg-slate-950/85 border border-sky-500/35 space-y-2">
@@ -1907,6 +1957,58 @@
     </div>
   </div>
 
+  <!-- MODAL 6B: PIN-DROP SUMMARY SCORECARD -->
+  <div id="modal-pindrop-summary" class="hidden fixed inset-0 z-[675] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overscroll-contain">
+    <div class="apple-glass rounded-3xl max-w-lg w-full p-4 sm:p-6 border border-amber-500/45 shadow-2xl max-h-[90dvh] flex flex-col overflow-hidden space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
+        <div class="flex items-center gap-2.5">
+          <div class="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-xl">
+            📍
+          </div>
+          <div>
+            <h3 class="text-base sm:text-lg font-black text-white">給地名標座標 · 挑戰結算</h3>
+            <p class="text-xs text-slate-400">GeoGuessr 風格最近邊界距離計分（單題滿分 5,000 分）</p>
+          </div>
+        </div>
+        <button id="btn-pindrop-close-summary" type="button" aria-label="關閉" class="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-bold">✕</button>
+      </div>
+
+      <div class="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3 shrink-0">
+        <div class="flex items-baseline justify-between gap-2">
+          <span class="text-xs font-bold text-slate-400">本局累積總分</span>
+          <div class="flex items-baseline gap-1.5">
+            <span id="pindrop-summary-total-score" class="text-2xl sm:text-3xl font-black text-amber-300 font-mono-num">0</span>
+            <span id="pindrop-summary-max-score" class="text-xs sm:text-sm font-bold text-slate-400 font-mono-num">/ 50,000 分</span>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/80 text-xs">
+          <div class="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800">
+            <div class="text-[10px] text-slate-400 font-semibold">📏 平均誤差距離</div>
+            <div id="pindrop-summary-avg-dist" class="text-sm sm:text-base font-bold text-sky-300 font-mono-num mt-0.5">0.0 km</div>
+          </div>
+          <div class="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800">
+            <div class="text-[10px] text-slate-400 font-semibold">🎯 最準一題</div>
+            <div id="pindrop-summary-best-round" class="text-xs sm:text-sm font-bold text-emerald-300 break-words leading-snug mt-0.5">尚無紀錄</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex-1 min-h-0 flex flex-col space-y-1.5">
+        <div class="text-xs font-extrabold text-sky-300 px-1">📋 每題標記誤差與得分明細</div>
+        <div id="pindrop-summary-list" class="flex-1 overflow-y-auto overscroll-contain space-y-1.5 pr-1"></div>
+      </div>
+
+      <div class="pt-3 border-t border-slate-800 flex flex-wrap items-center justify-end gap-2 shrink-0">
+        <button id="btn-pindrop-exit-mode" type="button" class="px-3.5 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/35 text-rose-300 border border-rose-500/40 font-bold text-xs transition">
+          ✕ 退出標座標模式
+        </button>
+        <button id="btn-pindrop-play-again" type="button" class="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs sm:text-sm shadow-lg transition">
+          🔄 再玩一局
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL 7: OPPONENT FINISHED NOTIFICATION -->
   <div id="modal-opponent-finished" class="hidden fixed inset-0 z-[680] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overscroll-contain">
     <div class="apple-glass rounded-3xl max-w-md w-full p-6 border border-amber-500/50 shadow-2xl space-y-4 text-center">
@@ -2109,6 +2211,19 @@
     </div>
   </template>
 
+  <template id="tpl-pindrop-history-row">
+    <div class="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-slate-900/85 border border-slate-800 text-xs">
+      <div class="flex items-center gap-2 min-w-0">
+        <span class="pindrop-row-round font-mono-num font-bold text-slate-400 shrink-0"></span>
+        <span class="pindrop-row-title font-bold text-white truncate"></span>
+      </div>
+      <div class="flex items-center gap-2 shrink-0 font-mono-num">
+        <span class="pindrop-row-dist text-sky-300"></span>
+        <span class="pindrop-row-score font-extrabold text-amber-300"></span>
+      </div>
+    </div>
+  </template>
+
   <!-- 1. Static Datasets -->
   <script src="data/admin-data.js"></script>
   <script src="data/railisland-shapes.js"></script>
@@ -2128,6 +2243,7 @@
   <script src="js/label-engine.js"></script>
 
   <!-- 4. Game Logic, Target Mode, Progress Dashboard & P2P Multiplayer -->
+  <script src="js/pindrop-engine.js"></script>
   <script src="js/game-logic.js"></script>
   <script src="js/dashboard-ui.js"></script>
   <script src="js/p2p-engine.js"></script>

@@ -60,6 +60,10 @@ function _dashUnlockViewport(opts) {
 }
 
 function updateScoreAndProgressUI() {
+  if (state.playMode === "pin_drop" && typeof renderPinDropDashboardUI === "function") {
+    renderPinDropDashboardUI();
+    return;
+  }
   const vState = typeof getActiveViewState === "function" ? getActiveViewState() : state;
   const allItems = _dashItems();
   const features = _dashFeatures();
@@ -2459,6 +2463,10 @@ function resetGame() {
 
   updatePrefixDropdownUI();
   updateScoreAndProgressUI();
+  if (state.playMode === "pin_drop" && typeof startPinDropGame === "function") {
+    startPinDropGame();
+    return;
+  }
   if (state.playMode === "target_random" || state.playMode === "satellite_quiz") {
     pickNextTargetRegion();
   } else {
