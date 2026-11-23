@@ -536,11 +536,11 @@ runSection("3.PinDropGameplayAndAntiSpoiler", () => {
   check(Boolean(s.pinDrop.currentTarget), "3b.EnterPinDrop.HasCurrentTarget", "state.pinDrop.currentTarget must be populated");
 
   // ANTI-SPOILER CHECKS DURING PLACING PHASE:
-  // 1. Label-free basemap only (vector, terrain, or satellite) and no OpenRailwayMap / road tiles
-  check(["vector", "terrain", "satellite"].includes(s.mapLayer), "3c.AntiSpoiler.LabelFreeBasemap", `Expected label-free basemap, got ${s.mapLayer}`);
+  // 1. Default basemap is satellite (label-free), and street basemap is blocked
+  check(s.pinDropBaseLayer === "satellite" && s.mapLayer === "satellite", "3c.DefaultBasemapSatellite", `Expected default pinDropBaseLayer & mapLayer === 'satellite', got ${s.pinDropBaseLayer} / ${s.mapLayer}`);
   // Try switching to street layer during pin_drop -> must be blocked
   sb.setMapBaseLayer("street");
-  check(s.mapLayer !== "street", "3c.AntiSpoiler.BlockStreetBasemap", "setMapBaseLayer('street') must be blocked during pin_drop");
+  check(s.mapLayer === "satellite", "3c.AntiSpoiler.BlockStreetBasemap", "setMapBaseLayer('street') must be blocked during pin_drop");
 
   // 2. District borders hidden by default
   check(s.showDistrictBorders === false, "3c.AntiSpoiler.DistrictBordersHiddenByDefault", `Expected showDistrictBorders === false by default in pin_drop, got ${s.showDistrictBorders}`);
@@ -554,6 +554,9 @@ runSection("3.PinDropGameplayAndAntiSpoiler", () => {
   // 4. Polygon styles during placing must NOT leak target, unlocked, or missed colors
   s.unlockedTowns.add(fangyuan.id);
   s.missedTowns.add(xiulin.id);
+  const stFangyuanSat = sb.computePolygonStyle(fangyuan);
+  check(stFangyuanSat.stroke === false, "3c.AntiSpoiler.TilePolygonStrokeHidden", "Tile basemap polygon strokes must be hidden when showDistrictBorders is false in pin_drop");
+  s.mapLayer = "vector";
   const stFangyuanPlacing = sb.computePolygonStyle(fangyuan);
   const stXiulinPlacing = sb.computePolygonStyle(xiulin);
   check(
@@ -565,10 +568,9 @@ runSection("3.PinDropGameplayAndAntiSpoiler", () => {
     `Vector silhouette with borders off must seal sub-pixel Canvas seams using matching stroke+fill #253e63 @ 1.0, got stroke=${stFangyuanPlacing.color} fill=${stFangyuanPlacing.fillColor} @ ${stFangyuanPlacing.fillOpacity}`
   );
   check(stFangyuanPlacing.fillColor === stXiulinPlacing.fillColor, "3c.AntiSpoiler.NoUnlockedOrMissedFillLeak", "Unlocked/missed polygon fills must be suppressed during pin_drop placing");
-  s.mapLayer = "satellite";
-  const stFangyuanSat = sb.computePolygonStyle(fangyuan);
-  check(stFangyuanSat.stroke === false, "3c.AntiSpoiler.TilePolygonStrokeHidden", "Tile basemap polygon strokes must be hidden when showDistrictBorders is false in pin_drop");
-  s.mapLayer = "vector";
+  // Switch basemap during Round 1 to 'terrain' via normal toolbar call -> must persist into Round 2!
+  sb.setMapBaseLayer("terrain");
+  check(s.mapLayer === "terrain" && s.pinDropBaseLayer === "terrain", "3c.BasemapPersist.SwitchedInRound1", `Expected terrain synced to pinDropBaseLayer, got ${s.mapLayer} / ${s.pinDropBaseLayer}`);
   check(elements["map-rail-control-pill"].classList.contains("hidden") && elements["btn-leader-mode"].classList.contains("hidden"), "3c.Declutter.MapToolbarControlsHidden", "Non-applicable Free-Mode toolbar controls must be hidden during pin_drop");
 
   // 5. Answer text input dock hidden, Pin-Drop control bar visible, Confirm button disabled before click
@@ -621,6 +623,16 @@ runSection("3.PinDropGameplayAndAntiSpoiler", () => {
   check(s.pinDrop.currentRound === 2, "3g.NextRound.RoundIncremented", `Expected currentRound === 2, got ${s.pinDrop.currentRound}`);
   check(s.pinDrop.guessLatLng === null, "3g.NextRound.GuessCleared", "guessLatLng must be cleared at start of new round");
   check(confirmBtn.disabled === true, "3g.NextRound.ConfirmDisabledAgain", "Confirm button must be disabled at start of new round");
+  check(s.mapLayer === "terrain" && s.pinDropBaseLayer === "terrain", "3g.NextRound.BasemapPersistedFromPrevRound", `Expected Round 2 to keep previous round's basemap ('terrain'), got ${s.mapLayer} / ${s.pinDropBaseLayer}`);
+
+  // Test Forced BaseLayer Lock (強制鎖定底圖)
+  sb.setPinDropLockBaseLayer(true);
+  check(s.pinDropLockBaseLayer === true, "3g.LockLayer.FlagSet", "setPinDropLockBaseLayer(true) must set flag");
+  check(!elements["layer-lock-badge"].classList.contains("hidden") && elements["layer-switcher-pill"].classList.contains("opacity-60"), "3g.LockLayer.VisualLockShown", "Lock badge and dimmed switcher must show when pinDropLockBaseLayer is true");
+  sb.setMapBaseLayer("vector");
+  check(s.mapLayer === "terrain", "3g.LockLayer.BlocksManualSwitch", `Manual basemap switch must be blocked when locked, got ${s.mapLayer}`);
+  sb.setPinDropLockBaseLayer(false);
+  check(elements["layer-lock-badge"].classList.contains("hidden") && !elements["layer-switcher-pill"].classList.contains("opacity-60"), "3g.LockLayer.VisualLockCleared", "Unlocking must hide lock badge and restore switcher opacity");
 
   // Verify viewport reset to TAIWAN_FULL_VIEW_BOUNDS at start of new round
   const mapCenter = sb.map.getCenter();

@@ -99,7 +99,8 @@ const state = {
   satelliteViewportLocked: false,
   satelliteTargetPoint: null,
   pinDropRounds: 10,          // 5 | 10 | 20 | 0 (0 = endless)
-  pinDropBaseLayer: "vector", // 'vector' | 'terrain' | 'satellite'
+  pinDropBaseLayer: "satellite", // 'satellite' | 'terrain' | 'vector'
+  pinDropLockBaseLayer: false,
   pinDropShowBorders: false,
   pinDropSavedBaseLayer: null,
   pinDropSavedDistrictBorders: null,

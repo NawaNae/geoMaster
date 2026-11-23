@@ -569,6 +569,28 @@ function isPinDropPlacing() {
   );
 }
 
+function syncPinDropLayerLockUI() {
+  const isPin = typeof state !== "undefined" && state.playMode === "pin_drop";
+  const locked = Boolean(isPin && state.pinDropLockBaseLayer);
+  const switcher = document.getElementById("layer-switcher-pill");
+  const badge = document.getElementById("layer-lock-badge");
+
+  if (switcher) {
+    switcher.classList.toggle("opacity-60", locked);
+  }
+  if (badge) {
+    if (locked) {
+      const layerNames = { satellite: "衛星", terrain: "地形", vector: "純輪廓" };
+      const lbl = layerNames[state.pinDropBaseLayer || "satellite"] || "底圖";
+      badge.className = "apple-glass-pill px-2.5 py-1 rounded-xl text-[11px] font-bold text-rose-300 border border-rose-500/40 pointer-events-auto";
+      badge.textContent = `🔒 強制${lbl}`;
+      badge.classList.remove("hidden");
+    } else if (state.p2pLayerRule !== "locked") {
+      badge.classList.add("hidden");
+    }
+  }
+}
+
 function ensurePinDropEnvironment() {
   if (typeof state === "undefined" || state.playMode !== "pin_drop") return;
 
@@ -580,18 +602,19 @@ function ensurePinDropEnvironment() {
     state.pinDropSavedDistrictBorders = Boolean(state.showDistrictBorders);
   }
 
-  // 1. Force label-free basemap (vector | terrain | satellite)
+  // 1. Force label-free basemap (default: satellite; preserves player's last chosen basemap across rounds)
   const desiredBase = ["vector", "terrain", "satellite"].includes(state.pinDropBaseLayer)
     ? state.pinDropBaseLayer
-    : ["vector", "terrain", "satellite"].includes(state.mapLayer)
-    ? state.mapLayer
-    : "vector";
+    : "satellite";
   state.pinDropBaseLayer = desiredBase;
-  if (typeof setMapBaseLayer === "function") {
-    setMapBaseLayer(desiredBase, true);
-  } else {
-    state.mapLayer = desiredBase;
+  if (state.mapLayer !== desiredBase) {
+    if (typeof setMapBaseLayer === "function") {
+      setMapBaseLayer(desiredBase, true);
+    } else {
+      state.mapLayer = desiredBase;
+    }
   }
+  syncPinDropLayerLockUI();
 
   // 2. Hide township district borders by default unless explicitly toggled on in Pin-Drop settings
   const showBorders = Boolean(state.pinDropShowBorders);
@@ -646,6 +669,10 @@ function restorePinDropEnvironment() {
   document.getElementById("btn-leader-mode")?.classList.remove("hidden");
   document.getElementById("multi-category-progress-bars")?.classList.remove("hidden");
   document.getElementById("quick-zoom-counties-section")?.classList.remove("hidden");
+  if (state.p2pLayerRule !== "locked") {
+    document.getElementById("layer-switcher-pill")?.classList.remove("opacity-60");
+    document.getElementById("layer-lock-badge")?.classList.add("hidden");
+  }
 
   if (state.pinDropSavedBaseLayer !== null) {
     const prevBase = state.pinDropSavedBaseLayer;
@@ -1005,8 +1032,19 @@ function setPinDropBaseLayer(layerKey) {
   if (!["vector", "terrain", "satellite"].includes(layerKey)) return;
   state.pinDropBaseLayer = layerKey;
   if (typeof syncConfigButtonsUI === "function") syncConfigButtonsUI();
-  if (state.playMode === "pin_drop" && typeof setMapBaseLayer === "function") {
-    setMapBaseLayer(layerKey, true);
+  if (state.playMode === "pin_drop") {
+    if (typeof setMapBaseLayer === "function") {
+      setMapBaseLayer(layerKey, true);
+    }
+    syncPinDropLayerLockUI();
+  }
+}
+
+function setPinDropLockBaseLayer(locked) {
+  state.pinDropLockBaseLayer = Boolean(locked);
+  if (typeof syncConfigButtonsUI === "function") syncConfigButtonsUI();
+  if (state.playMode === "pin_drop") {
+    ensurePinDropEnvironment();
   }
 }
 

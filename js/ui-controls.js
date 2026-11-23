@@ -217,11 +217,15 @@ function syncConfigButtonsUI() {
   });
   document.querySelectorAll(".pindrop-layer-btn").forEach((btn) => {
     const lk = btn.getAttribute("data-pindrop-layer");
-    const isCur = lk === (state.pinDropBaseLayer || "vector");
+    const isCur = lk === (state.pinDropBaseLayer || "satellite");
     btn.className = isCur
       ? "pindrop-layer-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border transition bg-sky-500/25 border-sky-400 text-sky-200 shadow"
       : "pindrop-layer-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition";
   });
+  const chkPinLockLayer = document.getElementById("chk-pindrop-lock-layer");
+  if (chkPinLockLayer) {
+    chkPinLockLayer.checked = Boolean(state.pinDropLockBaseLayer);
+  }
   const chkPinBorders = document.getElementById("chk-pindrop-show-borders");
   if (chkPinBorders) {
     chkPinBorders.checked = Boolean(state.pinDropShowBorders);
@@ -1393,6 +1397,11 @@ function bindAllUIEvents() {
         setPinDropBaseLayer(btn.getAttribute("data-pindrop-layer"));
       }
     });
+  });
+  document.getElementById("chk-pindrop-lock-layer")?.addEventListener("change", (e) => {
+    if (typeof setPinDropLockBaseLayer === "function") {
+      setPinDropLockBaseLayer(e.target.checked);
+    }
   });
   document.getElementById("chk-pindrop-show-borders")?.addEventListener("change", (e) => {
     if (typeof setPinDropShowBorders === "function") {

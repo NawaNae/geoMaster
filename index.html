@@ -992,10 +992,16 @@
                   <div class="flex flex-wrap items-center justify-between gap-1.5 pt-1 border-t border-slate-800/80">
                     <span class="text-[11px] font-extrabold text-sky-300">🗺️ 無字底圖選擇</span>
                     <div class="flex flex-wrap items-center gap-1">
-                      <button type="button" data-pindrop-layer="vector" class="pindrop-layer-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border transition bg-sky-500/25 border-sky-400 text-sky-200 shadow">純輪廓</button>
-                      <button type="button" data-pindrop-layer="terrain" class="pindrop-layer-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">無字地形</button>
-                      <button type="button" data-pindrop-layer="satellite" class="pindrop-layer-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">無字衛星</button>
+                      <button type="button" data-pindrop-layer="satellite" class="pindrop-layer-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border transition bg-sky-500/25 border-sky-400 text-sky-200 shadow">🛰️ 無字衛星</button>
+                      <button type="button" data-pindrop-layer="terrain" class="pindrop-layer-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">⛰️ 無字地形</button>
+                      <button type="button" data-pindrop-layer="vector" class="pindrop-layer-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">🗺️ 純輪廓</button>
                     </div>
+                  </div>
+                  <div class="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800/80 text-[11px]">
+                    <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="勾選後強制鎖定上方指定的底圖，作答期間不可自由切換；不勾選時可隨時切換且每題會沿用上一題底圖">
+                      <input id="chk-pindrop-lock-layer" type="checkbox" class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-rose-500 accent-rose-400 cursor-pointer" />
+                      <span class="font-bold text-rose-200">🔒 強制鎖定底圖（遊玩中不可切換）</span>
+                    </label>
                   </div>
                   <div class="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800/80 text-[11px]">
                     <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="預設關閉區界（僅留台灣海岸線外輪廓），開啟後將顯示鄉鎮市區邊界格線">

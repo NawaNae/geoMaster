@@ -1082,6 +1082,19 @@ function setMapBaseLayer(layerKey, forceBypassLock = false) {
   }
   if (
     !forceBypassLock &&
+    state.playMode === "pin_drop" &&
+    state.pinDropLockBaseLayer &&
+    layerKey !== (state.pinDropBaseLayer || "satellite")
+  ) {
+    if (typeof setFeedback === "function") {
+      const layerNames = { satellite: "無字衛星影像", terrain: "無字山地地形", vector: "純淨向量底圖" };
+      const lockedName = layerNames[state.pinDropBaseLayer || "satellite"] || state.pinDropBaseLayer;
+      setFeedback(`🔒 標座標模式已強制鎖定使用「${lockedName}」，無法自由切換！`, "warn");
+    }
+    return;
+  }
+  if (
+    !forceBypassLock &&
     state.playMode === "satellite_quiz" &&
     !state.isGameOver &&
     state.role !== "spectator" &&
@@ -1098,6 +1111,16 @@ function setMapBaseLayer(layerKey, forceBypassLock = false) {
   }
 
   state.mapLayer = layerKey;
+  if (
+    state.playMode === "pin_drop" &&
+    ["vector", "terrain", "satellite"].includes(layerKey) &&
+    (!state.pinDropLockBaseLayer || forceBypassLock)
+  ) {
+    state.pinDropBaseLayer = layerKey;
+    if (typeof syncConfigButtonsUI === "function") {
+      syncConfigButtonsUI();
+    }
+  }
   activeTileLayers.forEach((tl) => map.removeLayer(tl));
   activeTileLayers = [];
 
