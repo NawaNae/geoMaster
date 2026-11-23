@@ -783,6 +783,7 @@ function updateRoadAndRailwayTileOverlays() {
   railTileLayers = [];
 
   if (!map) return;
+  if (state.playMode === "pin_drop") return;
 
   const effectiveRailRule = state.role === "spectator" ? "free" : state.p2pRailRule;
   if (effectiveRailRule === "ban_rail") {

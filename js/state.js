@@ -98,6 +98,23 @@ const state = {
   satelliteSavedDistrictBorders: null,
   satelliteViewportLocked: false,
   satelliteTargetPoint: null,
+  pinDropRounds: 10,          // 5 | 10 | 20 | 0 (0 = endless)
+  pinDropBaseLayer: "vector", // 'vector' | 'terrain' | 'satellite'
+  pinDropShowBorders: false,
+  pinDropSavedBaseLayer: null,
+  pinDropSavedDistrictBorders: null,
+  pinDrop: {
+    active: false,
+    totalRounds: 10,
+    currentRound: 0,
+    phase: "idle",            // 'idle' | 'placing' | 'revealed' | 'finished'
+    queue: [],
+    currentTarget: null,
+    guessLatLng: null,
+    lastReveal: null,
+    history: [],
+    totalScore: 0
+  },
   mapLayer: "vector",         // 'vector' | 'terrain' | 'street' | 'satellite' | 'satellite_night' | 'satellite_hybrid'
   showRailOverlay: false,     // Default OFF
   transportMode: "off",       // 'off' | 'rail_only' | 'lines_and_stations' | 'stations_only'

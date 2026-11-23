@@ -251,7 +251,7 @@ function getHostSyncConfig(isSettingChange = false, changeLabel = "", changeDeta
       : [],
     quizStationLines: state.stationQuizEnabled ? Array.from(state.quizStationLines) : [],
     difficulty: state.difficulty,
-    playMode: state.playMode,
+    playMode: state.playMode === "pin_drop" ? "free" : state.playMode,
     satelliteStyle: state.satelliteStyle || "day",
     satelliteLockViewport: Boolean(state.satelliteLockViewport),
     timerMode: state.timerMode,
@@ -1332,6 +1332,10 @@ function buildProposedConfigFromPatch(patch) {
 }
 
 function requestOrApplyConfigChange(patch, changeLabel = "比賽設定") {
+  if (patch && patch.playMode === "pin_drop" && (state.roomCode || state.roomId)) {
+    setFeedback("📍 標座標模式目前僅支援單人遊玩！", "warn");
+    return false;
+  }
   // Security Guard: Non-host in a multiplayer room CANNOT change difficulty or rules or broadcast!
   if (!canLocalModifyGameConfig()) {
     setFeedback("🔒 僅房主可調整房間題目設定！", "error");

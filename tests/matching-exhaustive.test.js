@@ -649,16 +649,18 @@ for (const poi of TAIWAN_POI_DATA) {
   }
 }
 
-// 6f. Prefix dropdown hidden & cleared in casual mode, visible in non-casual modes
-resetState({ difficulty: "casual", regionQuizEnabled: true, prefix: "臺北市" });
-sb.updatePrefixDropdownUI();
-check(
-  sb.document.getElementById("prefix-container").classList.contains("hidden") &&
-    sb.document.getElementById("prefix-select").value === "",
-  "6f.CasualPrefixHidden",
-  `Expected #prefix-container hidden and #prefix-select cleared in casual mode`
-);
-for (const diff of ["county_only", "hard_suffix", "hard_full", "master_hierarchy"]) {
+// 6f. Prefix dropdown hidden & cleared in non-prefix modes (casual, county_only, hard_suffix), visible in prefix-required modes (hard_full, master_hierarchy)
+for (const diff of ["casual", "county_only", "hard_suffix"]) {
+  resetState({ difficulty: diff, regionQuizEnabled: true, prefix: "臺北市" });
+  sb.updatePrefixDropdownUI();
+  check(
+    sb.document.getElementById("prefix-container").classList.contains("hidden") &&
+      sb.document.getElementById("prefix-select").value === "",
+    "6f.CasualPrefixHidden",
+    `Expected #prefix-container hidden and #prefix-select cleared in ${diff} mode`
+  );
+}
+for (const diff of ["hard_full", "master_hierarchy"]) {
   resetState({ difficulty: diff, regionQuizEnabled: true });
   sb.updatePrefixDropdownUI();
   check(

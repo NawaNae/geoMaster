@@ -204,6 +204,29 @@ function syncConfigButtonsUI() {
     satNightNotice.classList.toggle("hidden", !showNotice);
   }
 
+  const pinPanel = document.getElementById("pindrop-quiz-options-panel");
+  if (pinPanel) {
+    pinPanel.classList.toggle("hidden", state.playMode !== "pin_drop");
+  }
+  document.querySelectorAll(".pindrop-rounds-btn").forEach((btn) => {
+    const r = parseInt(btn.getAttribute("data-pindrop-rounds"), 10);
+    const isCur = r === (Number.isFinite(Number(state.pinDropRounds)) ? Number(state.pinDropRounds) : 10);
+    btn.className = isCur
+      ? "pindrop-rounds-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border transition bg-amber-500/25 border-amber-400 text-amber-200 shadow"
+      : "pindrop-rounds-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition";
+  });
+  document.querySelectorAll(".pindrop-layer-btn").forEach((btn) => {
+    const lk = btn.getAttribute("data-pindrop-layer");
+    const isCur = lk === (state.pinDropBaseLayer || "vector");
+    btn.className = isCur
+      ? "pindrop-layer-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border transition bg-sky-500/25 border-sky-400 text-sky-200 shadow"
+      : "pindrop-layer-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition";
+  });
+  const chkPinBorders = document.getElementById("chk-pindrop-show-borders");
+  if (chkPinBorders) {
+    chkPinBorders.checked = Boolean(state.pinDropShowBorders);
+  }
+
   ["chk-allow-target-hints", "chk-room-allow-target-hints"].forEach((cid) => {
     const el = document.getElementById(cid);
     if (el) el.checked = Boolean(state.allowTargetHints);
@@ -247,6 +270,12 @@ function setDifficulty(diff) {
 }
 
 function setPlayMode(pm) {
+  if (pm === "pin_drop" && (state.roomCode || state.roomId)) {
+    setFeedback("📍 標座標模式目前僅支援單人遊玩！", "warn");
+    playTone("error");
+    syncConfigButtonsUI();
+    return;
+  }
   if (!canLocalModifyGameConfig()) {
     setFeedback("🔒 僅房主可調整出題方式！", "error");
     playTone("error");
@@ -265,6 +294,9 @@ function setPlayMode(pm) {
   state.targetPoiId = null;
   state.hintLevel = 0;
   state.satelliteOutlineRevealed = false;
+  if (prevPlayMode === "pin_drop" && pm !== "pin_drop" && typeof restorePinDropEnvironment === "function") {
+    restorePinDropEnvironment();
+  }
   if (pm !== "satellite_quiz" && typeof clearSatelliteTargetMarker === "function") {
     clearSatelliteTargetMarker();
   }
@@ -275,7 +307,9 @@ function setPlayMode(pm) {
   }
   syncConfigButtonsUI();
   updateModeBadgeText();
-  if (pm === "target_random" || pm === "satellite_quiz") {
+  if (pm === "pin_drop" && typeof startPinDropGame === "function") {
+    startPinDropGame();
+  } else if (pm === "target_random" || pm === "satellite_quiz") {
     pickNextTargetRegion();
   } else {
     if (typeof updateRoadAndRailwayTileOverlays === "function") updateRoadAndRailwayTileOverlays();
@@ -786,6 +820,7 @@ const MODAL_IDS = [
   "modal-timer",
   "modal-info",
   "modal-settlement",
+  "modal-pindrop-summary",
   "modal-opponent-finished",
   "modal-rematch-confirm"
 ];
@@ -921,6 +956,7 @@ function initHoverAndTouchTipSystem() {
   let hideTimer = null;
 
   const showTipForTarget = (target) => {
+    if (typeof isPinDropPlacing === "function" && isPinDropPlacing()) return;
     const msg = target.getAttribute("data-tip");
     if (!msg) return;
     if (hideTimer) clearTimeout(hideTimer);
@@ -1344,6 +1380,46 @@ function bindAllUIEvents() {
   document.getElementById("chk-satellite-lock-viewport")?.addEventListener("change", (e) => {
     setSatelliteLockViewport(e.target.checked);
   });
+  document.querySelectorAll(".pindrop-rounds-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (typeof setPinDropRounds === "function") {
+        setPinDropRounds(btn.getAttribute("data-pindrop-rounds"));
+      }
+    });
+  });
+  document.querySelectorAll(".pindrop-layer-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (typeof setPinDropBaseLayer === "function") {
+        setPinDropBaseLayer(btn.getAttribute("data-pindrop-layer"));
+      }
+    });
+  });
+  document.getElementById("chk-pindrop-show-borders")?.addEventListener("change", (e) => {
+    if (typeof setPinDropShowBorders === "function") {
+      setPinDropShowBorders(e.target.checked);
+    }
+  });
+  document.getElementById("btn-pindrop-confirm")?.addEventListener("click", () => {
+    if (typeof confirmPinDropGuess === "function") confirmPinDropGuess();
+  });
+  document.getElementById("btn-pindrop-next")?.addEventListener("click", () => {
+    if (typeof nextPinDropRound === "function") nextPinDropRound();
+  });
+  document.getElementById("btn-pindrop-finish-endless")?.addEventListener("click", () => {
+    if (typeof finishPinDropGame === "function") finishPinDropGame();
+  });
+  document.getElementById("btn-pindrop-play-again")?.addEventListener("click", () => {
+    document.getElementById("modal-pindrop-summary")?.classList.add("hidden");
+    if (typeof startPinDropGame === "function") startPinDropGame();
+  });
+  document.getElementById("btn-pindrop-close-summary")?.addEventListener("click", () => {
+    document.getElementById("modal-pindrop-summary")?.classList.add("hidden");
+    if (typeof syncModalBodyScrollLock === "function") syncModalBodyScrollLock();
+  });
+  document.getElementById("btn-pindrop-exit-mode")?.addEventListener("click", () => {
+    document.getElementById("modal-pindrop-summary")?.classList.add("hidden");
+    if (typeof exitPinDropMode === "function") exitPinDropMode();
+  });
 
   document.querySelectorAll(".hub-timer-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -1404,6 +1480,26 @@ function bindAllUIEvents() {
     if (e.isComposing || state.isImeComposing) return;
     const tag = document.activeElement ? document.activeElement.tagName : "";
     const activeId = document.activeElement ? document.activeElement.id : "";
+
+    if (state.playMode === "pin_drop" && (e.key === " " || e.key === "Spacebar" || e.key === "Enter")) {
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      const anyModalOpen = MODAL_IDS.some((id) => {
+        const m = document.getElementById(id);
+        return m && !m.classList.contains("hidden");
+      });
+      if (anyModalOpen) return;
+      if (state.pinDrop && state.pinDrop.phase === "placing" && state.pinDrop.guessLatLng) {
+        if (typeof e.preventDefault === "function") e.preventDefault();
+        if (typeof confirmPinDropGuess === "function") confirmPinDropGuess();
+        return;
+      }
+      if (state.pinDrop && state.pinDrop.phase === "revealed") {
+        if (typeof e.preventDefault === "function") e.preventDefault();
+        if (typeof nextPinDropRound === "function") nextPinDropRound();
+        return;
+      }
+    }
+
     if (tag === "INPUT" && activeId !== "answer-input") return;
 
     const inputEl = document.getElementById("answer-input");
