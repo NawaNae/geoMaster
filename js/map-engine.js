@@ -2,44 +2,205 @@
 // 4. HARDWARE-ACCELERATED CANVAS LEAFLET MAP INITIALIZATION
 // =========================================================================
 if (typeof window.L === "undefined") {
-  // Lightweight offline fallback shim when Leaflet CDN is unreachable (e.g., offline file:// mode)
-  const noopLayer = () => ({
+  // Lightweight offline fallback shim when Leaflet CDN is unreachable (e.g., offline file:// mode or Node VM tests)
+  const toLatLngObj = (pt) => {
+    if (!pt) return null;
+    if (Array.isArray(pt) && pt.length >= 2) {
+      return { lat: Number(pt[0]), lng: Number(pt[1]) };
+    }
+    if (typeof pt === "object" && Number.isFinite(Number(pt.lat)) && Number.isFinite(Number(pt.lng))) {
+      return { lat: Number(pt.lat), lng: Number(pt.lng) };
+    }
+    return null;
+  };
+
+  const makeLatLngBounds = (a, b) => {
+    const bounds = {
+      _sw: { lat: Infinity, lng: Infinity },
+      _ne: { lat: -Infinity, lng: -Infinity },
+      isValid() {
+        return (
+          Number.isFinite(this._sw.lat) &&
+          Number.isFinite(this._sw.lng) &&
+          Number.isFinite(this._ne.lat) &&
+          Number.isFinite(this._ne.lng) &&
+          this._sw.lat <= this._ne.lat &&
+          this._sw.lng <= this._ne.lng
+        );
+      },
+      extend(target) {
+        if (!target) return this;
+        if (typeof target.getSouthWest === "function" && typeof target.getNorthEast === "function") {
+          if (typeof target.isValid === "function" && !target.isValid()) return this;
+          this.extend(target.getSouthWest());
+          this.extend(target.getNorthEast());
+          return this;
+        }
+        if (Array.isArray(target) && target.length > 0 && (Array.isArray(target[0]) || (typeof target[0] === "object" && target[0] !== null))) {
+          target.forEach((item) => this.extend(item));
+          return this;
+        }
+        const pt = toLatLngObj(target);
+        if (pt && Number.isFinite(pt.lat) && Number.isFinite(pt.lng)) {
+          if (pt.lat < this._sw.lat) this._sw.lat = pt.lat;
+          if (pt.lng < this._sw.lng) this._sw.lng = pt.lng;
+          if (pt.lat > this._ne.lat) this._ne.lat = pt.lat;
+          if (pt.lng > this._ne.lng) this._ne.lng = pt.lng;
+        }
+        return this;
+      },
+      pad(bufferRatio = 0) {
+        if (!this.isValid()) return makeLatLngBounds();
+        const r = Number.isFinite(bufferRatio) ? bufferRatio : 0;
+        const hBuffer = Math.max(0.005, (this._ne.lat - this._sw.lat) * r);
+        const wBuffer = Math.max(0.005, (this._ne.lng - this._sw.lng) * r);
+        return makeLatLngBounds(
+          [this._sw.lat - hBuffer, this._sw.lng - wBuffer],
+          [this._ne.lat + hBuffer, this._ne.lng + wBuffer]
+        );
+      },
+      getSouthWest() { return { lat: this._sw.lat, lng: this._sw.lng }; },
+      getNorthEast() { return { lat: this._ne.lat, lng: this._ne.lng }; },
+      getNorthWest() { return { lat: this._ne.lat, lng: this._sw.lng }; },
+      getSouthEast() { return { lat: this._sw.lat, lng: this._ne.lng }; },
+      getCenter() {
+        if (!this.isValid()) return { lat: 23.75, lng: 120.95 };
+        return {
+          lat: (this._sw.lat + this._ne.lat) / 2,
+          lng: (this._sw.lng + this._ne.lng) / 2
+        };
+      },
+      contains(target) {
+        if (!this.isValid()) return false;
+        const pt = toLatLngObj(target);
+        if (!pt) return false;
+        return (
+          pt.lat >= this._sw.lat &&
+          pt.lat <= this._ne.lat &&
+          pt.lng >= this._sw.lng &&
+          pt.lng <= this._ne.lng
+        );
+      }
+    };
+    if (a !== undefined && b !== undefined) {
+      bounds.extend(a);
+      bounds.extend(b);
+    } else if (a !== undefined) {
+      bounds.extend(a);
+    }
+    return bounds;
+  };
+
+  const extractGeoJsonBounds = (geojson) => {
+    const b = makeLatLngBounds();
+    const walkCoords = (coords) => {
+      if (!Array.isArray(coords)) return;
+      if (coords.length >= 2 && typeof coords[0] === "number" && typeof coords[1] === "number") {
+        b.extend([coords[1], coords[0]]);
+        return;
+      }
+      coords.forEach(walkCoords);
+    };
+    const walkObj = (obj) => {
+      if (!obj) return;
+      if (obj.type === "FeatureCollection" && Array.isArray(obj.features)) {
+        obj.features.forEach(walkObj);
+      } else if (obj.type === "Feature" && obj.geometry) {
+        walkObj(obj.geometry);
+      } else if (obj.coordinates) {
+        walkCoords(obj.coordinates);
+      }
+    };
+    walkObj(geojson);
+    if (!b.isValid()) {
+      return makeLatLngBounds([22, 120], [25, 121]);
+    }
+    return b;
+  };
+
+  const noopLayer = (customBounds = null) => ({
+    _bounds: customBounds || makeLatLngBounds([22, 120], [25, 121]),
     addTo() { return this; },
     remove() { return this; },
     clearLayers() { return this; },
     setStyle() { return this; },
+    eachLayer(fn) { if (typeof fn === "function") fn(this); return this; },
     on() { return this; },
     bindTooltip() { return this; },
-    getBounds() { return { isValid: () => true, getNorthWest: () => [25, 121], getSouthEast: () => [22, 120] }; }
+    getBounds() { return this._bounds; }
   });
   window.L = {
-    latLngBounds: () => ({ isValid: () => true, pad: function() { return this; }, getNorthWest: () => [25, 121], getSouthEast: () => [22, 120] }),
+    latLngBounds: (a, b) => makeLatLngBounds(a, b),
     canvas: () => ({}),
     svg: () => ({}),
     layerGroup: () => noopLayer(),
     featureGroup: () => noopLayer(),
     tileLayer: () => noopLayer(),
-    geoJSON: () => noopLayer(),
+    geoJSON: (feat) => noopLayer(extractGeoJsonBounds(feat)),
     polyline: () => noopLayer(),
     circleMarker: () => noopLayer(),
     marker: () => noopLayer(),
     divIcon: () => ({}),
     DomEvent: { stopPropagation() {} },
-    map: () => ({
+    map: (_id, opts = {}) => ({
+      _zoom: typeof opts.zoom === "number" ? opts.zoom : 8,
+      _minZoom: typeof opts.minZoom === "number" ? opts.minZoom : 7,
+      _maxZoom: typeof opts.maxZoom === "number" ? opts.maxZoom : 15,
+      _center: Array.isArray(opts.center) ? { lat: opts.center[0], lng: opts.center[1] } : { lat: 23.75, lng: 120.95 },
+      _maxBounds: opts.maxBounds || null,
+      _layers: new Set(),
       on() { return this; },
-      removeLayer() { return this; },
-      hasLayer() { return false; },
+      addLayer(l) { this._layers.add(l); return this; },
+      removeLayer(l) { this._layers.delete(l); return this; },
+      hasLayer(l) { return this._layers.has(l); },
       getSize: () => ({ x: 960, y: 600, divideBy: () => ({ x: 480, y: 300 }) }),
-      getCenter: () => ({ lat: 23.75, lng: 120.95 }),
-      getZoom: () => 8,
+      getCenter() { return this._center; },
+      getZoom() { return this._zoom; },
+      setZoom(z) { if (Number.isFinite(z)) this._zoom = z; return this; },
+      getMinZoom() { return this._minZoom; },
+      setMinZoom(z) { if (Number.isFinite(z)) this._minZoom = z; return this; },
+      getMaxZoom() { return this._maxZoom; },
+      setMaxZoom(z) { if (Number.isFinite(z)) this._maxZoom = z; return this; },
+      getMaxBounds() { return this._maxBounds; },
+      setMaxBounds(b) { this._maxBounds = b || null; return this; },
+      getBounds() { return this._maxBounds || makeLatLngBounds([20.2, 116.5], [27.4, 123.8]); },
+      getBoundsZoom(b) {
+        if (!b || typeof b.isValid !== "function" || !b.isValid()) return this._zoom || 10;
+        const sw = b.getSouthWest();
+        const ne = b.getNorthEast();
+        const span = Math.max(Math.abs(ne.lat - sw.lat), Math.abs(ne.lng - sw.lng));
+        if (span <= 0.12) return 13;
+        if (span <= 0.25) return 12;
+        if (span <= 0.5) return 11;
+        if (span <= 1.0) return 10;
+        if (span <= 2.0) return 9;
+        return 8;
+      },
       getZoomScale: () => 1,
       project: () => ({ x: 480, y: 300 }),
       latLngToContainerPoint: () => ({ x: 480, y: 300 }),
-      flyTo() {},
-      flyToBounds() {},
-      panTo() {},
-      zoomIn() {},
-      zoomOut() {},
+      fitBounds(b, fitOpts = {}) {
+        if (b && typeof b.isValid === "function" && b.isValid()) {
+          this._center = b.getCenter();
+          const maxZ = typeof fitOpts.maxZoom === "number" ? fitOpts.maxZoom : this._maxZoom;
+          this._zoom = Math.min(maxZ, this.getBoundsZoom(b));
+        }
+        return this;
+      },
+      flyToBounds(b, fitOpts = {}) { return this.fitBounds(b, fitOpts); },
+      flyTo(c, z) {
+        const pt = toLatLngObj(c);
+        if (pt) this._center = pt;
+        if (typeof z === "number") this._zoom = z;
+        return this;
+      },
+      panTo(c) {
+        const pt = toLatLngObj(c);
+        if (pt) this._center = pt;
+        return this;
+      },
+      zoomIn() { this._zoom = Math.min(this._maxZoom, this._zoom + 1); },
+      zoomOut() { this._zoom = Math.max(this._minZoom, this._zoom - 1); },
       invalidateSize() {},
       createPane: () => ({ style: {} }),
       getPane: () => ({ style: {} })
@@ -62,9 +223,21 @@ const GIS_TILES = {
   terrain_base: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Terrain_Base/MapServer/tile/{z}/{y}/{x}",
   street_dark_base: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
   satellite: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+  satellite_night: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_Black_Marble/default/2016-01-01/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png",
   gis_roads_overlay: "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}",
   gis_railway_overlay: "https://{s}.tiles.openrailwaymap.org/signals/{z}/{x}/{y}.png"
 };
+
+function resolveSatelliteQuestionStyle(difficulty = state.difficulty, style = state.satelliteStyle, rng = Math.random) {
+  if (style === "night") return "night";
+  if (style === "day") return "day";
+  if (style === "hybrid") {
+    const r = typeof rng === "function" ? rng() : Math.random();
+    const nightProb = difficulty === "county_only" ? 0.7 : 0.3;
+    return r < nightProb ? "night" : "day";
+  }
+  return "day";
+}
 
 // Unified zoom-responsive typography & POI marker scale (shared by townships, stations, and POIs)
 function computeMapZoomScaleMetrics(zoom) {
@@ -330,23 +503,281 @@ function initMap() {
 
 function resetToFullTaiwanView() {
   if (!map) return;
+  if (state.satelliteViewportLocked && state.role !== "spectator") {
+    if (typeof setFeedback === "function") {
+      setFeedback("🔒 衛星視野鎖定中，無法拉遠檢視全台灣！", "warn");
+    }
+    return;
+  }
   map.flyToBounds(TAIWAN_FULL_VIEW_BOUNDS, { padding: [20, 20], duration: 0.55 });
 }
 
 function zoomToCountyCenter(countyName) {
   const c = COUNTY_BY_NAME[countyName];
   if (!c || !map) return;
-  if (c.bounds && c.bounds.isValid()) {
-    map.flyToBounds(c.bounds, { padding: [45, 45], maxZoom: 12, duration: 0.55 });
+  const targetB = (c.mainBounds && typeof c.mainBounds.isValid === "function" && c.mainBounds.isValid())
+    ? c.mainBounds
+    : c.bounds;
+  if (targetB && targetB.isValid()) {
+    map.flyToBounds(targetB, { padding: [45, 45], maxZoom: 12, duration: 0.55 });
   } else {
     map.flyTo([c.lat, c.lng], 11, { duration: 0.55 });
   }
+}
+
+function computeMainPolygonBounds(geojsonFeature, options = {}) {
+  const distThresholdDeg = typeof options.distThresholdDeg === "number" ? options.distThresholdDeg : 0.35;
+  const geom = geojsonFeature && geojsonFeature.type === "Feature" ? geojsonFeature.geometry : geojsonFeature;
+  if (!geom || !geom.coordinates) return L.latLngBounds();
+
+  const outerRings = [];
+  if (geom.type === "Polygon" && Array.isArray(geom.coordinates[0])) {
+    outerRings.push(geom.coordinates[0]);
+  } else if (geom.type === "MultiPolygon" && Array.isArray(geom.coordinates)) {
+    geom.coordinates.forEach((poly) => {
+      if (Array.isArray(poly) && Array.isArray(poly[0])) {
+        outerRings.push(poly[0]);
+      }
+    });
+  }
+  if (outerRings.length === 0) return L.latLngBounds();
+
+  const ringInfos = [];
+  outerRings.forEach((ring) => {
+    if (!Array.isArray(ring) || ring.length === 0) return;
+    let area2 = 0;
+    let minLat = Infinity;
+    let maxLat = -Infinity;
+    let minLng = Infinity;
+    let maxLng = -Infinity;
+    for (let i = 0; i < ring.length; i++) {
+      const pt = ring[i];
+      if (!Array.isArray(pt) || pt.length < 2) continue;
+      const lng = Number(pt[0]);
+      const lat = Number(pt[1]);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+      if (lng < minLng) minLng = lng;
+      if (lng > maxLng) maxLng = lng;
+      const next = ring[(i + 1) % ring.length];
+      if (Array.isArray(next) && next.length >= 2) {
+        const nLng = Number(next[0]);
+        const nLat = Number(next[1]);
+        if (Number.isFinite(nLng) && Number.isFinite(nLat)) {
+          area2 += lng * nLat - nLng * lat;
+        }
+      }
+    }
+    if (!Number.isFinite(minLat) || !Number.isFinite(minLng)) return;
+    ringInfos.push({
+      area: 0.5 * Math.abs(area2),
+      minLat,
+      maxLat,
+      minLng,
+      maxLng,
+      centerLat: (minLat + maxLat) / 2,
+      centerLng: (minLng + maxLng) / 2
+    });
+  });
+
+  if (ringInfos.length === 0) return L.latLngBounds();
+
+  let mainRing = ringInfos[0];
+  for (let i = 1; i < ringInfos.length; i++) {
+    if (ringInfos[i].area > mainRing.area) {
+      mainRing = ringInfos[i];
+    }
+  }
+
+  let outMinLat = mainRing.minLat;
+  let outMaxLat = mainRing.maxLat;
+  let outMinLng = mainRing.minLng;
+  let outMaxLng = mainRing.maxLng;
+
+  ringInfos.forEach((info) => {
+    const dist = Math.hypot(info.centerLat - mainRing.centerLat, info.centerLng - mainRing.centerLng);
+    if (dist <= distThresholdDeg) {
+      if (info.minLat < outMinLat) outMinLat = info.minLat;
+      if (info.maxLat > outMaxLat) outMaxLat = info.maxLat;
+      if (info.minLng < outMinLng) outMinLng = info.minLng;
+      if (info.maxLng > outMaxLng) outMaxLng = info.maxLng;
+    }
+  });
+
+  return L.latLngBounds([outMinLat, outMinLng], [outMaxLat, outMaxLng]);
+}
+
+function computeCountyMainBounds(countyName, townList = null, options = {}) {
+  const distThresholdDeg = typeof options.distThresholdDeg === "number" ? options.distThresholdDeg : 0.45;
+  const isPureIslandCounty = countyName === "澎湖縣" || countyName === "金門縣" || countyName === "連江縣";
+  const allCountyTowns = Array.isArray(townList)
+    ? townList
+    : ALL_TOWNS.filter((t) => t.countyName === countyName);
+
+  const townsWithBounds = allCountyTowns.filter((t) => {
+    const b = (t.mainBounds && typeof t.mainBounds.isValid === "function" && t.mainBounds.isValid())
+      ? t.mainBounds
+      : t.bounds;
+    return Boolean(b && typeof b.isValid === "function" && b.isValid());
+  });
+  if (townsWithBounds.length === 0) return null;
+
+  let candidates = townsWithBounds;
+  if (!isPureIslandCounty && typeof TAIWAN_MAINLAND_OFFSHORE_SET !== "undefined") {
+    const mainlandOnly = townsWithBounds.filter((t) => !TAIWAN_MAINLAND_OFFSHORE_SET.has(t.fullCountyTown));
+    if (mainlandOnly.length > 0) {
+      candidates = mainlandOnly;
+    }
+  }
+
+  const items = candidates.map((t) => {
+    const b = (t.mainBounds && typeof t.mainBounds.isValid === "function" && t.mainBounds.isValid())
+      ? t.mainBounds
+      : t.bounds;
+    const sw = b.getSouthWest();
+    const ne = b.getNorthEast();
+    const area = Math.max(1e-9, Math.abs(ne.lat - sw.lat) * Math.abs(ne.lng - sw.lng));
+    return {
+      town: t,
+      bounds: b,
+      centerLat: (sw.lat + ne.lat) / 2,
+      centerLng: (sw.lng + ne.lng) / 2,
+      area
+    };
+  });
+
+  let primary = items[0];
+  for (let i = 1; i < items.length; i++) {
+    if (items[i].area > primary.area) {
+      primary = items[i];
+    }
+  }
+
+  // Connected cluster BFS from primary town using distThresholdDeg (0.45 deg)
+  const kept = [primary];
+  const visited = new Set([primary]);
+  let idx = 0;
+  while (idx < kept.length) {
+    const cur = kept[idx++];
+    for (let i = 0; i < items.length; i++) {
+      const other = items[i];
+      if (visited.has(other)) continue;
+      const dist = Math.hypot(other.centerLat - cur.centerLat, other.centerLng - cur.centerLng);
+      if (dist <= distThresholdDeg) {
+        visited.add(other);
+        kept.push(other);
+      }
+    }
+  }
+
+  const outBounds = L.latLngBounds(
+    kept[0].bounds.getSouthWest(),
+    kept[0].bounds.getNorthEast()
+  );
+  for (let i = 1; i < kept.length; i++) {
+    outBounds.extend(kept[i].bounds);
+  }
+  return outBounds;
+}
+
+function lockMapViewportToBounds(bounds, options = {}) {
+  if (state.role === "spectator") {
+    state.satelliteViewportLocked = false;
+    return false;
+  }
+  if (!state.satelliteLockViewport && !options.force) {
+    state.satelliteViewportLocked = false;
+    return false;
+  }
+  if (!map || !bounds || (typeof bounds.isValid === "function" && !bounds.isValid())) {
+    return false;
+  }
+
+  const padRatio = typeof options.padRatio === "number" ? options.padRatio : 0.35;
+  const padded = typeof bounds.pad === "function" ? bounds.pad(padRatio) : bounds;
+  if (typeof map.setMaxBounds === "function") {
+    map.setMaxBounds(padded);
+  }
+
+  const maxFitZoom = typeof options.maxFitZoom === "number"
+    ? options.maxFitZoom
+    : (state.difficulty === "county_only" ? 11 : 13);
+  let fittedZoom = typeof map.getZoom === "function" ? map.getZoom() : 10;
+  if (typeof map.getBoundsZoom === "function") {
+    try {
+      const padPt = typeof L !== "undefined" && typeof L.point === "function" ? L.point(56, 56) : [56, 56];
+      const bz = map.getBoundsZoom(bounds, false, padPt);
+      if (Number.isFinite(bz) && bz > 0) {
+        fittedZoom = Math.min(maxFitZoom, bz);
+      }
+    } catch (_) {}
+  }
+  const computedMinZoom = Math.max(8, Math.min(13, fittedZoom - 1));
+  const targetMinZoom = typeof options.minZoom === "number" ? options.minZoom : computedMinZoom;
+  if (typeof map.setMinZoom === "function") {
+    map.setMinZoom(targetMinZoom);
+  }
+
+  state.satelliteViewportLocked = true;
+  return true;
+}
+
+function unlockMapViewportToTaiwan(options = {}) {
+  const restoreLayers = options.restoreLayers !== false;
+  if (map) {
+    if (typeof map.setMaxBounds === "function") {
+      map.setMaxBounds(TAIWAN_MAX_BOUNDS);
+    }
+    if (typeof map.setMinZoom === "function") {
+      map.setMinZoom(7);
+    }
+  }
+  state.satelliteViewportLocked = false;
+
+  if (restoreLayers) {
+    if (state.satelliteSavedBaseLayer) {
+      const prevLayer = state.satelliteSavedBaseLayer;
+      state.satelliteSavedBaseLayer = null;
+      setMapBaseLayer(prevLayer, true);
+    }
+    if (state.satelliteSavedDistrictBorders !== null) {
+      const prevBorders = Boolean(state.satelliteSavedDistrictBorders);
+      state.satelliteSavedDistrictBorders = null;
+      if (typeof window.setDistrictBordersVisible === "function") {
+        window.setDistrictBordersVisible(prevBorders, true);
+      } else {
+        state.showDistrictBorders = prevBorders;
+        if (countyBorderLayerGroup && map) {
+          if (prevBorders) {
+            if (!map.hasLayer(countyBorderLayerGroup)) countyBorderLayerGroup.addTo(map);
+          } else if (map.hasLayer(countyBorderLayerGroup)) {
+            map.removeLayer(countyBorderLayerGroup);
+          }
+        }
+        refreshAllPolygonStyles();
+      }
+    }
+  }
+  return true;
 }
 
 // =========================================================================
 // 4A-2. BASE LAYERS, TOPOJSON LOADER & POLYGON RENDERING
 // =========================================================================
 function setMapBaseLayer(layerKey, forceBypassLock = false) {
+  if (
+    !forceBypassLock &&
+    state.playMode === "satellite_quiz" &&
+    !state.isGameOver &&
+    state.role !== "spectator" &&
+    !["satellite", "satellite_night", "satellite_hybrid"].includes(layerKey)
+  ) {
+    if (typeof setFeedback === "function") {
+      setFeedback("🛰️ 衛星影像猜題中已鎖定衛星圖層，退出或結束後將自動恢復！", "warn");
+    }
+    return;
+  }
   if (state.p2pLayerRule === "locked" && !forceBypassLock && state.role !== "spectator") {
     setFeedback(`🔒 本場對戰已鎖定使用「${state.p2pForcedLayer}」圖層，無法自由切換！`, "warn");
     return;
@@ -372,7 +803,19 @@ function setMapBaseLayer(layerKey, forceBypassLock = false) {
     }).addTo(map);
     activeTileLayers.push(tBase, tRelief);
     mapEl.classList.add("basemap-no-spoiler");
-  } else if (layerKey === "satellite") {
+  } else if (
+    layerKey === "satellite_night" ||
+    (layerKey === "satellite_hybrid" && state.satelliteActiveQuestionStyle === "night")
+  ) {
+    const satNight = L.tileLayer(GIS_TILES.satellite_night, {
+      maxNativeZoom: 8,
+      maxZoom: 15,
+      opacity: 0.95,
+      attribution: "Night Lights &copy; NASA GIBS VIIRS Black Marble"
+    }).addTo(map);
+    activeTileLayers.push(satNight);
+    mapEl.classList.add("basemap-no-spoiler");
+  } else if (layerKey === "satellite" || layerKey === "satellite_hybrid") {
     const sat = L.tileLayer(GIS_TILES.satellite, {
       maxZoom: 18,
       opacity: 0.82,
@@ -386,7 +829,10 @@ function setMapBaseLayer(layerKey, forceBypassLock = false) {
 
   document.querySelectorAll(".layer-btn").forEach((btn) => {
     if (btn.classList.contains("hidden")) return;
-    const isCurrent = btn.getAttribute("data-layer") === layerKey;
+    const btnLayer = btn.getAttribute("data-layer");
+    const isCurrent =
+      btnLayer === layerKey ||
+      (btnLayer === "satellite" && (layerKey === "satellite_night" || layerKey === "satellite_hybrid"));
     btn.className = isCurrent
       ? "layer-btn px-2 sm:px-2.5 py-1 rounded-xl text-[11px] sm:text-xs font-semibold transition bg-sky-500 text-white shadow whitespace-nowrap"
       : "layer-btn px-2 sm:px-2.5 py-1 rounded-xl text-[11px] sm:text-xs font-semibold transition text-slate-300 hover:text-white whitespace-nowrap";
@@ -496,9 +942,12 @@ function rebuildMapLayers(topoData) {
   countyBorderLayerGroup.clearLayers();
   ALL_TOWNS.forEach((t) => {
     t.layers = [];
+    t.bounds = null;
+    t.mainBounds = null;
   });
   TAIWAN_ADMIN_DATA.forEach((c) => {
     c.bounds = null;
+    c.mainBounds = null;
   });
 
   if (loadedTopoData && loadedTopoData.townsGeo) {
@@ -520,9 +969,11 @@ function rebuildMapLayers(topoData) {
       townObj.layers.push(polyLayer);
       try {
         const b = polyLayer.getBounds();
+        const mainB = computeMainPolygonBounds(feat);
         if (b && b.isValid()) {
           townObj.bounds = b;
-          const center = b.getCenter();
+          townObj.mainBounds = mainB && mainB.isValid() ? mainB : b;
+          const center = townObj.mainBounds.getCenter();
           townObj.lat = center.lat;
           townObj.lng = center.lng;
 
@@ -538,6 +989,15 @@ function rebuildMapLayers(topoData) {
       } catch (e) {}
     });
 
+    TAIWAN_ADMIN_DATA.forEach((cObj) => {
+      const cMain = computeCountyMainBounds(cObj.name);
+      if (cMain && cMain.isValid()) {
+        cObj.mainBounds = cMain;
+      } else if (cObj.bounds && cObj.bounds.isValid()) {
+        cObj.mainBounds = cObj.bounds;
+      }
+    });
+
     if (loadedTopoData.countiesGeo) {
       L.geoJSON(loadedTopoData.countiesGeo, {
         renderer: canvasRenderer,
@@ -549,6 +1009,13 @@ function rebuildMapLayers(topoData) {
           opacity: 0.78
         })
       }).addTo(countyBorderLayerGroup);
+    }
+    if (countyBorderLayerGroup && map) {
+      if (state.showDistrictBorders && state.playMode !== "satellite_quiz") {
+        if (!map.hasLayer(countyBorderLayerGroup)) countyBorderLayerGroup.addTo(map);
+      } else if (map.hasLayer(countyBorderLayerGroup)) {
+        map.removeLayer(countyBorderLayerGroup);
+      }
     }
   }
 
@@ -570,8 +1037,18 @@ function isTownInScope(townObj) {
 }
 
 function computePolygonStyle(townObj) {
+  const vState = typeof getActiveViewState === "function" ? getActiveViewState() : state;
   const inScope = isTownInScope(townObj);
   if (!inScope) {
+    if (state.playMode === "satellite_quiz" && !vState.isGameOver) {
+      return {
+        stroke: state.showDistrictBorders,
+        color: state.showDistrictBorders ? "rgba(148, 163, 184, 0.28)" : "transparent",
+        weight: state.showDistrictBorders ? 0.55 : 0,
+        fillColor: "#0f172a",
+        fillOpacity: 0
+      };
+    }
     return {
       stroke: state.showDistrictBorders,
       color: state.showDistrictBorders ? "rgba(148, 163, 184, 0.28)" : "transparent",
@@ -581,19 +1058,20 @@ function computePolygonStyle(townObj) {
     };
   }
 
-  const vState = typeof getActiveViewState === "function" ? getActiveViewState() : state;
-  const isTarget =
-    (state.playMode === "target_random" || state.playMode === "target_click") &&
-    (state.difficulty === "county_only"
-      ? vState.targetId === townObj.countyName
-      : vState.targetId === townObj.id);
-
   const isUnlocked =
     state.difficulty === "county_only"
       ? vState.unlockedCounties.has(townObj.countyName)
       : vState.unlockedTowns.has(townObj.id);
 
   const isMissed = vState.missedTowns.has(townObj.id);
+  const isTarget =
+    (state.playMode === "target_random" || state.playMode === "target_click" || state.playMode === "satellite_quiz") &&
+    !isUnlocked &&
+    !isMissed &&
+    (state.difficulty === "county_only"
+      ? vState.targetId === townObj.countyName
+      : vState.targetId === townObj.id);
+
   const countyUnlockedInMaster =
     state.difficulty === "master_hierarchy" && vState.unlockedCounties.has(townObj.countyName);
   const provinceUnlockedInMaster =
@@ -601,6 +1079,25 @@ function computePolygonStyle(townObj) {
     vState.unlockedProvinces.has(townObj.isSpecial ? townObj.countyName : townObj.province);
 
   const baseCountyColor = COUNTY_COLORS[townObj.countyName] || "#38bdf8";
+
+  if (state.playMode === "satellite_quiz" && !isUnlocked && !isMissed && !vState.isGameOver) {
+    if (isTarget && state.satelliteOutlineRevealed) {
+      return {
+        stroke: true,
+        color: "#fef08a",
+        weight: 2.6,
+        fillColor: "#f59e0b",
+        fillOpacity: 0
+      };
+    }
+    return {
+      stroke: state.showDistrictBorders,
+      color: state.showDistrictBorders ? "rgba(255, 255, 255, 0.45)" : "transparent",
+      weight: state.showDistrictBorders ? 0.75 : 0,
+      fillColor: "#0f172a",
+      fillOpacity: 0
+    };
+  }
 
   if (isTarget) {
     return {

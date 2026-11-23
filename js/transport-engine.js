@@ -723,7 +723,7 @@ function tryMatchAndUnlockStation(core, combined, isAutoCheck) {
     state.targetStationKey = null;
   }
 
-  if ((state.playMode === "target_click" || state.playMode === "target_random") && state.targetStationKey) {
+  if ((state.playMode === "target_click" || state.playMode === "target_random" || state.playMode === "satellite_quiz") && state.targetStationKey) {
     const targetSt = activeStations.find((s) => s.key === state.targetStationKey);
     if (!targetSt) {
       state.targetStationKey = null;
@@ -738,7 +738,7 @@ function tryMatchAndUnlockStation(core, combined, isAutoCheck) {
       state.targetStationKey = null;
       updateRoadAndRailwayTileOverlays();
       onSuccessfulUnlock(`🚉 答對指定車站：${targetSt.displayName}（${targetSt.lineName}）！`, targetSt.displayName, true);
-      if (state.playMode === "target_random") {
+      if (state.playMode === "target_random" || state.playMode === "satellite_quiz") {
         pickNextTargetRegion();
       } else {
         updateTargetBannerUI();

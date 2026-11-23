@@ -89,8 +89,15 @@ const TAB_INSTANCE_ID = getOrCreateTabInstanceId(STABLE_DEVICE_ID);
 
 const state = {
   difficulty: "casual",       // 'casual' | 'county_only' | 'hard_suffix' | 'hard_full' | 'master_hierarchy'
-  playMode: "free",           // 'free' | 'target_random' | 'target_click'
-  mapLayer: "vector",         // 'vector' | 'terrain' | 'street' | 'satellite'
+  playMode: "free",           // 'free' | 'target_random' | 'target_click' | 'satellite_quiz'
+  satelliteStyle: "day",      // 'day' | 'night' | 'hybrid'
+  satelliteLockViewport: true,
+  satelliteOutlineRevealed: false,
+  satelliteActiveQuestionStyle: "day",
+  satelliteSavedBaseLayer: null,
+  satelliteSavedDistrictBorders: null,
+  satelliteViewportLocked: false,
+  mapLayer: "vector",         // 'vector' | 'terrain' | 'street' | 'satellite' | 'satellite_night' | 'satellite_hybrid'
   showRailOverlay: false,     // Default OFF
   transportMode: "off",       // 'off' | 'rail_only' | 'lines_and_stations' | 'stations_only'
   showDistrictBorders: true,  // Toggleable administrative boundaries (區界開關)
@@ -212,6 +219,14 @@ const state = {
 
 // Initialize default selected transport lines from data/transport-data.js
 state.selectedTransportLines = new Set(TAIWAN_SELECTABLE_LINES.map((l) => l.id));
+
+function isTargetQuizPlayMode(pm = state.playMode) {
+  return pm === "target_random" || pm === "target_click" || pm === "satellite_quiz";
+}
+
+function isRandomTargetPlayMode(pm = state.playMode) {
+  return pm === "target_random" || pm === "satellite_quiz";
+}
 
 // Keeps legacy state.quizTargetMode synchronized with multi-select topic toggles
 function syncLegacyQuizTargetMode() {

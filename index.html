@@ -223,34 +223,37 @@
         </div>
 
         <!-- TARGET REGION QUIZ BANNER -->
-        <div id="target-quiz-banner" class="hidden absolute top-16 left-1/2 -translate-x-1/2 z-[445] apple-glass-pill rounded-2xl px-3.5 py-2.5 border border-amber-400/50 shadow-xl max-w-[92%] sm:max-w-lg w-full">
-          <div class="flex items-center justify-between gap-2.5">
-            <div class="flex items-center gap-2 min-w-0">
-              <span class="w-2.5 h-2.5 rounded-full bg-amber-400 shrink-0"></span>
-              <div class="min-w-0">
+        <div id="target-quiz-banner" class="hidden absolute bottom-2 left-2 right-2 sm:bottom-auto sm:top-[4.25rem] sm:left-3 sm:right-auto z-[445] apple-glass-pill rounded-2xl px-3 py-2 sm:px-3.5 sm:py-2.5 border border-amber-400/50 shadow-xl sm:w-auto sm:max-w-[calc(100%-14rem)]">
+          <div class="flex flex-col gap-1.5">
+            <div class="flex items-start gap-2 min-w-0">
+              <span class="w-2.5 h-2.5 rounded-full bg-amber-400 shrink-0 mt-1"></span>
+              <div class="min-w-0 flex-1">
                 <div class="text-xs font-bold text-amber-300 uppercase tracking-wider flex flex-wrap items-center gap-1.5">
-                  <span id="target-banner-title">指定區塊挑戰</span>
-                  <span id="target-hint-badge" class="text-[11px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-200 truncate">請看地圖閃爍區塊</span>
+                  <span id="target-banner-title" class="whitespace-nowrap">指定區塊挑戰</span>
+                  <span id="target-hint-badge" class="text-[11px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-200 whitespace-nowrap">請看地圖閃爍區塊</span>
                 </div>
-                <p id="target-banner-desc" class="text-xs text-slate-300 mt-0.5 truncate">
+                <p id="target-banner-desc" class="text-[11px] sm:text-xs text-slate-300 mt-0.5 leading-snug">
                   請輸入地圖上琥珀色高亮區塊的行政區名稱
                 </p>
               </div>
             </div>
-            <div class="flex flex-wrap items-center gap-1 shrink-0">
+            <div class="flex flex-wrap items-center gap-1.5 pl-4">
               <div id="target-dir-group" class="flex items-center bg-slate-900/90 rounded-lg p-0.5 border border-slate-700" data-tip="指定模式下點擊按鈕移動至相鄰未解鎖區塊或車站">
                 <button id="btn-dir-w" type="button" class="px-1.5 py-0.5 rounded hover:bg-slate-700 text-xs font-bold text-sky-300" title="往西移至相鄰目標 (←)">←</button>
                 <button id="btn-dir-n" type="button" class="px-1.5 py-0.5 rounded hover:bg-slate-700 text-xs font-bold text-sky-300" title="往北移至相鄰目標 (↑)">↑</button>
                 <button id="btn-dir-s" type="button" class="px-1.5 py-0.5 rounded hover:bg-slate-700 text-xs font-bold text-sky-300" title="往南移至相鄰目標 (↓)">↓</button>
                 <button id="btn-dir-e" type="button" class="px-1.5 py-0.5 rounded hover:bg-slate-700 text-xs font-bold text-sky-300" title="往東移至相鄰目標 (→)">→</button>
               </div>
-              <button id="btn-target-hint" type="button" class="hidden px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] text-amber-300 border border-amber-500/30 transition" data-tip="查看目標提示（需於設定中開啟允許提示）">
+              <button id="btn-target-reveal-outline" type="button" class="hidden px-2 py-1 rounded-lg bg-sky-500/20 hover:bg-sky-500/35 text-[11px] font-bold text-sky-200 border border-sky-400/50 transition whitespace-nowrap" data-tip="於衛星地圖上顯示目標行政區邊界輪廓（衛星提示 Level 1）">
+                👁️ 顯示輪廓
+              </button>
+              <button id="btn-target-hint" type="button" class="hidden px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] text-amber-300 border border-amber-500/30 transition whitespace-nowrap" data-tip="查看目標提示（需於設定中開啟允許提示）">
                 提示
               </button>
-              <button id="btn-target-next" type="button" class="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[11px] transition" data-tip="隨機挑選下一個未解鎖目標">
+              <button id="btn-target-next" type="button" class="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[11px] transition whitespace-nowrap" data-tip="隨機挑選下一個未解鎖目標">
                 🎲 隨機下個
               </button>
-              <button id="btn-target-exit" type="button" class="px-2 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/35 text-rose-300 border border-rose-500/40 font-bold text-[11px] transition" title="退出指定/隨機模式，切回一般自由輸入" data-tip="退出指定/隨機模式，切回一般自由作答模式">
+              <button id="btn-target-exit" type="button" class="px-2 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/35 text-rose-300 border border-rose-500/40 font-bold text-[11px] transition whitespace-nowrap" title="退出指定/隨機模式，切回一般自由輸入" data-tip="退出指定/隨機模式，切回一般自由作答模式">
                 ✕ 退出
               </button>
             </div>
@@ -948,12 +951,32 @@
               </div>
 
               <div class="lg:col-span-5 p-3 rounded-2xl bg-slate-900/90 border border-slate-800 flex flex-col justify-between gap-2">
-                <div class="flex items-center justify-between gap-1">
+                <div class="flex flex-wrap items-center justify-between gap-1">
                   <span class="text-xs font-bold text-emerald-300">出題與計時</span>
-                  <div class="flex items-center gap-1">
+                  <div class="flex flex-wrap items-center gap-1">
                     <button type="button" data-playmode="free" class="playmode-btn px-2 py-1 rounded-lg text-[11px] font-bold border transition bg-emerald-500/20 border-emerald-400 text-emerald-200" data-tip="自由輸入任意行政區或車站">✍️ 自由</button>
                     <button type="button" data-playmode="target_random" class="playmode-btn px-2 py-1 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-950 text-slate-300" data-tip="由系統隨機高亮指定一個區塊作答">🎯 隨機</button>
                     <button type="button" data-playmode="target_click" class="playmode-btn px-2 py-1 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-950 text-slate-300" data-tip="自己點選地圖區塊作答">👆 點選</button>
+                    <button id="btn-playmode-satellite" type="button" data-playmode="satellite_quiz" class="playmode-btn px-2 py-1 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-950 text-slate-300" data-tip="自動對準目標衛星外接框並隱藏區界與地名，支援日間、夜間燈火與日夜混合盲猜">🛰️ 衛星</button>
+                  </div>
+                </div>
+                <div id="satellite-quiz-options-panel" class="hidden p-2.5 rounded-xl bg-slate-950/85 border border-sky-500/35 space-y-2">
+                  <div class="flex flex-wrap items-center justify-between gap-1.5">
+                    <span class="text-[11px] font-extrabold text-sky-300">🛰️ 衛星影像風格</span>
+                    <div class="flex flex-wrap items-center gap-1">
+                      <button id="btn-sat-style-day" type="button" data-sat-style="day" class="satellite-style-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border transition bg-sky-500/25 border-sky-400 text-sky-200 shadow" data-tip="Esri 高解析度日間無字衛星影像">☀️ 日間衛星</button>
+                      <button id="btn-sat-style-night" type="button" data-sat-style="night" class="satellite-style-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition" data-tip="NASA GIBS VIIRS Black Marble 台灣夜間城市燈火">🌙 夜間燈火</button>
+                      <button id="btn-sat-style-hybrid" type="button" data-sat-style="hybrid" class="satellite-style-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition" data-tip="每題隨機以日間衛星或夜間燈火出題（縣市高機率夜間、鄉鎮偏日間）">🌓 日夜混合</button>
+                    </div>
+                  </div>
+                  <div class="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800/80 text-[11px]">
+                    <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="開啟時，答題期間自動鎖定目標外接框視野與最小縮放層級，防止拉遠看全台灣海岸線作弊">
+                      <input id="chk-satellite-lock-viewport" type="checkbox" checked class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-sky-500 accent-sky-400 cursor-pointer" />
+                      <span class="font-bold text-sky-200">🔒 防作弊鎖定目標視野（禁拉遠看全島）</span>
+                    </label>
+                  </div>
+                  <div id="satellite-night-town-notice" class="hidden px-2 py-1 rounded-lg bg-amber-500/15 border border-amber-500/35 text-[11px] font-semibold text-amber-200">
+                    ⚠️ 夜間解析度較低，鄉鎮模式屬高難度趣味挑戰（建議搭配「22縣市」模式體驗最佳）
                   </div>
                 </div>
                 <div class="flex flex-wrap items-center gap-1">

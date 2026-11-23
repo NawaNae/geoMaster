@@ -180,6 +180,30 @@ function syncConfigButtonsUI() {
       : "playmode-btn px-2 py-1 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-950 text-slate-300 hover:bg-slate-800";
   });
 
+  const satPanel = document.getElementById("satellite-quiz-options-panel");
+  if (satPanel) {
+    satPanel.classList.toggle("hidden", state.playMode !== "satellite_quiz");
+  }
+  document.querySelectorAll(".satellite-style-btn").forEach((btn) => {
+    const st = btn.getAttribute("data-sat-style");
+    const isCur = st === (state.satelliteStyle || "day");
+    btn.className = isCur
+      ? "satellite-style-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border transition bg-sky-500/25 border-sky-400 text-sky-200 shadow"
+      : "satellite-style-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition";
+  });
+  const chkSatLock = document.getElementById("chk-satellite-lock-viewport");
+  if (chkSatLock) {
+    chkSatLock.checked = Boolean(state.satelliteLockViewport);
+  }
+  const satNightNotice = document.getElementById("satellite-night-town-notice");
+  if (satNightNotice) {
+    const showNotice =
+      state.playMode === "satellite_quiz" &&
+      state.difficulty !== "county_only" &&
+      (state.satelliteStyle === "night" || state.satelliteStyle === "hybrid");
+    satNightNotice.classList.toggle("hidden", !showNotice);
+  }
+
   ["chk-allow-target-hints", "chk-room-allow-target-hints"].forEach((cid) => {
     const el = document.getElementById(cid);
     if (el) el.checked = Boolean(state.allowTargetHints);
@@ -234,13 +258,21 @@ function setPlayMode(pm) {
     requestOrApplyConfigChange({ playMode: pm }, "出題方式");
     return;
   }
+  const prevPlayMode = state.playMode;
   state.playMode = pm;
   state.targetId = null;
   state.targetStationKey = null;
+  state.targetPoiId = null;
   state.hintLevel = 0;
+  state.satelliteOutlineRevealed = false;
+  if (prevPlayMode === "satellite_quiz" && pm !== "satellite_quiz") {
+    if (typeof unlockMapViewportToTaiwan === "function") {
+      unlockMapViewportToTaiwan({ restoreLayers: true });
+    }
+  }
   syncConfigButtonsUI();
   updateModeBadgeText();
-  if (pm === "target_random") {
+  if (pm === "target_random" || pm === "satellite_quiz") {
     pickNextTargetRegion();
   } else {
     if (typeof updateRoadAndRailwayTileOverlays === "function") updateRoadAndRailwayTileOverlays();
@@ -251,6 +283,69 @@ function setPlayMode(pm) {
   if (state.isHost && state.roomCode) {
     onHostSettingChange("出題方式");
   }
+}
+
+function setSatelliteStyle(styleKey) {
+  if (!["day", "night", "hybrid"].includes(styleKey)) return;
+  if (!canLocalModifyGameConfig()) {
+    setFeedback("🔒 僅房主可調整衛星影像風格！", "error");
+    playTone("error");
+    syncConfigButtonsUI();
+    return;
+  }
+  if (state.isHost && state.roomCode) {
+    if (styleKey === state.satelliteStyle) return;
+    requestOrApplyConfigChange({ satelliteStyle: styleKey }, "衛星影像風格");
+    return;
+  }
+  state.satelliteStyle = styleKey;
+  syncConfigButtonsUI();
+  if (state.playMode === "satellite_quiz") {
+    state.satelliteActiveQuestionStyle =
+      typeof resolveSatelliteQuestionStyle === "function"
+        ? resolveSatelliteQuestionStyle(state.difficulty, state.satelliteStyle)
+        : styleKey === "night"
+        ? "night"
+        : "day";
+    if (typeof setMapBaseLayer === "function") {
+      setMapBaseLayer(state.satelliteActiveQuestionStyle === "night" ? "satellite_night" : "satellite", true);
+    }
+    updateTargetBannerUI();
+  }
+  if (typeof renderRoomConciseSettingsSummary === "function") renderRoomConciseSettingsSummary();
+}
+
+function setSatelliteLockViewport(locked) {
+  if (!canLocalModifyGameConfig()) {
+    setFeedback("🔒 僅房主可調整衛星視野鎖定！", "error");
+    playTone("error");
+    syncConfigButtonsUI();
+    return;
+  }
+  const nextVal = Boolean(locked);
+  if (state.isHost && state.roomCode) {
+    if (nextVal === state.satelliteLockViewport) return;
+    requestOrApplyConfigChange({ satelliteLockViewport: nextVal }, "衛星視野鎖定");
+    return;
+  }
+  state.satelliteLockViewport = nextVal;
+  syncConfigButtonsUI();
+  if (state.playMode === "satellite_quiz" && !state.isGameOver) {
+    if (!nextVal) {
+      if (typeof unlockMapViewportToTaiwan === "function") {
+        unlockMapViewportToTaiwan({ restoreLayers: false });
+      }
+    } else if (state.targetId) {
+      const pickObj = state.difficulty === "county_only"
+        ? COUNTY_BY_NAME[state.targetId]
+        : ALL_TOWNS.find((t) => t.id === state.targetId);
+      if (pickObj && typeof applySatelliteTargetViewport === "function") {
+        applySatelliteTargetViewport(pickObj);
+      }
+    }
+    updateTargetBannerUI();
+  }
+  if (typeof renderRoomConciseSettingsSummary === "function") renderRoomConciseSettingsSummary();
 }
 
 function updateModeBadgeText() {
@@ -887,6 +982,18 @@ function bindAllUIEvents() {
   });
 
   function setDistrictBordersVisible(visible, forceBypassLock = false) {
+    if (
+      !forceBypassLock &&
+      state.playMode === "satellite_quiz" &&
+      !state.isGameOver &&
+      state.role !== "spectator" &&
+      visible
+    ) {
+      setFeedback("🛰️ 衛星影像猜題中已隱藏區界，請點擊「👁️ 顯示輪廓」提示！", "warn");
+      const chkModalSat = document.getElementById("chk-modal-borders");
+      if (chkModalSat) chkModalSat.checked = false;
+      return;
+    }
     if (!forceBypassLock && state.p2pBorderRule === "force_off" && state.role !== "spectator" && visible) {
       setFeedback("🔒 本場對戰房主已指定「關閉區界」模式，無法開啟區界！", "warn");
       const chkModalLock = document.getElementById("chk-modal-borders");
@@ -1228,6 +1335,12 @@ function bindAllUIEvents() {
   document.querySelectorAll(".playmode-btn").forEach((btn) => {
     btn.addEventListener("click", () => setPlayMode(btn.getAttribute("data-playmode")));
   });
+  document.querySelectorAll(".satellite-style-btn").forEach((btn) => {
+    btn.addEventListener("click", () => setSatelliteStyle(btn.getAttribute("data-sat-style")));
+  });
+  document.getElementById("chk-satellite-lock-viewport")?.addEventListener("change", (e) => {
+    setSatelliteLockViewport(e.target.checked);
+  });
 
   document.querySelectorAll(".hub-timer-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -1251,6 +1364,10 @@ function bindAllUIEvents() {
 
   document.getElementById("btn-target-next")?.addEventListener("click", () => pickNextTargetRegion());
   document.getElementById("btn-target-hint")?.addEventListener("click", () => giveTargetHint());
+  document.getElementById("btn-target-reveal-outline")?.addEventListener("click", () => {
+    if (typeof revealSatelliteOutline === "function") revealSatelliteOutline();
+    else giveTargetHint();
+  });
   document.getElementById("btn-target-exit")?.addEventListener("click", () => exitTargetQuizMode());
   document.getElementById("btn-dir-n")?.addEventListener("click", () => moveTargetByDirection("N"));
   document.getElementById("btn-dir-s")?.addEventListener("click", () => moveTargetByDirection("S"));

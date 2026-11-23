@@ -252,6 +252,8 @@ function getHostSyncConfig(isSettingChange = false, changeLabel = "", changeDeta
     quizStationLines: state.stationQuizEnabled ? Array.from(state.quizStationLines) : [],
     difficulty: state.difficulty,
     playMode: state.playMode,
+    satelliteStyle: state.satelliteStyle || "day",
+    satelliteLockViewport: Boolean(state.satelliteLockViewport),
     timerMode: state.timerMode,
     countdownTotalSec: state.countdownTotalSec,
     layerRule: lruleEl ? lruleEl.value : state.p2pLayerRule,
@@ -275,10 +277,17 @@ function getConciseDifficultySummaryText() {
     hard_full: "困難全名模式（需輸入完整縣市＋鄉鎮市區單位）",
     master_hierarchy: "困難模式（需先輸入省、直轄市，精確輸入鄉鎮市區單位）"
   };
+  const satStyleMap = {
+    day: "日間衛星",
+    night: "夜間燈火",
+    hybrid: "日夜混合"
+  };
+  const satLockStr = state.satelliteLockViewport ? "鎖定視野" : "自由視野";
   const pmMap = {
     free: "",
     target_random: " · 隨機指定區塊",
-    target_click: " · 點選指定區塊"
+    target_click: " · 點選指定區塊",
+    satellite_quiz: ` · 🛰️ 衛星影像猜題（${satStyleMap[state.satelliteStyle] || "日間衛星"} · ${satLockStr}）`
   };
   const timerStr =
     state.timerMode === "down"
@@ -1201,7 +1210,13 @@ function describeConfigDiff(patch) {
   const pmNames = {
     free: "✍️ 自由默寫",
     target_random: "🎯 隨機指定區塊",
-    target_click: "👆 點選指定區塊"
+    target_click: "👆 點選指定區塊",
+    satellite_quiz: "🛰️ 衛星影像猜題"
+  };
+  const satStyleNames = {
+    day: "☀️ 日間衛星",
+    night: "🌙 夜間燈火",
+    hybrid: "🌓 日夜混合"
   };
   const qmNames = {
     region: "🗺️ 猜行政區",
@@ -1218,6 +1233,12 @@ function describeConfigDiff(patch) {
   }
   if (patch.playMode && patch.playMode !== state.playMode) {
     lines.push(`${pmNames[state.playMode] || state.playMode} ➔ ${pmNames[patch.playMode] || patch.playMode}`);
+  }
+  if (patch.satelliteStyle && patch.satelliteStyle !== state.satelliteStyle) {
+    lines.push(`衛星影像風格：${satStyleNames[state.satelliteStyle] || state.satelliteStyle} ➔ ${satStyleNames[patch.satelliteStyle] || patch.satelliteStyle}`);
+  }
+  if (typeof patch.satelliteLockViewport === "boolean" && patch.satelliteLockViewport !== state.satelliteLockViewport) {
+    lines.push(patch.satelliteLockViewport ? "開啟衛星防作弊視野鎖定" : "關閉衛星視野鎖定");
   }
   if (patch.selectedCounties) {
     const newSet = new Set(patch.selectedCounties);
@@ -1270,6 +1291,10 @@ function buildProposedConfigFromPatch(patch) {
   if (Array.isArray(patch.settlementSubTypes)) base.settlementSubTypes = patch.settlementSubTypes.slice();
   if (patch.difficulty) base.difficulty = patch.difficulty;
   if (patch.playMode) base.playMode = patch.playMode;
+  if (patch.satelliteStyle) base.satelliteStyle = patch.satelliteStyle;
+  if (typeof patch.satelliteLockViewport === "boolean") {
+    base.satelliteLockViewport = patch.satelliteLockViewport;
+  }
   if (patch.selectedCounties) base.selectedCounties = Array.from(patch.selectedCounties);
   if (patch.selectedTownIds) base.selectedTownIds = Array.from(patch.selectedTownIds);
   if (patch.quizStationLines) base.quizStationLines = Array.from(patch.quizStationLines);
@@ -3317,8 +3342,20 @@ function applyRemoteSyncConfig(cfg, fromCountdown = false, isAuthorized = false)
   if (cfg.difficulty && ["casual", "county_only", "hard_suffix", "hard_full", "master_hierarchy"].includes(cfg.difficulty)) {
     state.difficulty = cfg.difficulty;
   }
+  const prevPlayMode = state.playMode;
   if (cfg.playMode) {
     state.playMode = cfg.playMode;
+  }
+  if (cfg.satelliteStyle && ["day", "night", "hybrid"].includes(cfg.satelliteStyle)) {
+    state.satelliteStyle = cfg.satelliteStyle;
+  }
+  if (typeof cfg.satelliteLockViewport === "boolean") {
+    state.satelliteLockViewport = cfg.satelliteLockViewport;
+  }
+  if (prevPlayMode === "satellite_quiz" && state.playMode !== "satellite_quiz") {
+    if (typeof unlockMapViewportToTaiwan === "function") {
+      unlockMapViewportToTaiwan({ restoreLayers: true });
+    }
   }
   if (cfg.timerMode) state.timerMode = cfg.timerMode;
   if (cfg.countdownTotalSec) state.countdownTotalSec = cfg.countdownTotalSec;

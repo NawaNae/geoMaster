@@ -608,6 +608,9 @@ function finishGame(reason = "victory") {
   stopTimer();
   state.isGameOver = true;
   state.finished = true;
+  if (typeof unlockMapViewportToTaiwan === "function") {
+    unlockMapViewportToTaiwan({ restoreLayers: false });
+  }
 
   if (reason !== "victory") {
     if (state.difficulty === "county_only") {
@@ -2181,6 +2184,8 @@ function resetGame() {
   state.finalStats = null;
   state.elapsedSec = 0;
   state.targetId = null;
+  state.hintLevel = 0;
+  state.satelliteOutlineRevealed = false;
 
   if (state.opponent) {
     state.opponent.finished = false;
@@ -2215,9 +2220,12 @@ function resetGame() {
 
   updatePrefixDropdownUI();
   updateScoreAndProgressUI();
-  if (state.playMode === "target_random") {
+  if (state.playMode === "target_random" || state.playMode === "satellite_quiz") {
     pickNextTargetRegion();
   } else {
+    if (typeof unlockMapViewportToTaiwan === "function") {
+      unlockMapViewportToTaiwan({ restoreLayers: true });
+    }
     updateTargetBannerUI();
     refreshAllPolygonStyles();
   }

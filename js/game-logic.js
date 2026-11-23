@@ -401,8 +401,8 @@ function evaluateGuess(rawInput, isAutoCheck = false) {
   const isPoiQuizActive = typeof hasAnyPoiQuizActive === "function" && hasAnyPoiQuizActive();
   const isStationQuizActive = Boolean(state.stationQuizEnabled && state.quizStationLines && state.quizStationLines.size > 0);
   const isPurePoiQuiz = isPoiQuizActive && !state.regionQuizEnabled && !isStationQuizActive;
-  const isTargetingPoi = (state.playMode === "target_click" || state.playMode === "target_random") && Boolean(state.targetPoiId);
-  const isTargetingOtherFromPoi = (state.playMode === "target_click" || state.playMode === "target_random") && Boolean(state.targetId || state.targetStationKey);
+  const isTargetingPoi = (state.playMode === "target_click" || state.playMode === "target_random" || state.playMode === "satellite_quiz") && Boolean(state.targetPoiId);
+  const isTargetingOtherFromPoi = (state.playMode === "target_click" || state.playMode === "target_random" || state.playMode === "satellite_quiz") && Boolean(state.targetId || state.targetStationKey);
   const poiSuffixRe = /(機場|基地|航空站|桃機|松機|清泉崗|漁港|商港|工業港|天然氣港|接收港|接收站|港|碼頭|一接|二接|三接|水庫|攔河堰|人工湖|大壩|壩|湖|潭|池|埤|窟|水漾森林|天使的眼淚)$/;
   const normPoiWithSuffix = typeof normalizePoiText === "function" ? normalizePoiText(coreWithSuffix) : normTw(coreWithSuffix);
   const normPoiCombined = typeof normalizePoiText === "function" ? normalizePoiText(combined) : normTw(combined);
@@ -487,7 +487,7 @@ function evaluateGuess(rawInput, isAutoCheck = false) {
           : `${catMeta.icon} 解鎖${catMeta.label}：${p.name}${locHint}${bonusText}`;
         onSuccessfulUnlock(unlockMsg, p.shortName, Boolean(isTargetingPoi));
       if (isTargetingPoi) {
-        if (state.playMode === "target_random") {
+        if (state.playMode === "target_random" || state.playMode === "satellite_quiz") {
           pickNextTargetRegion();
         } else {
           state.targetPoiId = null;
@@ -518,9 +518,9 @@ function evaluateGuess(rawInput, isAutoCheck = false) {
 
   // CASE 0: PURE STATION QUIZ MODE (0 counties selected) OR TARGETED STATION DOT (only in target modes) OR "站" SUFFIX
   const isPureStationQuiz = !state.regionQuizEnabled && !isPoiQuizActive && isStationQuizActive;
-  const isTargetingStation = (state.playMode === "target_click" || state.playMode === "target_random") && Boolean(state.targetStationKey);
+  const isTargetingStation = (state.playMode === "target_click" || state.playMode === "target_random" || state.playMode === "satellite_quiz") && Boolean(state.targetStationKey);
   const looksLikeStationInput = core.endsWith("站") || coreWithSuffix.endsWith("站") || suffix === "站";
-  const isTargetingOtherFromStation = (state.playMode === "target_click" || state.playMode === "target_random") && Boolean(state.targetId || state.targetPoiId);
+  const isTargetingOtherFromStation = (state.playMode === "target_click" || state.playMode === "target_random" || state.playMode === "satellite_quiz") && Boolean(state.targetId || state.targetPoiId);
   if (
     isStationQuizActive &&
     !isTargetingOtherFromStation &&
@@ -548,7 +548,7 @@ function evaluateGuess(rawInput, isAutoCheck = false) {
   }
 
   // CASE A: TARGET QUIZ MODE
-  if (state.playMode === "target_random" || state.playMode === "target_click") {
+  if (state.playMode === "target_random" || state.playMode === "target_click" || state.playMode === "satellite_quiz") {
     if (!state.targetId && !state.targetStationKey && !state.targetPoiId) {
       if (!isAutoCheck) setFeedback("請先在地圖上點選一個目標區塊、車站或地標，或使用上方目標控制按鈕！", "warn");
       return false;
@@ -566,7 +566,7 @@ function evaluateGuess(rawInput, isAutoCheck = false) {
         state.lastTargetLat = targetCounty.lat;
         state.lastTargetLng = targetCounty.lng;
         onSuccessfulUnlock(`🎯 答對指定縣市：${targetCounty.name}！（可按方向鍵 ↑↓←→ 移至相鄰縣市或點選下一個）`, targetCounty.name, true);
-        if (state.playMode === "target_random") {
+        if (state.playMode === "target_random" || state.playMode === "satellite_quiz") {
           pickNextTargetRegion();
         } else {
           state.targetId = null;
@@ -613,7 +613,7 @@ function evaluateGuess(rawInput, isAutoCheck = false) {
       state.lastTargetLng = targetTown.lng;
       updatePrefixDropdownUI();
       onSuccessfulUnlock(`🎯 精準命中：${targetTown.fullHierarchyName}！（按方向鍵 ↑↓←→ 可移至相鄰區塊，或直接點選地圖）`, targetTown.fullCountyTown, true);
-      if (state.playMode === "target_random") {
+      if (state.playMode === "target_random" || state.playMode === "satellite_quiz") {
         pickNextTargetRegion();
       } else {
         // In target_click mode: stay at original position! Do not jump randomly!
@@ -992,10 +992,77 @@ function setFeedback(text, level = "info") {
 }
 
 // =========================================================================
-// 7. TARGET REGION MODE
+// 7. TARGET REGION MODE & SATELLITE QUIZ MODE
 // =========================================================================
+function applySatelliteTargetViewport(pickObj) {
+  if (!pickObj) return;
+  if (typeof unlockMapViewportToTaiwan === "function") {
+    unlockMapViewportToTaiwan({ restoreLayers: false });
+  }
+  let targetBounds =
+    pickObj.mainBounds && typeof pickObj.mainBounds.isValid === "function" && pickObj.mainBounds.isValid()
+      ? pickObj.mainBounds
+      : pickObj.bounds && typeof pickObj.bounds.isValid === "function" && pickObj.bounds.isValid()
+      ? pickObj.bounds
+      : null;
+
+  if (!targetBounds && typeof L !== "undefined" && typeof L.latLngBounds === "function" && Number.isFinite(pickObj.lat) && Number.isFinite(pickObj.lng)) {
+    const d = state.difficulty === "county_only" ? 0.18 : 0.06;
+    targetBounds = L.latLngBounds([pickObj.lat - d, pickObj.lng - d], [pickObj.lat + d, pickObj.lng + d]);
+  }
+
+  const maxFitZoom = state.difficulty === "county_only" ? 11 : 13;
+  if (map && targetBounds && typeof map.fitBounds === "function") {
+    map.fitBounds(targetBounds, { padding: [28, 28], maxZoom: maxFitZoom, animate: false });
+  } else if (Number.isFinite(pickObj.lat) && Number.isFinite(pickObj.lng)) {
+    focusMapOnLatLng(pickObj.lat, pickObj.lng, state.difficulty === "county_only" ? 9 : 10);
+  }
+
+  if (state.satelliteLockViewport && targetBounds && typeof lockMapViewportToBounds === "function") {
+    lockMapViewportToBounds(targetBounds, { maxFitZoom });
+  }
+}
+
+function ensureSatelliteQuizEnvironment() {
+  if (state.playMode !== "satellite_quiz") return;
+  if (state.satelliteSavedBaseLayer === null) {
+    const curLayer = state.mapLayer || "vector";
+    state.satelliteSavedBaseLayer =
+      curLayer === "satellite_night" || curLayer === "satellite_hybrid" ? "vector" : curLayer;
+  }
+  if (state.satelliteSavedDistrictBorders === null) {
+    state.satelliteSavedDistrictBorders = Boolean(state.showDistrictBorders);
+  }
+  if (typeof window.setDistrictBordersVisible === "function") {
+    window.setDistrictBordersVisible(false, true);
+  } else {
+    state.showDistrictBorders = false;
+  }
+  if (typeof countyBorderLayerGroup !== "undefined" && countyBorderLayerGroup && map && map.hasLayer(countyBorderLayerGroup)) {
+    map.removeLayer(countyBorderLayerGroup);
+  }
+  state.satelliteActiveQuestionStyle =
+    typeof resolveSatelliteQuestionStyle === "function"
+      ? resolveSatelliteQuestionStyle(state.difficulty, state.satelliteStyle)
+      : state.satelliteStyle === "night"
+      ? "night"
+      : "day";
+  const targetLayer = state.satelliteActiveQuestionStyle === "night" ? "satellite_night" : "satellite";
+  if (typeof setMapBaseLayer === "function") {
+    setMapBaseLayer(targetLayer, true);
+  } else {
+    state.mapLayer = targetLayer;
+  }
+}
+
 function pickNextTargetRegion() {
   state.hintLevel = 0;
+  state.satelliteOutlineRevealed = false;
+  const isSatellite = state.playMode === "satellite_quiz";
+  if (isSatellite) {
+    ensureSatelliteQuizEnvironment();
+  }
+
   const remainingStations = getActiveQuizStations().filter((s) => !state.unlockedStations.has(s.key));
   const remainingPois = typeof getActiveQuizPois === "function"
     ? getActiveQuizPois().filter((p) => !state.unlockedPois.has(p.id))
@@ -1015,7 +1082,11 @@ function pickNextTargetRegion() {
     state.targetPoiId = pickPoi.id;
     state.lastTargetLat = pickPoi.lat;
     state.lastTargetLng = pickPoi.lng;
-    focusMapOnLatLng(pickPoi.lat, pickPoi.lng, 10);
+    if (isSatellite) {
+      applySatelliteTargetViewport(pickPoi);
+    } else {
+      focusMapOnLatLng(pickPoi.lat, pickPoi.lng, 10);
+    }
     if (typeof refreshPoiMapLayer === "function") refreshPoiMapLayer();
     updateTargetBannerUI();
     refreshAllPolygonStyles();
@@ -1031,7 +1102,11 @@ function pickNextTargetRegion() {
     state.targetStationKey = pickSt.key;
     state.lastTargetLat = pickSt.lat;
     state.lastTargetLng = pickSt.lng;
-    focusMapOnLatLng(pickSt.lat, pickSt.lng, 12);
+    if (isSatellite) {
+      applySatelliteTargetViewport(pickSt);
+    } else {
+      focusMapOnLatLng(pickSt.lat, pickSt.lng, 12);
+    }
     updateRoadAndRailwayTileOverlays();
     if (typeof refreshPoiMapLayer === "function") refreshPoiMapLayer();
     updateTargetBannerUI();
@@ -1053,7 +1128,11 @@ function pickNextTargetRegion() {
     state.targetId = pick.name;
     state.lastTargetLat = pick.lat;
     state.lastTargetLng = pick.lng;
-    focusMapOnLatLng(pick.lat, pick.lng, 9);
+    if (isSatellite) {
+      applySatelliteTargetViewport(pick);
+    } else {
+      focusMapOnLatLng(pick.lat, pick.lng, 9);
+    }
   } else {
     const remaining = scopeTowns.filter((t) => !state.unlockedTowns.has(t.id));
     if (remaining.length === 0) {
@@ -1065,19 +1144,27 @@ function pickNextTargetRegion() {
     state.targetId = pick.id;
     state.lastTargetLat = pick.lat;
     state.lastTargetLng = pick.lng;
-    focusMapOnLatLng(pick.lat, pick.lng, 10);
+    if (isSatellite) {
+      applySatelliteTargetViewport(pick);
+    } else {
+      focusMapOnLatLng(pick.lat, pick.lng, 10);
+    }
   }
   updateTargetBannerUI();
   refreshAllPolygonStyles();
   if (state.roomCode && typeof broadcastP2PState === "function") broadcastP2PState();
 }
 
-// Exit target/random mode back to normal free recall mode
+// Exit target/random/satellite mode back to normal free recall mode
 function exitTargetQuizMode() {
   state.targetId = null;
   state.targetStationKey = null;
   state.targetPoiId = null;
   state.hintLevel = 0;
+  state.satelliteOutlineRevealed = false;
+  if (typeof unlockMapViewportToTaiwan === "function") {
+    unlockMapViewportToTaiwan({ restoreLayers: true });
+  }
   if (canLocalModifyGameConfig()) {
     if (state.isHost && state.roomCode && state.playMode !== "free") {
       if (typeof requestOrApplyConfigChange === "function") {
@@ -1101,7 +1188,7 @@ function exitTargetQuizMode() {
 
 // Move target selection to the nearest locked neighbor in direction ('N' | 'S' | 'W' | 'E')
 function moveTargetByDirection(dir) {
-  if (state.playMode === "free") {
+  if (state.playMode === "free" || state.playMode === "satellite_quiz") {
     return;
   }
   let curLat = state.lastTargetLat;
@@ -1227,6 +1314,15 @@ function handlePolygonClick(townObj) {
     return;
   }
 
+  if (state.playMode === "satellite_quiz") {
+    if (state.unlockedTowns.has(townObj.id)) {
+      setFeedback(`📍 已解鎖：${townObj.fullHierarchyName}`, "info");
+    } else {
+      setFeedback("🛰️ 衛星影像猜題模式中，請觀察當前鎖定視野作答（或點擊上方「👁️ 顯示輪廓」提示）！", "info");
+    }
+    return;
+  }
+
   if (state.playMode === "target_click" || state.playMode === "target_random") {
     if (state.difficulty === "county_only") {
       if (state.unlockedCounties.has(townObj.countyName)) {
@@ -1297,37 +1393,53 @@ function updateTargetBannerUI() {
   }
   banner.classList.remove("hidden");
 
-  const isRandom = state.playMode === "target_random";
+  const isSatellite = state.playMode === "satellite_quiz";
+  const isRandom = state.playMode === "target_random" || isSatellite;
   const isClick = state.playMode === "target_click";
 
-  // 依據模式精確區分按鈕：指定模式只保留上下左右；隨機模式顯示隨機按鈕；提示預設隱藏除非開啟 allowTargetHints；皆可退出
+  // 依據模式精確區分按鈕：指定模式只保留上下左右；隨機/衛星模式顯示隨機按鈕；衛星模式顯示顯示輪廓與提示；皆可退出
   const dirGroup = document.getElementById("target-dir-group");
   const nextBtn = document.getElementById("btn-target-next");
   const hintBtn = document.getElementById("btn-target-hint");
+  const revealBtn = document.getElementById("btn-target-reveal-outline");
   const exitBtn = document.getElementById("btn-target-exit");
 
   if (dirGroup) dirGroup.classList.toggle("hidden", !isClick);
   if (nextBtn) nextBtn.classList.toggle("hidden", !isRandom);
-  if (hintBtn) hintBtn.classList.toggle("hidden", !state.allowTargetHints);
+  if (hintBtn) hintBtn.classList.toggle("hidden", !(state.allowTargetHints || isSatellite));
+  if (revealBtn) {
+    revealBtn.classList.toggle("hidden", !isSatellite);
+    if (isSatellite) {
+      revealBtn.textContent = state.satelliteOutlineRevealed ? "👁️ 已顯示輪廓" : "👁️ 顯示輪廓";
+      revealBtn.className = state.satelliteOutlineRevealed
+        ? "px-2 py-1 rounded-lg bg-amber-500/25 text-[11px] font-bold text-amber-200 border border-amber-400/60 transition whitespace-nowrap"
+        : "px-2 py-1 rounded-lg bg-sky-500/20 hover:bg-sky-500/35 text-[11px] font-bold text-sky-200 border border-sky-400/50 transition whitespace-nowrap";
+    }
+  }
   if (exitBtn) exitBtn.classList.remove("hidden");
 
   if (vState.targetStationKey) {
     const targetSt = getActiveQuizStations().find((s) => s.key === vState.targetStationKey);
     if (targetSt) {
-      titleEl.textContent = isRandom ? "🎯 隨機抽題 · 車站目標" : "👆 指定模式 · 車站目標";
+      titleEl.textContent = isSatellite ? "🛰️ 衛星影像 · 車站目標" : isRandom ? "🎯 隨機抽題 · 車站目標" : "👆 指定模式 · 車站目標";
       hintBadge.textContent = targetSt.lineName;
       descEl.textContent = "請輸入高亮圓點的「車站名稱」（或點選地圖其他行政區/車站切換目標）";
       return;
     }
   }
 
-  titleEl.textContent = isRandom ? "🎯 隨機抽題模式" : "👆 指定點選模式";
+  if (isSatellite) {
+    const styleLabel = state.satelliteActiveQuestionStyle === "night" ? "🌙 夜間燈火" : "☀️ 日間衛星";
+    titleEl.textContent = `🛰️ 衛星影像猜題 · ${styleLabel}`;
+  } else {
+    titleEl.textContent = isRandom ? "🎯 隨機抽題模式" : "👆 指定點選模式";
+  }
 
   const reqText =
     state.difficulty === "casual"
       ? "普通難度：只需輸入鄉鎮或車站名稱"
       : state.difficulty === "county_only"
-      ? "縣市模式：請輸入高亮區塊所屬的縣市名稱"
+      ? (isSatellite ? "縣市模式：觀察衛星地貌與燈火，輸入視野中心所屬縣市名稱" : "縣市模式：請輸入高亮區塊所屬的縣市名稱")
       : state.difficulty === "hard_suffix"
       ? "進階後綴：請輸入正確「鄉鎮市區+後綴」（免縣市）"
       : "困難全名：請輸入完整「縣市+鄉鎮市區+後綴」";
@@ -1337,6 +1449,13 @@ function updateTargetBannerUI() {
     descEl.textContent = isClick
       ? "請點擊地圖區塊/車站，或按右側 ←↑↓→ 鍵切換目標！"
       : "請點擊右側「🎲 隨機下個」抽取下一個目標！";
+  } else if (isSatellite) {
+    hintBadge.textContent = state.satelliteOutlineRevealed
+      ? "👁️ 已顯示輪廓"
+      : state.satelliteViewportLocked
+      ? "🔒 視野已鎖定"
+      : "🛰️ 衛星盲猜中";
+    descEl.textContent = reqText;
   } else {
     hintBadge.textContent = "琥珀色高亮區塊";
     descEl.textContent = reqText;
@@ -1344,6 +1463,52 @@ function updateTargetBannerUI() {
 }
 
 function giveTargetHint() {
+  if (state.playMode === "satellite_quiz") {
+    if (!state.targetId && !state.targetStationKey && !state.targetPoiId) return;
+    state.hintLevel++;
+    state.satelliteOutlineRevealed = true;
+    refreshAllPolygonStyles();
+    updateTargetBannerUI();
+    if (state.hintLevel === 1) {
+      setFeedback("💡 衛星提示 1：已於地圖上顯示目標行政區輪廓邊界！", "warn");
+      return;
+    }
+    if (state.targetStationKey) {
+      const st = getActiveQuizStations().find((s) => s.key === state.targetStationKey);
+      if (st) {
+        if (state.hintLevel === 2) {
+          setFeedback(`💡 衛星提示 2：所屬路線為「${st.lineName}」（${st.countyName || ""}）`, "warn");
+        } else {
+          setFeedback(`💡 衛星提示 3：隸屬「${st.lineName}」，站名首字為「${st.displayName[0]}...」`, "warn");
+        }
+      }
+      return;
+    }
+    if (state.targetPoiId && typeof TAIWAN_POI_BY_ID !== "undefined") {
+      const p = TAIWAN_POI_BY_ID.get(state.targetPoiId);
+      if (p) {
+        if (state.hintLevel === 2) {
+          setFeedback(`💡 衛星提示 2：此地標位於「${p.countyName || ""}${p.townName || ""}」`, "warn");
+        } else {
+          setFeedback(`💡 衛星提示 3：位於「${p.countyName || ""}」，地標首字為「${(p.shortName || p.name)[0]}...」`, "warn");
+        }
+      }
+      return;
+    }
+    if (state.difficulty === "county_only") {
+      const c = COUNTY_BY_NAME[state.targetId];
+      if (c) setFeedback(`💡 衛星提示 2：位於「${c.province}」，縣市首字為「${c.name[0]}...」`, "warn");
+      return;
+    }
+    const t = ALL_TOWNS.find((x) => x.id === state.targetId);
+    if (!t) return;
+    if (state.hintLevel === 2) {
+      setFeedback(`💡 衛星提示 2：此區塊位於「${t.isSpecial ? t.countyName : t.province + t.countyName}」`, "warn");
+    } else {
+      setFeedback(`💡 衛星提示 3：隸屬「${t.countyName}」，鄉鎮首字為「${t.townName[0]}...」`, "warn");
+    }
+    return;
+  }
   if (!state.allowTargetHints) {
     setFeedback("🚫 本局未開啟目標提示功能（預設關閉）", "warn");
     return;
@@ -1373,5 +1538,17 @@ function giveTargetHint() {
     setFeedback(`💡 提示 1：此區塊位於「${t.isSpecial ? t.countyName : t.province + t.countyName}」`, "warn");
   } else {
     setFeedback(`💡 提示 2：隸屬「${t.countyName}」，鄉鎮首字為「${t.townName[0]}...」`, "warn");
+  }
+}
+
+function revealSatelliteOutline() {
+  if (state.playMode !== "satellite_quiz") return;
+  if (state.hintLevel < 1) {
+    giveTargetHint();
+  } else {
+    state.satelliteOutlineRevealed = true;
+    refreshAllPolygonStyles();
+    updateTargetBannerUI();
+    setFeedback("💡 衛星提示 1：已於地圖上顯示目標行政區輪廓邊界！", "warn");
   }
 }

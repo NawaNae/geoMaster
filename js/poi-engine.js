@@ -272,7 +272,7 @@ function tryMatchAndUnlockPoi(rawInput, isAutoCheck = false) {
   const allowBareStem = !requireSuffix && !state.regionQuizEnabled;
 
   // Target mode: check ONLY the currently targeted POI first
-  if ((state.playMode === "target_random" || state.playMode === "target_click") && state.targetPoiId) {
+  if ((state.playMode === "target_random" || state.playMode === "target_click" || state.playMode === "satellite_quiz") && state.targetPoiId) {
     const targetPoi = TAIWAN_POI_BY_ID.get(state.targetPoiId);
     if (targetPoi && activePois.some((p) => p.id === targetPoi.id)) {
       if (matchSinglePoi(targetPoi, normInput, !requireSuffix, requireSuffix)) {
@@ -412,7 +412,7 @@ function isPoiInsideViewport(poi, bounds) {
 function resolvePoiMarkerStatus(poi, unlockedSet, missedSet, activeTargetId) {
   if (unlockedSet && unlockedSet.has(poi.id)) return "unlocked";
   if (missedSet && missedSet.has(poi.id)) return "missed";
-  if (activeTargetId === poi.id && (state.playMode === "target_random" || state.playMode === "target_click")) {
+  if (activeTargetId === poi.id && (state.playMode === "target_random" || state.playMode === "target_click" || state.playMode === "satellite_quiz")) {
     return "target";
   }
   return "locked";
