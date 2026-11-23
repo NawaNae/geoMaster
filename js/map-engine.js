@@ -139,13 +139,40 @@ if (typeof window.L === "undefined") {
     geoJSON: (feat) => noopLayer(extractGeoJsonBounds(feat)),
     polyline: () => noopLayer(),
     circleMarker: () => noopLayer(),
-    marker: () => noopLayer(),
-    divIcon: () => ({}),
+    marker: (latlng, opts = {}) => {
+      let curLatLng = toLatLngObj(latlng) || { lat: 23.75, lng: 120.95 };
+      let attachedMap = null;
+      return {
+        options: opts,
+        _latlng: curLatLng,
+        addTo(m) {
+          attachedMap = m || null;
+          if (m && typeof m.addLayer === "function") m.addLayer(this);
+          return this;
+        },
+        remove() {
+          if (attachedMap && typeof attachedMap.removeLayer === "function") {
+            attachedMap.removeLayer(this);
+          }
+          attachedMap = null;
+          return this;
+        },
+        getLatLng() { return curLatLng; },
+        setLatLng(ll) {
+          const parsed = toLatLngObj(ll);
+          if (parsed) curLatLng = parsed;
+          return this;
+        },
+        on() { return this; },
+        bindTooltip() { return this; }
+      };
+    },
+    divIcon: (opts = {}) => ({ options: opts }),
     DomEvent: { stopPropagation() {} },
     map: (_id, opts = {}) => ({
       _zoom: typeof opts.zoom === "number" ? opts.zoom : 8,
       _minZoom: typeof opts.minZoom === "number" ? opts.minZoom : 7,
-      _maxZoom: typeof opts.maxZoom === "number" ? opts.maxZoom : 15,
+      _maxZoom: typeof opts.maxZoom === "number" ? opts.maxZoom : 18,
       _center: Array.isArray(opts.center) ? { lat: opts.center[0], lng: opts.center[1] } : { lat: 23.75, lng: 120.95 },
       _maxBounds: opts.maxBounds || null,
       _layers: new Set(),
@@ -283,7 +310,7 @@ function initMap() {
     center: [23.75, 120.95],
     zoom: 8,
     minZoom: 7,
-    maxZoom: 15,
+    maxZoom: 18,
     maxBounds: TAIWAN_MAX_BOUNDS,
     maxBoundsViscosity: 0.9,
     preferCanvas: true,
@@ -681,6 +708,261 @@ function computeCountyMainBounds(countyName, townList = null, options = {}) {
   return outBounds;
 }
 
+function isPointInRing(lng, lat, ring) {
+  if (!Array.isArray(ring) || ring.length < 3 || !Number.isFinite(lng) || !Number.isFinite(lat)) {
+    return false;
+  }
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const pi = ring[i];
+    const pj = ring[j];
+    if (!Array.isArray(pi) || !Array.isArray(pj) || pi.length < 2 || pj.length < 2) continue;
+    const xi = Number(pi[0]);
+    const yi = Number(pi[1]);
+    const xj = Number(pj[0]);
+    const yj = Number(pj[1]);
+    if (!Number.isFinite(xi) || !Number.isFinite(yi) || !Number.isFinite(xj) || !Number.isFinite(yj)) continue;
+    const intersects = ((yi > lat) !== (yj > lat)) &&
+      (lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi);
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+function computeMainPolygonPoint(geojsonFeature, _options = {}) {
+  const geom = geojsonFeature && geojsonFeature.type === "Feature" ? geojsonFeature.geometry : geojsonFeature;
+  if (!geom || !geom.coordinates) return null;
+
+  const outerRings = [];
+  if (geom.type === "Polygon" && Array.isArray(geom.coordinates[0])) {
+    outerRings.push(geom.coordinates[0]);
+  } else if (geom.type === "MultiPolygon" && Array.isArray(geom.coordinates)) {
+    geom.coordinates.forEach((poly) => {
+      if (Array.isArray(poly) && Array.isArray(poly[0])) {
+        outerRings.push(poly[0]);
+      }
+    });
+  }
+  if (outerRings.length === 0) return null;
+
+  let mainRingInfo = null;
+  outerRings.forEach((ring) => {
+    if (!Array.isArray(ring) || ring.length < 3) return;
+    let area2 = 0;
+    let minLat = Infinity;
+    let maxLat = -Infinity;
+    let minLng = Infinity;
+    let maxLng = -Infinity;
+    for (let i = 0; i < ring.length; i++) {
+      const pt = ring[i];
+      if (!Array.isArray(pt) || pt.length < 2) continue;
+      const lng = Number(pt[0]);
+      const lat = Number(pt[1]);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+      if (lng < minLng) minLng = lng;
+      if (lng > maxLng) maxLng = lng;
+      const next = ring[(i + 1) % ring.length];
+      if (Array.isArray(next) && next.length >= 2) {
+        const nLng = Number(next[0]);
+        const nLat = Number(next[1]);
+        if (Number.isFinite(nLng) && Number.isFinite(nLat)) {
+          area2 += lng * nLat - nLng * lat;
+        }
+      }
+    }
+    if (!Number.isFinite(minLat) || !Number.isFinite(minLng)) return;
+    const area = 0.5 * Math.abs(area2);
+    if (!mainRingInfo || area > mainRingInfo.area) {
+      mainRingInfo = { ring, area, minLat, maxLat, minLng, maxLng };
+    }
+  });
+
+  if (!mainRingInfo) return null;
+  const { ring, minLat, maxLat, minLng, maxLng } = mainRingInfo;
+  const centerLat = (minLat + maxLat) / 2;
+  const centerLng = (minLng + maxLng) / 2;
+
+  if (isPointInRing(centerLng, centerLat, ring)) {
+    return { lat: centerLat, lng: centerLng };
+  }
+
+  const latSpan = maxLat - minLat;
+  if (latSpan > 1e-9) {
+    const scanRatios = [0.5, 0.35, 0.65, 0.2, 0.8];
+    for (let rIdx = 0; rIdx < scanRatios.length; rIdx++) {
+      const scanLat = minLat + latSpan * scanRatios[rIdx];
+      const xs = [];
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const pi = ring[i];
+        const pj = ring[j];
+        if (!Array.isArray(pi) || !Array.isArray(pj) || pi.length < 2 || pj.length < 2) continue;
+        const xi = Number(pi[0]);
+        const yi = Number(pi[1]);
+        const xj = Number(pj[0]);
+        const yj = Number(pj[1]);
+        if (!Number.isFinite(xi) || !Number.isFinite(yi) || !Number.isFinite(xj) || !Number.isFinite(yj)) continue;
+        if ((yi > scanLat) !== (yj > scanLat)) {
+          const xInt = xi + ((scanLat - yi) * (xj - xi)) / (yj - yi);
+          if (Number.isFinite(xInt)) xs.push(xInt);
+        }
+      }
+      xs.sort((a, b) => a - b);
+      let bestMidLng = null;
+      let bestSegLen = -1;
+      for (let k = 0; k + 1 < xs.length; k++) {
+        const segLen = xs[k + 1] - xs[k];
+        if (segLen <= 1e-9) continue;
+        const midLng = (xs[k] + xs[k + 1]) / 2;
+        if (segLen > bestSegLen && isPointInRing(midLng, scanLat, ring)) {
+          bestSegLen = segLen;
+          bestMidLng = midLng;
+        }
+      }
+      if (bestMidLng !== null) {
+        return { lat: scanLat, lng: bestMidLng };
+      }
+    }
+  }
+
+  return { lat: centerLat, lng: centerLng };
+}
+
+function computeCountyMainPoint(countyName, townList = null) {
+  const isPureIslandCounty = countyName === "澎湖縣" || countyName === "金門縣" || countyName === "連江縣";
+  const allCountyTowns = Array.isArray(townList)
+    ? townList
+    : ALL_TOWNS.filter((t) => t.countyName === countyName);
+
+  const townsWithGeo = allCountyTowns.filter((t) => {
+    if (t.mainPoint && Number.isFinite(t.mainPoint.lat) && Number.isFinite(t.mainPoint.lng)) return true;
+    const b = (t.mainBounds && typeof t.mainBounds.isValid === "function" && t.mainBounds.isValid())
+      ? t.mainBounds
+      : t.bounds;
+    return Boolean(b && typeof b.isValid === "function" && b.isValid());
+  });
+
+  if (townsWithGeo.length === 0) {
+    const cObj = typeof COUNTY_BY_NAME !== "undefined" ? COUNTY_BY_NAME[countyName] : null;
+    if (cObj && Number.isFinite(cObj.lat) && Number.isFinite(cObj.lng)) {
+      return { lat: cObj.lat, lng: cObj.lng };
+    }
+    return null;
+  }
+
+  let candidates = townsWithGeo;
+  if (!isPureIslandCounty && typeof TAIWAN_MAINLAND_OFFSHORE_SET !== "undefined") {
+    const mainlandOnly = townsWithGeo.filter((t) => !TAIWAN_MAINLAND_OFFSHORE_SET.has(t.fullCountyTown));
+    if (mainlandOnly.length > 0) {
+      candidates = mainlandOnly;
+    }
+  }
+
+  const cObj = typeof COUNTY_BY_NAME !== "undefined" ? COUNTY_BY_NAME[countyName] : null;
+  const cBounds = (cObj && cObj.mainBounds && typeof cObj.mainBounds.isValid === "function" && cObj.mainBounds.isValid())
+    ? cObj.mainBounds
+    : computeCountyMainBounds(countyName, candidates);
+  const targetCenter = (cBounds && typeof cBounds.getCenter === "function")
+    ? cBounds.getCenter()
+    : { lat: cObj?.lat || 23.75, lng: cObj?.lng || 120.95 };
+
+  let bestPt = null;
+  let bestDist = Infinity;
+  candidates.forEach((t) => {
+    let pt = null;
+    if (t.mainPoint && Number.isFinite(t.mainPoint.lat) && Number.isFinite(t.mainPoint.lng)) {
+      pt = t.mainPoint;
+    } else if (t.mainBounds && typeof t.mainBounds.isValid === "function" && t.mainBounds.isValid()) {
+      pt = t.mainBounds.getCenter();
+    } else if (t.bounds && typeof t.bounds.isValid === "function" && t.bounds.isValid()) {
+      pt = t.bounds.getCenter();
+    } else if (Number.isFinite(t.lat) && Number.isFinite(t.lng)) {
+      pt = { lat: t.lat, lng: t.lng };
+    }
+    if (!pt || !Number.isFinite(pt.lat) || !Number.isFinite(pt.lng)) return;
+    const d = Math.hypot(pt.lat - targetCenter.lat, pt.lng - targetCenter.lng);
+    if (d < bestDist) {
+      bestDist = d;
+      bestPt = { lat: pt.lat, lng: pt.lng };
+    }
+  });
+
+  return bestPt || { lat: targetCenter.lat, lng: targetCenter.lng };
+}
+
+let satelliteTargetMarker = null;
+
+function getSatelliteTargetMarker() {
+  return satelliteTargetMarker;
+}
+
+function clearSatelliteTargetMarker() {
+  if (satelliteTargetMarker) {
+    if (typeof satelliteTargetMarker.remove === "function") {
+      satelliteTargetMarker.remove();
+    } else if (map && typeof map.removeLayer === "function") {
+      map.removeLayer(satelliteTargetMarker);
+    }
+    satelliteTargetMarker = null;
+  }
+  state.satelliteTargetPoint = null;
+}
+
+function updateSatelliteTargetMarker(pickObj) {
+  clearSatelliteTargetMarker();
+  if (!pickObj || !map || typeof L === "undefined" || typeof L.marker !== "function" || typeof L.divIcon !== "function") {
+    return null;
+  }
+
+  let pt = null;
+  if (pickObj.mainPoint && Number.isFinite(pickObj.mainPoint.lat) && Number.isFinite(pickObj.mainPoint.lng)) {
+    pt = { lat: pickObj.mainPoint.lat, lng: pickObj.mainPoint.lng };
+  } else if (state.difficulty === "county_only" && pickObj.name) {
+    pt = computeCountyMainPoint(pickObj.name);
+  }
+  if (!pt && pickObj.mainBounds && typeof pickObj.mainBounds.isValid === "function" && pickObj.mainBounds.isValid()) {
+    pt = pickObj.mainBounds.getCenter();
+  }
+  if (!pt && pickObj.bounds && typeof pickObj.bounds.isValid === "function" && pickObj.bounds.isValid()) {
+    pt = pickObj.bounds.getCenter();
+  }
+  if (!pt && Number.isFinite(pickObj.lat) && Number.isFinite(pickObj.lng)) {
+    pt = { lat: Number(pickObj.lat), lng: Number(pickObj.lng) };
+  }
+  if (!pt || !Number.isFinite(pt.lat) || !Number.isFinite(pt.lng)) {
+    return null;
+  }
+
+  state.satelliteTargetPoint = { lat: pt.lat, lng: pt.lng };
+
+  const pinEl = document.createElement("div");
+  pinEl.className = "satellite-target-pin";
+  const pulseEl = document.createElement("span");
+  pulseEl.className = "satellite-target-pin-pulse";
+  const coreEl = document.createElement("span");
+  coreEl.className = "satellite-target-pin-core";
+  coreEl.textContent = "?";
+  pinEl.appendChild(pulseEl);
+  pinEl.appendChild(coreEl);
+
+  const icon = L.divIcon({
+    className: "satellite-target-pin-wrapper",
+    html: pinEl,
+    iconSize: [36, 36],
+    iconAnchor: [18, 18]
+  });
+
+  satelliteTargetMarker = L.marker([pt.lat, pt.lng], {
+    icon,
+    interactive: false,
+    keyboard: false,
+    zIndexOffset: 900
+  }).addTo(map);
+
+  return satelliteTargetMarker;
+}
+
 function lockMapViewportToBounds(bounds, options = {}) {
   if (state.role === "spectator") {
     state.satelliteViewportLocked = false;
@@ -694,7 +976,7 @@ function lockMapViewportToBounds(bounds, options = {}) {
     return false;
   }
 
-  const padRatio = typeof options.padRatio === "number" ? options.padRatio : 0.35;
+  const padRatio = typeof options.padRatio === "number" ? options.padRatio : 0.22;
   const padded = typeof bounds.pad === "function" ? bounds.pad(padRatio) : bounds;
   if (typeof map.setMaxBounds === "function") {
     map.setMaxBounds(padded);
@@ -702,21 +984,31 @@ function lockMapViewportToBounds(bounds, options = {}) {
 
   const maxFitZoom = typeof options.maxFitZoom === "number"
     ? options.maxFitZoom
-    : (state.difficulty === "county_only" ? 11 : 13);
-  let fittedZoom = typeof map.getZoom === "function" ? map.getZoom() : 10;
-  if (typeof map.getBoundsZoom === "function") {
+    : (state.difficulty === "county_only" ? 10 : 12);
+  let fittedZoom = typeof map.getZoom === "function" && Number.isFinite(map.getZoom())
+    ? Math.floor(map.getZoom())
+    : 10;
+  if (typeof options.maxFitZoom !== "number" && typeof map.getBoundsZoom === "function") {
     try {
-      const padPt = typeof L !== "undefined" && typeof L.point === "function" ? L.point(56, 56) : [56, 56];
-      const bz = map.getBoundsZoom(bounds, false, padPt);
+      const padPt = typeof L !== "undefined" && typeof L.point === "function" ? L.point(32, 32) : [32, 32];
+      const bz = map.getBoundsZoom(padded, false, padPt);
       if (Number.isFinite(bz) && bz > 0) {
-        fittedZoom = Math.min(maxFitZoom, bz);
+        fittedZoom = Math.min(maxFitZoom, Math.floor(bz));
       }
     } catch (_) {}
   }
-  const computedMinZoom = Math.max(8, Math.min(13, fittedZoom - 1));
+  const minCap = state.difficulty === "county_only" ? 11 : 12;
+  const computedMinZoom = Math.max(8, Math.min(minCap, fittedZoom));
   const targetMinZoom = typeof options.minZoom === "number" ? options.minZoom : computedMinZoom;
   if (typeof map.setMinZoom === "function") {
     map.setMinZoom(targetMinZoom);
+  }
+
+  const maxCap = state.difficulty === "county_only" ? 12 : 13;
+  const computedMaxZoom = Math.max(targetMinZoom + 1, Math.min(maxCap, targetMinZoom + 1));
+  const targetMaxZoom = typeof options.maxZoom === "number" ? options.maxZoom : computedMaxZoom;
+  if (typeof map.setMaxZoom === "function") {
+    map.setMaxZoom(targetMaxZoom);
   }
 
   state.satelliteViewportLocked = true;
@@ -732,8 +1024,14 @@ function unlockMapViewportToTaiwan(options = {}) {
     if (typeof map.setMinZoom === "function") {
       map.setMinZoom(7);
     }
+    if (typeof map.setMaxZoom === "function") {
+      map.setMaxZoom(18);
+    }
   }
   state.satelliteViewportLocked = false;
+  if (restoreLayers || options.clearMarker === true) {
+    clearSatelliteTargetMarker();
+  }
 
   if (restoreLayers) {
     if (state.satelliteSavedBaseLayer) {
@@ -807,13 +1105,20 @@ function setMapBaseLayer(layerKey, forceBypassLock = false) {
     layerKey === "satellite_night" ||
     (layerKey === "satellite_hybrid" && state.satelliteActiveQuestionStyle === "night")
   ) {
+    const satDarkBase = L.tileLayer(GIS_TILES.satellite, {
+      maxZoom: 18,
+      opacity: 1,
+      className: "satellite-night-dark-base",
+      attribution: "Imagery &copy; Esri"
+    }).addTo(map);
     const satNight = L.tileLayer(GIS_TILES.satellite_night, {
       maxNativeZoom: 8,
       maxZoom: 15,
       opacity: 0.95,
+      className: "satellite-night-lights-overlay",
       attribution: "Night Lights &copy; NASA GIBS VIIRS Black Marble"
     }).addTo(map);
-    activeTileLayers.push(satNight);
+    activeTileLayers.push(satDarkBase, satNight);
     mapEl.classList.add("basemap-no-spoiler");
   } else if (layerKey === "satellite" || layerKey === "satellite_hybrid") {
     const sat = L.tileLayer(GIS_TILES.satellite, {
@@ -944,10 +1249,12 @@ function rebuildMapLayers(topoData) {
     t.layers = [];
     t.bounds = null;
     t.mainBounds = null;
+    t.mainPoint = null;
   });
   TAIWAN_ADMIN_DATA.forEach((c) => {
     c.bounds = null;
     c.mainBounds = null;
+    c.mainPoint = null;
   });
 
   if (loadedTopoData && loadedTopoData.townsGeo) {
@@ -970,10 +1277,12 @@ function rebuildMapLayers(topoData) {
       try {
         const b = polyLayer.getBounds();
         const mainB = computeMainPolygonBounds(feat);
+        const mainPt = computeMainPolygonPoint(feat);
         if (b && b.isValid()) {
           townObj.bounds = b;
           townObj.mainBounds = mainB && mainB.isValid() ? mainB : b;
-          const center = townObj.mainBounds.getCenter();
+          const center = mainPt || townObj.mainBounds.getCenter();
+          townObj.mainPoint = { lat: center.lat, lng: center.lng };
           townObj.lat = center.lat;
           townObj.lng = center.lng;
 
@@ -995,6 +1304,10 @@ function rebuildMapLayers(topoData) {
         cObj.mainBounds = cMain;
       } else if (cObj.bounds && cObj.bounds.isValid()) {
         cObj.mainBounds = cObj.bounds;
+      }
+      const cPt = computeCountyMainPoint(cObj.name);
+      if (cPt && Number.isFinite(cPt.lat) && Number.isFinite(cPt.lng)) {
+        cObj.mainPoint = cPt;
       }
     });
 

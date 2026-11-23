@@ -1035,13 +1035,88 @@ body.perf-lite .tw-poi-state-missed {
 .geo-select-card[data-accent="lime"][data-state="on"] { background: rgba(132, 204, 22, 0.22); border-color: #84cc16; }
 .geo-select-card[data-accent="lime"][data-state="partial"] { background: rgba(132, 204, 22, 0.10); border-color: rgba(132, 204, 22, 0.45); color: #d9f99d; }
 
+/* ============================================================================
+   SATELLITE QUIZ NIGHT BLEND & TARGET PIN MARKER
+   ============================================================================ */
+.satellite-night-dark-base {
+  filter: brightness(0.34) contrast(1.25) saturate(0.5);
+}
+
+.satellite-night-lights-overlay {
+  mix-blend-mode: screen;
+  filter: brightness(0.74) contrast(1.1) saturate(1.25);
+}
+
+.satellite-target-pin-wrapper {
+  background: transparent !important;
+  border: none !important;
+  pointer-events: none !important;
+}
+
+.satellite-target-pin {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.satellite-target-pin-pulse {
+  position: absolute;
+  inset: 2px;
+  border-radius: 9999px;
+  border: 2px solid rgba(251, 191, 36, 0.92);
+  background: rgba(245, 158, 11, 0.18);
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.7), inset 0 0 6px rgba(251, 191, 36, 0.4);
+  animation: satellite-pin-pulse 1.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+.satellite-target-pin-core {
+  position: relative;
+  z-index: 2;
+  width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, #fbbf24, #d97706);
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 8px rgba(2, 6, 23, 0.9), 0 0 0 1.5px rgba(2, 6, 23, 0.75);
+  color: #020617;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+
+@keyframes satellite-pin-pulse {
+  0% {
+    transform: scale(0.82);
+    opacity: 0.95;
+  }
+  70% {
+    transform: scale(1.32);
+    opacity: 0.15;
+  }
+  100% {
+    transform: scale(1.38);
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tw-poi-pin,
   .geo-select-card,
   .geo-solo-btn,
   .geo-union-btn,
-  .geo-union-pill {
+  .geo-union-pill,
+  .satellite-target-pin,
+  .satellite-target-pin-pulse {
     transition: none !important;
     transform: none !important;
+    animation: none !important;
   }
 }

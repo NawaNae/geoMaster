@@ -608,8 +608,11 @@ function finishGame(reason = "victory") {
   stopTimer();
   state.isGameOver = true;
   state.finished = true;
+  if (typeof clearSatelliteTargetMarker === "function") {
+    clearSatelliteTargetMarker();
+  }
   if (typeof unlockMapViewportToTaiwan === "function") {
-    unlockMapViewportToTaiwan({ restoreLayers: false });
+    unlockMapViewportToTaiwan({ restoreLayers: false, clearMarker: true });
   }
 
   if (reason !== "victory") {
@@ -2186,6 +2189,9 @@ function resetGame() {
   state.targetId = null;
   state.hintLevel = 0;
   state.satelliteOutlineRevealed = false;
+  if (typeof clearSatelliteTargetMarker === "function") {
+    clearSatelliteTargetMarker();
+  }
 
   if (state.opponent) {
     state.opponent.finished = false;

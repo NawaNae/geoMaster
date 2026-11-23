@@ -265,9 +265,12 @@ function setPlayMode(pm) {
   state.targetPoiId = null;
   state.hintLevel = 0;
   state.satelliteOutlineRevealed = false;
+  if (pm !== "satellite_quiz" && typeof clearSatelliteTargetMarker === "function") {
+    clearSatelliteTargetMarker();
+  }
   if (prevPlayMode === "satellite_quiz" && pm !== "satellite_quiz") {
     if (typeof unlockMapViewportToTaiwan === "function") {
-      unlockMapViewportToTaiwan({ restoreLayers: true });
+      unlockMapViewportToTaiwan({ restoreLayers: true, clearMarker: true });
     }
   }
   syncConfigButtonsUI();

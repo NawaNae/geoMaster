@@ -97,6 +97,7 @@ const state = {
   satelliteSavedBaseLayer: null,
   satelliteSavedDistrictBorders: null,
   satelliteViewportLocked: false,
+  satelliteTargetPoint: null,
   mapLayer: "vector",         // 'vector' | 'terrain' | 'street' | 'satellite' | 'satellite_night' | 'satellite_hybrid'
   showRailOverlay: false,     // Default OFF
   transportMode: "off",       // 'off' | 'rail_only' | 'lines_and_stations' | 'stations_only'

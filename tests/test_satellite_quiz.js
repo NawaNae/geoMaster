@@ -121,6 +121,8 @@ function createSandbox() {
   };
 
   const tileLayerCalls = [];
+  const markerCalls = [];
+  const divIconCalls = [];
 
   const sandbox = {
     console,
@@ -218,6 +220,8 @@ function createSandbox() {
     },
     fetch: async () => ({ ok: false }),
     __tileLayerCalls: tileLayerCalls,
+    __markerCalls: markerCalls,
+    __divIconCalls: divIconCalls,
     lastFeedback: null
   };
 
@@ -253,6 +257,24 @@ function createSandbox() {
         return _origTileLayer.apply(this, arguments);
       };
     }
+    if (typeof L !== "undefined" && typeof L.marker === "function") {
+      const _origMarker = L.marker;
+      L.marker = function(latlng, options) {
+        const inst = _origMarker.apply(this, arguments);
+        inst._latlng = latlng;
+        inst._options = options || {};
+        window.__markerCalls.push({ latlng, options: options || {}, instance: inst });
+        return inst;
+      };
+    }
+    if (typeof L !== "undefined" && typeof L.divIcon === "function") {
+      const _origDivIcon = L.divIcon;
+      L.divIcon = function(options) {
+        const inst = _origDivIcon.apply(this, arguments);
+        window.__divIconCalls.push(options || {});
+        return inst;
+      };
+    }
     if (typeof setFeedback === "function") {
       const _origSetFeedback = setFeedback;
       setFeedback = function(text, level) {
@@ -264,10 +286,10 @@ function createSandbox() {
     if (typeof bindAllUIEvents === "function") bindAllUIEvents();
   `, sandbox);
 
-  return { sandbox, elements, tileLayerCalls };
+  return { sandbox, elements, tileLayerCalls, markerCalls, divIconCalls };
 }
 
-const { sandbox: sb, elements, tileLayerCalls } = createSandbox();
+const { sandbox: sb, elements, tileLayerCalls, markerCalls, divIconCalls } = createSandbox();
 
 // Helper to create a closed GeoJSON rectangle ring: [[minLng, minLat], [maxLng, minLat], [maxLng, maxLat], [minLng, maxLat], [minLng, minLat]]
 function makeRectRing(minLng, minLat, maxLng, maxLat) {
@@ -1016,6 +1038,284 @@ runSection("8.AntiCheatAndHardeningGuards", () => {
   );
 
   sb.exitTargetQuizMode();
+});
+
+// ============================================================================
+// 9. PLAYTEST REFINEMENTS (Night Dark Base + NASA Blend, Zoom Caps, Interior Point, Target Pin)
+// ============================================================================
+runSection("9.PlaytestRefinements", () => {
+  // --------------------------------------------------------------------------
+  // 9a. Night Mode High-Res Dark Satellite + NASA Night Lights Blend
+  // --------------------------------------------------------------------------
+  tileLayerCalls.length = 0;
+  sb.setMapBaseLayer("satellite_night", true);
+  const dayUrl = vm.runInContext("GIS_TILES && GIS_TILES.satellite", sb);
+  const nightUrl = vm.runInContext("GIS_TILES && GIS_TILES.satellite_night", sb);
+  const darkBaseCall = tileLayerCalls.find((c) => c.url === dayUrl);
+  const nightOverlayCall = tileLayerCalls.find((c) => c.url === nightUrl);
+
+  check(
+    Boolean(darkBaseCall && String(darkBaseCall.options.className || "").includes("satellite-night-dark-base")),
+    "9a.NightDarkBasePlusNasaBlend",
+    `setMapBaseLayer("satellite_night", true) must instantiate Esri GIS_TILES.satellite base tile layer with className containing "satellite-night-dark-base", got ${JSON.stringify(darkBaseCall ? darkBaseCall.options : null)}`
+  );
+  check(
+    Boolean(
+      nightOverlayCall &&
+        nightOverlayCall.options.maxNativeZoom === 8 &&
+        nightOverlayCall.options.maxZoom >= 15 &&
+        nightOverlayCall.options.opacity === 0.95 &&
+        String(nightOverlayCall.options.className || "").includes("satellite-night-lights-overlay")
+    ),
+    "9a.NightDarkBasePlusNasaBlend",
+    `setMapBaseLayer("satellite_night", true) must instantiate NASA GIS_TILES.satellite_night overlay with maxNativeZoom:8, maxZoom>=15, opacity:0.95, and className containing "satellite-night-lights-overlay", got ${JSON.stringify(nightOverlayCall ? nightOverlayCall.options : null)}`
+  );
+
+  const cssText = readRepoFile("css/styles.css");
+  const darkBaseCssMatch = cssText.match(/\.satellite-night-dark-base\s*\{([\s\S]*?)\}/);
+  const nightOverlayCssMatch = cssText.match(/\.satellite-night-lights-overlay\s*\{([\s\S]*?)\}/);
+  check(
+    Boolean(darkBaseCssMatch && /brightness\s*\(/i.test(darkBaseCssMatch[1])),
+    "9a.NightDarkBasePlusNasaBlend",
+    "css/styles.css must define .satellite-night-dark-base with a brightness(...) darkening filter"
+  );
+  check(
+    Boolean(nightOverlayCssMatch && /mix-blend-mode\s*:\s*screen/i.test(nightOverlayCssMatch[1])),
+    "9a.NightDarkBasePlusNasaBlend",
+    "css/styles.css must define .satellite-night-lights-overlay with mix-blend-mode: screen"
+  );
+
+  // --------------------------------------------------------------------------
+  // 9b. Tight Framing + Zoom-In Cap (maxZoom) + Prevent 2-Level Zoom-Out (minZoom) + Full Restore
+  // --------------------------------------------------------------------------
+  vm.runInContext('state.role = "solo"; state.satelliteLockViewport = true; state.difficulty = "casual";', sb);
+  sb.unlockMapViewportToTaiwan({ restoreLayers: false });
+
+  // Tight default padRatio <= 0.25 (e.g., 0.22)
+  const testTownBounds = vm.runInContext("L.latLngBounds([22.54, 120.26], [22.64, 120.36])", sb);
+  sb.lockMapViewportToBounds(testTownBounds);
+  const lockedMaxB = vm.runInContext("map.getMaxBounds && map.getMaxBounds()", sb);
+  const latSpan = 22.64 - 22.54;
+  const latPadNorth = lockedMaxB ? lockedMaxB.getNorthEast().lat - 22.64 : Infinity;
+  const effectivePadRatio = latPadNorth / latSpan;
+  check(
+    Boolean(lockedMaxB && effectivePadRatio > 0 && effectivePadRatio <= 0.25 + 1e-6),
+    "9b.ZoomCapsAndTightBounds",
+    `lockMapViewportToBounds default padRatio must be <= 0.25 (e.g. 0.22) for tight district framing, got effectivePadRatio=${effectivePadRatio.toFixed(3)}`
+  );
+
+  // Township mode applySatelliteTargetViewport: prevents 2-level zoom-out & caps maxZoom <= 13 (and <= fittedZoom + 1)
+  const meinongTown = vm.runInContext('ALL_TOWNS.find(t => t.fullCountyTown === "高雄市美濃區")', sb);
+  vm.runInContext('state.playMode = "satellite_quiz"; state.difficulty = "casual"; state.satelliteLockViewport = true;', sb);
+  sb.applySatelliteTargetViewport(meinongTown);
+  const townZoom = vm.runInContext("map.getZoom()", sb);
+  const townMinZ = vm.runInContext("map.getMinZoom()", sb);
+  const townMaxZ = vm.runInContext("map.getMaxZoom()", sb);
+  check(
+    Number.isFinite(townZoom) &&
+      Number.isFinite(townMinZ) &&
+      townMinZ >= Math.max(8, Math.floor(townZoom)) &&
+      townZoom - townMinZ <= 1,
+    "9b.ZoomCapsAndTightBounds",
+    `After applySatelliteTargetViewport(townObj), minZoom must be >= Math.max(8, Math.floor(map.getZoom())) so player cannot zoom out 2 levels! got zoom=${townZoom}, minZoom=${townMinZ}`
+  );
+  check(
+    Number.isFinite(townMaxZ) &&
+      townMaxZ <= 13 &&
+      townMaxZ <= Math.floor(townZoom) + 1 &&
+      townMaxZ >= townMinZ,
+    "9b.ZoomCapsAndTightBounds",
+    `In township satellite_quiz mode, map.getMaxZoom() must be capped at <= 13 and <= fittedZoom + 1 (preventing zoom 16-18 street spoiler), got zoom=${townZoom}, minZoom=${townMinZ}, maxZoom=${townMaxZ}`
+  );
+
+  // County mode applySatelliteTargetViewport: caps maxZoom <= 12 (and <= fittedZoom + 1, with maxZoom >= minZoom + 1)
+  const khCounty = vm.runInContext('COUNTY_BY_NAME["高雄市"]', sb);
+  vm.runInContext('state.playMode = "satellite_quiz"; state.difficulty = "county_only"; state.satelliteLockViewport = true;', sb);
+  sb.applySatelliteTargetViewport(khCounty);
+  const countyZoom = vm.runInContext("map.getZoom()", sb);
+  const countyMinZ = vm.runInContext("map.getMinZoom()", sb);
+  const countyMaxZ = vm.runInContext("map.getMaxZoom()", sb);
+  check(
+    Number.isFinite(countyZoom) &&
+      Number.isFinite(countyMinZ) &&
+      Number.isFinite(countyMaxZ) &&
+      countyMinZ >= Math.max(8, Math.floor(countyZoom)) &&
+      countyMaxZ <= 12 &&
+      countyMaxZ <= Math.floor(countyZoom) + 1 &&
+      countyMaxZ >= countyMinZ + 1,
+    "9b.ZoomCapsAndTightBounds",
+    `In county_only satellite_quiz mode, expected minZoom >= Math.max(8, fittedZoom), maxZoom <= 12, maxZoom <= fittedZoom + 1, and maxZoom >= minZoom + 1, got zoom=${countyZoom}, minZoom=${countyMinZ}, maxZoom=${countyMaxZ}`
+  );
+
+  // unlockMapViewportToTaiwan() restores minZoom === 7, maxZoom === 18, and TAIWAN_MAX_BOUNDS
+  sb.unlockMapViewportToTaiwan({ restoreLayers: false });
+  const unlockedMinZ = vm.runInContext("map.getMinZoom()", sb);
+  const unlockedMaxZ = vm.runInContext("map.getMaxZoom()", sb);
+  const unlockedMaxB = vm.runInContext("map.getMaxBounds()", sb);
+  check(
+    unlockedMinZ === 7 &&
+      unlockedMaxZ === 18 &&
+      Boolean(
+        unlockedMaxB &&
+          Math.abs(unlockedMaxB.getSouthWest().lat - 20.2) < 0.01 &&
+          Math.abs(unlockedMaxB.getNorthEast().lat - 27.4) < 0.01
+      ),
+    "9b.ZoomCapsAndTightBounds",
+    `unlockMapViewportToTaiwan() must restore minZoom===7, maxZoom===18, and TAIWAN_MAX_BOUNDS, got minZoom=${unlockedMinZ}, maxZoom=${unlockedMaxZ}, maxBounds=${JSON.stringify(unlockedMaxB)}`
+  );
+
+  // --------------------------------------------------------------------------
+  // 9c. Guaranteed Interior Target Point (computeMainPolygonPoint & computeCountyMainPoint)
+  // --------------------------------------------------------------------------
+  const hasMainPt = vm.runInContext('typeof computeMainPolygonPoint === "function"', sb);
+  const hasCountyPt = vm.runInContext('typeof computeCountyMainPoint === "function"', sb);
+  check(
+    hasMainPt,
+    "9c.MainPolygonInteriorPoint",
+    "computeMainPolygonPoint(geojsonFeature) must be defined in js/map-engine.js"
+  );
+  check(
+    hasCountyPt,
+    "9c.MainPolygonInteriorPoint",
+    "computeCountyMainPoint(countyName) must be defined in js/map-engine.js"
+  );
+
+  // C-shaped concave polygon opening East:
+  // BBox is [120.0..121.0E, 23.0..24.0N], whose bbox center (23.5N, 120.5E) AND area centroid (23.5N, 120.425E)
+  // both fall inside the hollow central bay (lng > 120.25, 23.25 < lat < 23.75) OUTSIDE the polygon!
+  const cShapeRing = [
+    [120.0, 23.0],
+    [121.0, 23.0],
+    [121.0, 23.25],
+    [120.25, 23.25],
+    [120.25, 23.75],
+    [121.0, 23.75],
+    [121.0, 24.0],
+    [120.0, 24.0],
+    [120.0, 23.0]
+  ];
+  const cShapeFeature = makePolygonFeature("高雄市", "旗津區", cShapeRing);
+
+  function isPointStrictlyInsideCShape(pt) {
+    if (!pt || !Number.isFinite(pt.lat) || !Number.isFinite(pt.lng)) return false;
+    const inOuterBox = pt.lng > 120.0 && pt.lng < 121.0 && pt.lat > 23.0 && pt.lat < 24.0;
+    const inHollowBay = pt.lng >= 120.25 && pt.lat >= 23.25 && pt.lat <= 23.75;
+    return inOuterBox && !inHollowBay;
+  }
+
+  const cPt = hasMainPt ? sb.computeMainPolygonPoint(cShapeFeature) : null;
+  check(
+    isPointStrictlyInsideCShape(cPt),
+    "9c.MainPolygonInteriorPoint",
+    `computeMainPolygonPoint on a C-shaped concave polygon must return { lat, lng } strictly INSIDE the solid land area (NOT in the hollow bay [lng>=120.25, 23.25<=lat<=23.75]), got ${JSON.stringify(cPt)}`
+  );
+
+  const ttCountyPt = hasCountyPt ? sb.computeCountyMainPoint("臺東縣") : null;
+  check(
+    Boolean(
+      ttCountyPt &&
+        Number.isFinite(ttCountyPt.lat) &&
+        Number.isFinite(ttCountyPt.lng) &&
+        ttCountyPt.lat >= 22.70 &&
+        ttCountyPt.lat <= 22.95 &&
+        ttCountyPt.lng >= 121.00 &&
+        ttCountyPt.lng <= 121.20
+    ),
+    "9c.MainPolygonInteriorPoint",
+    `computeCountyMainPoint("臺東縣") must return { lat, lng } inside mainland Taitung towns (excluding Green/Orchid Islands), got ${JSON.stringify(ttCountyPt)}`
+  );
+
+  // --------------------------------------------------------------------------
+  // 9d. Visible Non-Spoiling Target Pin Marker Lifecycle
+  // --------------------------------------------------------------------------
+  const hasUpdateMarker = vm.runInContext('typeof updateSatelliteTargetMarker === "function"', sb);
+  const hasClearMarker = vm.runInContext('typeof clearSatelliteTargetMarker === "function"', sb);
+  check(
+    hasUpdateMarker && hasClearMarker,
+    "9d.SatelliteTargetPinMarker",
+    "updateSatelliteTargetMarker(pickObj) and clearSatelliteTargetMarker() must exist in js/map-engine.js"
+  );
+
+  const qijinTown = vm.runInContext('ALL_TOWNS.find(t => t.fullCountyTown === "高雄市旗津區")', sb);
+  const lingyaTown = vm.runInContext('ALL_TOWNS.find(t => t.fullCountyTown === "高雄市苓雅區")', sb);
+
+  markerCalls.length = 0;
+  divIconCalls.length = 0;
+  vm.runInContext(`
+    state.role = "solo";
+    state.isGameOver = false;
+    state.finished = false;
+    state.playMode = "satellite_quiz";
+    state.satelliteStyle = "day";
+    state.satelliteLockViewport = true;
+    state.difficulty = "casual";
+    state.regionQuizEnabled = true;
+    state.selectedCounties = new Set(["高雄市"]);
+    state.selectedTownIds = new Set([${JSON.stringify(qijinTown.id)}, ${JSON.stringify(lingyaTown.id)}]);
+    state.unlockedTowns.clear();
+  `, sb);
+
+  sb.pickNextTargetRegion();
+  const targetPt = vm.runInContext("state.satelliteTargetPoint", sb);
+  const nonInteractiveMarkerCall = markerCalls.find(
+    (m) => m.options && m.options.interactive === false
+  );
+  const domDivIconCall = divIconCalls.find(
+    (d) => d && typeof d.html === "object" && d.html !== null && typeof d.html.tagName === "string"
+  );
+
+  check(
+    Boolean(
+      targetPt &&
+        Number.isFinite(targetPt.lat) &&
+        Number.isFinite(targetPt.lng) &&
+        nonInteractiveMarkerCall &&
+        domDivIconCall
+    ),
+    "9d.SatelliteTargetPinMarker",
+    `pickNextTargetRegion() in satellite_quiz must set state.satelliteTargetPoint={lat,lng} and create a non-interactive Leaflet marker with DOM element divIcon, got targetPt=${JSON.stringify(targetPt)}, markerFound=${Boolean(nonInteractiveMarkerCall)}, domIconFound=${Boolean(domDivIconCall)}`
+  );
+
+  // finishGame("giveup") clears the target pin marker and resets state.satelliteTargetPoint = null
+  sb.finishGame("giveup");
+  const ptAfterGiveup = vm.runInContext("state.satelliteTargetPoint", sb);
+  const markerAfterGiveup = vm.runInContext(
+    'typeof getSatelliteTargetMarker === "function" ? getSatelliteTargetMarker() : null',
+    sb
+  );
+  check(
+    ptAfterGiveup === null && markerAfterGiveup === null,
+    "9d.SatelliteTargetPinMarker",
+    `finishGame("giveup") must call clearSatelliteTargetMarker() and set state.satelliteTargetPoint = null, got satelliteTargetPoint=${JSON.stringify(ptAfterGiveup)}, marker=${JSON.stringify(markerAfterGiveup)}`
+  );
+
+  // Re-pick in satellite_quiz and verify exitTargetQuizMode() also clears the marker
+  vm.runInContext('state.isGameOver = false; state.finished = false; state.playMode = "satellite_quiz";', sb);
+  sb.pickNextTargetRegion();
+  const ptBeforeExit = vm.runInContext("state.satelliteTargetPoint", sb);
+  sb.exitTargetQuizMode();
+  const ptAfterExit = vm.runInContext("state.satelliteTargetPoint", sb);
+  const markerAfterExit = vm.runInContext(
+    'typeof getSatelliteTargetMarker === "function" ? getSatelliteTargetMarker() : null',
+    sb
+  );
+  check(
+    Boolean(ptBeforeExit && Number.isFinite(ptBeforeExit.lat)) &&
+      ptAfterExit === null &&
+      markerAfterExit === null,
+    "9d.SatelliteTargetPinMarker",
+    `exitTargetQuizMode() must clear satellite target marker and set state.satelliteTargetPoint = null, got before=${JSON.stringify(ptBeforeExit)}, after=${JSON.stringify(ptAfterExit)}`
+  );
+
+  // CSS contract for .satellite-target-pin and prefers-reduced-motion
+  const hasPinCss = /\.satellite-target-pin\b/.test(cssText);
+  const reducedMotionBlocks = cssText.match(/@media\s*\(\s*prefers-reduced-motion\s*:\s*reduce\s*\)\s*\{[\s\S]*?\}\s*\}/g) || [];
+  const reducedMotionCoversPin = reducedMotionBlocks.some((b) => /\.satellite-target-pin/.test(b));
+  check(
+    hasPinCss && reducedMotionCoversPin,
+    "9d.SatelliteTargetPinMarker",
+    `css/styles.css must define .satellite-target-pin styles and include .satellite-target-pin in @media (prefers-reduced-motion: reduce), got hasPinCss=${hasPinCss}, reducedMotionCoversPin=${reducedMotionCoversPin}`
+  );
 });
 
 // ============================================================================

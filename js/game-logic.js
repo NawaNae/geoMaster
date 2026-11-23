@@ -1011,15 +1011,22 @@ function applySatelliteTargetViewport(pickObj) {
     targetBounds = L.latLngBounds([pickObj.lat - d, pickObj.lng - d], [pickObj.lat + d, pickObj.lng + d]);
   }
 
-  const maxFitZoom = state.difficulty === "county_only" ? 11 : 13;
-  if (map && targetBounds && typeof map.fitBounds === "function") {
-    map.fitBounds(targetBounds, { padding: [28, 28], maxZoom: maxFitZoom, animate: false });
+  const framedBounds =
+    targetBounds && typeof targetBounds.pad === "function"
+      ? targetBounds.pad(0.18)
+      : targetBounds;
+  const maxFitZoom = state.difficulty === "county_only" ? 10 : 12;
+  if (map && framedBounds && typeof map.fitBounds === "function") {
+    map.fitBounds(framedBounds, { padding: [32, 32], maxZoom: maxFitZoom, animate: false });
   } else if (Number.isFinite(pickObj.lat) && Number.isFinite(pickObj.lng)) {
     focusMapOnLatLng(pickObj.lat, pickObj.lng, state.difficulty === "county_only" ? 9 : 10);
   }
 
   if (state.satelliteLockViewport && targetBounds && typeof lockMapViewportToBounds === "function") {
     lockMapViewportToBounds(targetBounds, { maxFitZoom });
+  }
+  if (typeof updateSatelliteTargetMarker === "function") {
+    updateSatelliteTargetMarker(pickObj);
   }
 }
 
@@ -1162,8 +1169,11 @@ function exitTargetQuizMode() {
   state.targetPoiId = null;
   state.hintLevel = 0;
   state.satelliteOutlineRevealed = false;
+  if (typeof clearSatelliteTargetMarker === "function") {
+    clearSatelliteTargetMarker();
+  }
   if (typeof unlockMapViewportToTaiwan === "function") {
-    unlockMapViewportToTaiwan({ restoreLayers: true });
+    unlockMapViewportToTaiwan({ restoreLayers: true, clearMarker: true });
   }
   if (canLocalModifyGameConfig()) {
     if (state.isHost && state.roomCode && state.playMode !== "free") {
