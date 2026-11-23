@@ -1133,6 +1133,13 @@ body.perf-lite .tw-poi-state-missed {
   pointer-events: none !important;
 }
 
+.pindrop-midpoint-icon-wrapper {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  overflow: visible !important;
+}
+
 .pindrop-preview-pin {
   position: relative;
   width: 34px;
@@ -1198,16 +1205,18 @@ body.perf-lite .tw-poi-state-missed {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: max-content;
   white-space: nowrap;
   padding: 3px 10px;
   border-radius: 9999px;
-  background: rgba(15, 23, 42, 0.94);
+  background: rgba(15, 23, 42, 0.95);
   border: 1.5px solid #f59e0b;
   color: #fde68a;
   font-family: 'JetBrains Mono', 'Noto Sans TC', monospace;
   font-size: 11px;
   font-weight: 800;
-  box-shadow: 0 4px 12px rgba(2, 6, 23, 0.85);
+  box-shadow: 0 4px 12px rgba(2, 6, 23, 0.88);
+  transform: translateY(-6px);
 }
 
 .pindrop-midpoint-pill.pindrop-midpoint-perfect {

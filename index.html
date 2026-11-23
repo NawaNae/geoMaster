@@ -50,9 +50,9 @@
       <!-- Center: Score, Timer & Top Give-Up Button -->
       <div class="flex items-center gap-1 sm:gap-2 bg-slate-900/90 border border-slate-700/70 rounded-xl sm:rounded-2xl px-2 sm:px-3 py-0.5 sm:py-1 shadow-inner">
         <div class="flex items-center gap-1" data-tip="當前挑戰答對題數與總完成率">
-          <span id="top-metric-label" class="hidden md:inline text-[11px] text-slate-400">進度</span>
-          <span id="top-score-display" class="font-mono-num text-xs sm:text-sm font-bold text-emerald-400">0 / 368</span>
-          <span id="top-percent-display" class="font-mono-num text-[10px] sm:text-xs px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300">0.0%</span>
+          <span id="top-metric-label" class="hidden md:inline text-[11px] text-slate-400 whitespace-nowrap">進度</span>
+          <span id="top-score-display" class="font-mono-num text-xs sm:text-sm font-bold text-emerald-400 whitespace-nowrap">0 / 368</span>
+          <span id="top-percent-display" class="font-mono-num text-[10px] sm:text-xs px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 whitespace-nowrap">0.0%</span>
         </div>
         <div class="h-3.5 w-[1px] bg-slate-700"></div>
         <div class="flex items-center gap-1" data-tip="點擊右側按鈕可切換正計時或倒數計時">
@@ -160,7 +160,7 @@
           </span>
 
           <div class="flex flex-wrap items-center gap-1 pointer-events-auto">
-            <div class="apple-glass-pill rounded-xl p-0.5 flex items-center gap-0.5 border border-slate-700/80">
+            <div id="map-rail-control-pill" class="apple-glass-pill rounded-xl p-0.5 flex items-center gap-0.5 border border-slate-700/80">
               <button id="btn-toggle-rail" type="button" class="px-2 py-1 rounded-lg text-[11px] sm:text-xs font-medium text-slate-300 hover:bg-slate-800 transition flex items-center gap-1 whitespace-nowrap" data-tip="切換：關閉 ➔ 純軌道路網 ➔ 完整路網">
                 <i data-lucide="train-front" class="w-3.5 h-3.5 text-amber-400"></i>
                 <span>路網疊圖: 關</span>
@@ -496,7 +496,7 @@
         <div id="multi-category-progress-bars" class="space-y-1.5 my-2.5 p-2.5 rounded-xl bg-slate-950/70 border border-slate-800/90"></div>
 
         <!-- Quick-Jump Unlocked County Chips -->
-        <div class="pt-2 border-t border-slate-800/80">
+        <div id="quick-zoom-counties-section" class="pt-2 border-t border-slate-800/80">
           <div class="flex items-center justify-between text-[11px] text-slate-400 mb-1.5">
             <span>📍 點選已解鎖縣市定位：</span>
             <button id="btn-reset-view-side" type="button" class="text-sky-400 hover:text-sky-300 font-semibold">
@@ -1972,7 +1972,7 @@
           </div>
           <div class="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800">
             <div class="text-[10px] text-slate-400 font-semibold">🎯 最準一題</div>
-            <div id="pindrop-summary-best-round" class="text-xs sm:text-sm font-bold text-emerald-300 truncate mt-0.5">尚無紀錄</div>
+            <div id="pindrop-summary-best-round" class="text-xs sm:text-sm font-bold text-emerald-300 break-words leading-snug mt-0.5">尚無紀錄</div>
           </div>
         </div>
       </div>

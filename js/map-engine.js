@@ -1422,8 +1422,8 @@ function computePolygonStyle(townObj) {
         ? (isTile ? "rgba(255, 255, 255, 0.52)" : "rgba(148, 163, 184, 0.42)")
         : "transparent",
       weight: state.showDistrictBorders ? 0.75 : 0,
-      fillColor: isTile ? "#0f172a" : "#162238",
-      fillOpacity: isTile ? 0.08 : 0.72
+      fillColor: isTile ? "#0f172a" : "#253e63",
+      fillOpacity: isTile ? 0.08 : 0.96
     };
   }
   const vState = typeof getActiveViewState === "function" ? getActiveViewState() : state;

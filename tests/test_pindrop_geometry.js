@@ -558,6 +558,8 @@ runSection("3.PinDropGameplayAndAntiSpoiler", () => {
   const stXiulinPlacing = sb.computePolygonStyle(xiulin);
   check(stFangyuanPlacing.stroke === false && stXiulinPlacing.stroke === false, "3c.AntiSpoiler.PolygonStrokeHidden", "Polygon strokes must be hidden when showDistrictBorders is false in pin_drop");
   check(stFangyuanPlacing.fillColor === stXiulinPlacing.fillColor, "3c.AntiSpoiler.NoUnlockedOrMissedFillLeak", "Unlocked/missed polygon fills must be suppressed during pin_drop placing");
+  check(stFangyuanPlacing.fillColor === "#253e63" && stFangyuanPlacing.fillOpacity === 0.96, "3c.VectorSilhouetteContrast", `Expected high-contrast vector fill #253e63 @ 0.96, got ${stFangyuanPlacing.fillColor} @ ${stFangyuanPlacing.fillOpacity}`);
+  check(elements["map-rail-control-pill"].classList.contains("hidden") && elements["btn-leader-mode"].classList.contains("hidden"), "3c.Declutter.MapToolbarControlsHidden", "Non-applicable Free-Mode toolbar controls must be hidden during pin_drop");
 
   // 5. Answer text input dock hidden, Pin-Drop control bar visible, Confirm button disabled before click
   const ansForm = elements["answer-form"];
@@ -626,6 +628,7 @@ runSection("3.PinDropGameplayAndAntiSpoiler", () => {
   check(s.pinDrop.history[1].inside === false && s.pinDrop.history[1].distanceKm > 9.5 && s.pinDrop.history[1].distanceKm < 10.5, "3h.OutsideGuess.Distance", `Expected ~10.0 km outside Xiulin, got ${s.pinDrop.history[1].distanceKm}`);
   const expectedR2Score = sb.computePinDropScore(s.pinDrop.history[1].distanceKm, 25, 0);
   check(s.pinDrop.history[1].score === expectedR2Score, "3h.OutsideGuess.Score", `Expected score ${expectedR2Score}, got ${s.pinDrop.history[1].score}`);
+  check(Boolean(sb.lastFeedback && String(sb.lastFeedback.text).includes("最近邊界")), "3h.PolygonRevealWording", `Polygon reveal must say '最近邊界', got ${JSON.stringify(sb.lastFeedback)}`);
 
   // Trigger keyboard Space to advance to finish (since only 2 towns in pool, totalRounds capped to 2)
   kdHandlers.forEach((fn) => fn({ key: " ", preventDefault() {}, stopPropagation() {} }));
@@ -679,12 +682,24 @@ runSection("4.PoolsCleanExitAndP2PGuard", () => {
   const hasOpenRailTile = tileLayerCalls.some((c) => String(c.url).includes("openrailwaymap") && sb.map.hasLayer(c));
   check(!hasOpenRailTile, "4b.AntiSpoiler.NoOpenRailwayTile", "OpenRailwayMap tiles must never be active during pin_drop");
 
-  // 4c. Clean exit back to free mode restores basemap, borders, and input dock
+  // Verify point-target (POI/station) reveal wording omits '最近邊界'
+  s.pinDrop.currentTarget = airportTarget;
+  sb.handlePinDropMapClick({ lat: 23.0, lng: 120.5 });
+  sb.confirmPinDropGuess();
+  check(Boolean(sb.lastFeedback && !String(sb.lastFeedback.text).includes("最近邊界") && String(sb.lastFeedback.text).includes("距離")), "4b.PointTargetRevealWording", `Point target reveal must NOT say '最近邊界', got ${JSON.stringify(sb.lastFeedback)}`);
+  check(!elements["target-banner-desc"].textContent.includes("最近邊界"), "4b.PointTargetBannerWording", `Point target banner desc must NOT say '最近邊界', got ${elements["target-banner-desc"].textContent}`);
+
+  // 4c. Clean exit back to free mode restores basemap, borders, viewport, feedback, and input dock
   sb.setPlayMode("free");
   check(s.playMode === "free", "4c.CleanExit.PlayModeFree", "PlayMode must return to 'free'");
   check(s.pinDrop.active === false && s.pinDrop.phase === "idle", "4c.CleanExit.PinDropStateReset", "state.pinDrop must reset to active=false, phase='idle'");
   check(!elements["answer-form"].classList.contains("hidden"), "4c.CleanExit.AnswerFormRestored", "#answer-form must be visible after exiting pin_drop");
   check(elements["pindrop-dock-bar"].classList.contains("hidden"), "4c.CleanExit.PinDropBarHidden", "#pindrop-dock-bar must be hidden after exiting pin_drop");
+  check(!elements["map-rail-control-pill"].classList.contains("hidden") && !elements["btn-leader-mode"].classList.contains("hidden"), "4c.CleanExit.ToolbarRestored", "Map toolbar controls must be restored on exit");
+  check(Boolean(sb.lastFeedback && String(sb.lastFeedback.text).includes("已切回自由輸入模式")), "4c.CleanExit.FeedbackCleared", `Expected exit feedback message, got ${JSON.stringify(sb.lastFeedback)}`);
+  const exitCenter = sb.map.getCenter();
+  const fullCenterExit = sb.TAIWAN_FULL_VIEW_BOUNDS.getCenter();
+  check(Math.abs(exitCenter.lat - fullCenterExit.lat) < 0.05 && Math.abs(exitCenter.lng - fullCenterExit.lng) < 0.05, "4c.CleanExit.ViewportReset", "Viewport must reset to TAIWAN_FULL_VIEW_BOUNDS on exit");
   check(s.mapLayer === "terrain", "4c.CleanExit.BasemapRestored", `Expected saved basemap 'terrain' restored, got ${s.mapLayer}`);
   check(s.showDistrictBorders === true, "4c.CleanExit.DistrictBordersRestored", `Expected saved showDistrictBorders=true restored, got ${s.showDistrictBorders}`);
 

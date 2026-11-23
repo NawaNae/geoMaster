@@ -489,6 +489,7 @@ function renderPinDropRevealLayers(target, record) {
       [record.nearestLat, record.nearestLng]
     ],
     {
+      renderer: typeof canvasRenderer !== "undefined" && canvasRenderer ? canvasRenderer : undefined,
       color: "#f59e0b",
       weight: 3,
       dashArray: "8, 6",
@@ -497,7 +498,7 @@ function renderPinDropRevealLayers(target, record) {
     }
   ).addTo(group);
 
-  // 3. Midpoint pill badge showing distance km & score
+  // 3. Midpoint pill badge showing distance km & score (floated above midpoint so it never covers pins)
   const midLat = (record.guessLat + record.nearestLat) / 2;
   const midLng = (record.guessLng + record.nearestLng) / 2;
   const pill = document.createElement("div");
@@ -516,7 +517,7 @@ function renderPinDropRevealLayers(target, record) {
     className: "pindrop-midpoint-icon-wrapper",
     html: pill,
     iconSize: [180, 28],
-    iconAnchor: [90, 14]
+    iconAnchor: [90, 38]
   });
   pinMidpointMarker = L.marker([midLat, midLng], {
     icon: pillIcon,
@@ -600,7 +601,7 @@ function ensurePinDropEnvironment() {
     state.showDistrictBorders = showBorders;
   }
 
-  // 3. Hide floating hover tooltips
+  // 3. Hide floating hover tooltips & declutter non-applicable Free-Mode toolbar/dashboard controls
   const tipEl = document.getElementById("floating-tip-popover");
   if (tipEl) tipEl.classList.add("hidden");
   const hoverTip = document.getElementById("hover-tip");
@@ -608,6 +609,10 @@ function ensurePinDropEnvironment() {
     hoverTip.classList.add("hidden");
     hoverTip.textContent = "";
   }
+  document.getElementById("map-rail-control-pill")?.classList.add("hidden");
+  document.getElementById("btn-leader-mode")?.classList.add("hidden");
+  document.getElementById("multi-category-progress-bars")?.classList.add("hidden");
+  document.getElementById("quick-zoom-counties-section")?.classList.add("hidden");
 
   // 4. Refresh overlays so labels, station dots, and POI pins are hidden during pin_drop
   if (typeof updateRoadAndRailwayTileOverlays === "function") {
@@ -637,6 +642,10 @@ function restorePinDropEnvironment() {
   document.getElementById("pindrop-dock-bar")?.classList.add("hidden");
   document.getElementById("answer-form")?.classList.remove("hidden");
   document.getElementById("input-occludable-footer")?.classList.remove("hidden");
+  document.getElementById("map-rail-control-pill")?.classList.remove("hidden");
+  document.getElementById("btn-leader-mode")?.classList.remove("hidden");
+  document.getElementById("multi-category-progress-bars")?.classList.remove("hidden");
+  document.getElementById("quick-zoom-counties-section")?.classList.remove("hidden");
 
   if (state.pinDropSavedBaseLayer !== null) {
     const prevBase = state.pinDropSavedBaseLayer;
@@ -658,10 +667,14 @@ function restorePinDropEnvironment() {
     }
   }
 
+  resetPinDropViewportToFullView();
   if (typeof updateRoadAndRailwayTileOverlays === "function") updateRoadAndRailwayTileOverlays();
   if (typeof refreshPoiMapLayer === "function") refreshPoiMapLayer();
   if (typeof refreshAllPolygonStyles === "function") refreshAllPolygonStyles();
   if (typeof updateScoreAndProgressUI === "function") updateScoreAndProgressUI();
+  if (typeof setFeedback === "function") {
+    setFeedback("已切回自由輸入模式，請開始作答！", "info");
+  }
 }
 
 function resetPinDropViewportToFullView() {
@@ -854,9 +867,14 @@ function confirmPinDropGuess() {
   }
 
   if (typeof setFeedback === "function") {
+    const isPolyTarget = target.kind === "town" || target.kind === "county";
     const msg = record.inside
-      ? `🎯 滿分命中【${target.shortLabel}】！距離 0.0 km · +5,000 分`
-      : `📏 揭曉【${target.shortLabel}】：距離最近邊界 ${record.distanceKm.toFixed(1)} km · +${record.score.toLocaleString()} 分`;
+      ? isPolyTarget
+        ? `🎯 滿分命中【${target.shortLabel}】境內！距離 0.0 km · +5,000 分`
+        : `🎯 精準命中【${target.shortLabel}】！距離 ${record.distanceKm.toFixed(2)} km · +5,000 分`
+      : isPolyTarget
+      ? `📏 揭曉【${target.shortLabel}】：距離最近邊界 ${record.distanceKm.toFixed(1)} km · +${record.score.toLocaleString()} 分`
+      : `📏 揭曉【${target.shortLabel}】：距離 ${record.distanceKm.toFixed(1)} km · +${record.score.toLocaleString()} 分`;
     setFeedback(msg, record.score >= 3500 ? "success" : "tier");
   }
   return true;
@@ -1061,9 +1079,14 @@ function updatePinDropBannerAndDockUI() {
           : "請在地圖上點擊目標所在位置放置藍色預覽圖釘（手機可點擊多次微調位置，不會直接送出）";
       } else if (pd.phase === "revealed" && pd.lastReveal) {
         const r = pd.lastReveal;
+        const isPolyReveal = r.kind === "town" || r.kind === "county";
         descEl.textContent = r.inside
-          ? `🎯 命中【${r.title}】境內！距離 0.0 km · 本題獲得滿分 +5,000 分`
-          : `📏 距離【${r.title}】最近邊界 ${r.distanceKm.toFixed(1)} km · 本題獲得 +${r.score.toLocaleString()} 分`;
+          ? isPolyReveal
+            ? `🎯 命中【${r.title}】境內！距離 0.0 km · 本題獲得滿分 +5,000 分`
+            : `🎯 精準命中【${r.title}】！距離 ${r.distanceKm.toFixed(2)} km · 本題獲得滿分 +5,000 分`
+          : isPolyReveal
+          ? `📏 距離【${r.title}】最近邊界 ${r.distanceKm.toFixed(1)} km · 本題獲得 +${r.score.toLocaleString()} 分`
+          : `📏 距離【${r.title}】${r.distanceKm.toFixed(1)} km · 本題獲得 +${r.score.toLocaleString()} 分`;
       } else {
         descEl.textContent = "本局標座標挑戰已結束，可查看結算明細或再玩一局！";
       }
@@ -1166,11 +1189,13 @@ function renderPinDropDashboardUI() {
   if (tPct) tPct.textContent = `均誤 ${avgDist} km`;
   if (tBar) tBar.style.width = `${Math.min(100, parseFloat(scorePct))}%`;
 
-  // Hide quick-jump county chips during pin_drop so no county hints leak
+  // Hide quick-jump county chips and multi-category bars during pin_drop so no Free-Mode clutter or county hints show
   const qBar = document.getElementById("quick-zoom-counties-bar");
   const mBar = document.getElementById("map-jump-counties-bar");
   if (qBar) qBar.replaceChildren();
   if (mBar) mBar.replaceChildren();
+  document.getElementById("multi-category-progress-bars")?.classList.add("hidden");
+  document.getElementById("quick-zoom-counties-section")?.classList.add("hidden");
 
   // Sidebar breakdown list: ONLY show already-revealed round history (NEVER upcoming queue items!)
   const listTitle = document.getElementById("breakdown-list-title");
