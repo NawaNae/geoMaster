@@ -443,6 +443,14 @@ function buildPoiLeafletMarker(poi, status) {
 
 function syncPoiViewportMarkers(forceRebuild = false) {
   if (!poiLayerGroup || typeof L === "undefined") return;
+  if (state.playMode === "pin_drop") {
+    if (poiMarkersById.size > 0) {
+      poiLayerGroup.clearLayers();
+      poiMarkersById.clear();
+      poiMarkerStatusById.clear();
+    }
+    return;
+  }
 
   if (activePoiListCache.length === 0) {
     if (poiMarkersById.size > 0) {

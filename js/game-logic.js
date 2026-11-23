@@ -1164,6 +1164,9 @@ function pickNextTargetRegion() {
 
 // Exit target/random/satellite mode back to normal free recall mode
 function exitTargetQuizMode() {
+  if (state.playMode === "pin_drop" && typeof restorePinDropEnvironment === "function") {
+    restorePinDropEnvironment();
+  }
   state.targetId = null;
   state.targetStationKey = null;
   state.targetPoiId = null;
@@ -1310,7 +1313,17 @@ function moveTargetByDirection(dir) {
   if (inp) inp.focus({ preventScroll: true });
 }
 
-function handlePolygonClick(townObj) {
+function handlePolygonClick(townObj, ev) {
+  if (state.playMode === "pin_drop") {
+    if (typeof handlePinDropMapClick === "function") {
+      const ll =
+        (ev && ev.latlng) ||
+        (townObj && townObj.mainPoint) ||
+        (townObj ? { lat: townObj.lat, lng: townObj.lng } : null);
+      if (ll) handlePinDropMapClick(ll);
+    }
+    return;
+  }
   if (!isTownInScope(townObj)) return;
   const vState = typeof getActiveViewState === "function" ? getActiveViewState() : state;
   if (state.role === "spectator") {
@@ -1387,6 +1400,15 @@ function focusMapOnLatLng(lat, lng, minZ = 10) {
 }
 
 function updateTargetBannerUI() {
+  if (state.playMode === "pin_drop") {
+    if (typeof updatePinDropBannerAndDockUI === "function") {
+      updatePinDropBannerAndDockUI();
+    }
+    return;
+  }
+  if (typeof updatePinDropBannerAndDockUI === "function") {
+    updatePinDropBannerAndDockUI();
+  }
   const banner = document.getElementById("target-quiz-banner");
   const titleEl = document.getElementById("target-banner-title");
   const descEl = document.getElementById("target-banner-desc");
