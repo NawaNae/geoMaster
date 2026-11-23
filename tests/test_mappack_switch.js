@@ -615,11 +615,27 @@ async function main() {
     check(vm.runInContext("getActiveItems().length", sandbox) === 368, "1.DefaultTwModernState", "tw_modern should have 368 items");
     check(vm.runInContext("state.selectedCounties.size", sandbox) === 22, "1.DefaultTwModernState", "Initial selectedCounties = 22");
     check(vm.runInContext("state.selectedTownIds.size", sandbox) === 368, "1.DefaultTwModernState", "Initial selectedTownIds = 368");
+    check(vm.runInContext("getRegisteredMapPacks().length", sandbox) === 4, "1.DefaultTwModernState", "4 built-in packs registered by default (tw_modern, jp_pref, cn_prov, world_countries)");
+    check(
+      !elements["mappack-selector-section"].classList.contains("hidden"),
+      "1.DefaultTwModernState",
+      "Switcher UI is visible by default when 4 built-in packs are registered"
+    );
+    // Verify switcher hides whenever getRegisteredMapPacks().length <= 1
+    vm.runInContext(`
+      window._savedBuiltInStubs = ["jp_pref", "cn_prov", "world_countries"].map(id => [id, window.GEOMASTER_PACKS[id]]);
+      ["jp_pref", "cn_prov", "world_countries"].forEach(id => delete window.GEOMASTER_PACKS[id]);
+      renderMapPackSwitcherUI();
+    `, sandbox);
     check(
       elements["mappack-selector-section"].classList.contains("hidden"),
       "1.DefaultTwModernState",
-      "Switcher UI must remain hidden when only 1 pack (tw_modern) is registered"
+      "Switcher UI must hide when <= 1 pack (only tw_modern) is registered"
     );
+    vm.runInContext(`
+      window._savedBuiltInStubs.forEach(([id, p]) => { window.GEOMASTER_PACKS[id] = p; });
+      renderMapPackSwitcherUI();
+    `, sandbox);
     check(
       diffButtons.every((b) => !b.classList.contains("hidden")),
       "1.DefaultTwModernState",
@@ -634,16 +650,16 @@ async function main() {
 
   await runSection("2.RegisterMockPacksAndSwitcherVisibility", async () => {
     vm.runInContext(buildMockPackScript(), sandbox);
-    check(vm.runInContext("getRegisteredMapPacks().length", sandbox) === 3, "2.RegisterMockPacks", "3 packs registered");
+    check(vm.runInContext("getRegisteredMapPacks().length", sandbox) === 6, "2.RegisterMockPacks", "6 packs registered (4 built-in + 2 mock)");
     check(
       !elements["mappack-selector-section"].classList.contains("hidden"),
       "2.RegisterMockPacks",
       "Switcher UI should unhide when >1 pack is registered"
     );
     check(
-      elements["mappack-selector-grid"].children.length === 3,
+      elements["mappack-selector-grid"].children.length === 6,
       "2.RegisterMockPacks",
-      "Switcher grid should render 3 pack buttons"
+      "Switcher grid should render 6 pack buttons"
     );
   });
 

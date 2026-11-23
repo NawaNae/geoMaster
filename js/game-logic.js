@@ -77,10 +77,21 @@ function _aliasStr(rawAl) {
   return typeof rawAl === "object" ? String(rawAl.name || rawAl.value || "") : String(rawAl);
 }
 
+function _getItemEffectiveAliases(item) {
+  if (!item) return [];
+  const pack = _activePack();
+  if (pack && typeof pack.getItemAliases === "function") {
+    const res = pack.getItemAliases(item, typeof state !== "undefined" ? state : null);
+    if (Array.isArray(res)) return res;
+  }
+  return Array.isArray(item.aliases) ? item.aliases : [];
+}
+
 function _itemAliasesMatch(item, ...candidates) {
-  if (!item || !Array.isArray(item.aliases) || item.aliases.length === 0) return false;
-  for (let i = 0; i < item.aliases.length; i++) {
-    const normAl = _normInput(_aliasStr(item.aliases[i]));
+  const aliases = _getItemEffectiveAliases(item);
+  if (!aliases.length) return false;
+  for (let i = 0; i < aliases.length; i++) {
+    const normAl = _normInput(_aliasStr(aliases[i]));
     if (!normAl) continue;
     for (let j = 0; j < candidates.length; j++) {
       if (candidates[j] && candidates[j] === normAl) return true;
@@ -142,7 +153,11 @@ function _groupAliasesMatch(group, ...candidates) {
 
 function getScopeTowns() {
   if (!state.regionQuizEnabled) return [];
-  const items = _activeItems();
+  const pack = _activePack();
+  const items =
+    typeof getPackEligibleItems === "function"
+      ? getPackEligibleItems(pack, state)
+      : _activeItems();
   if (state.selectedTownIds instanceof Set) {
     return items.filter((t) => state.selectedTownIds.has(t.id));
   }
@@ -152,6 +167,33 @@ function getScopeTowns() {
 function getScopeCounties() {
   if (!state.regionQuizEnabled) return [];
   return _activeGroups().filter((c) => state.selectedCounties.has(c.name));
+}
+
+function syncScopeWithPackOptions(includeNewlyEnabledMicrostates = false) {
+  const pack = _activePack();
+  if (!pack || typeof pack.isItemEnabledByOptions !== "function") return;
+  const eligibleItems =
+    typeof getPackEligibleItems === "function" ? getPackEligibleItems(pack, state) : _activeItems();
+  const eligibleSet = new Set(eligibleItems.map((it) => it.id));
+  if (!(state.selectedTownIds instanceof Set)) {
+    state.selectedTownIds = new Set(
+      eligibleItems.filter((t) => state.selectedCounties.has(t.countyName)).map((t) => t.id)
+    );
+    return;
+  }
+  for (const id of Array.from(state.selectedTownIds)) {
+    if (!eligibleSet.has(id)) state.selectedTownIds.delete(id);
+  }
+  if (includeNewlyEnabledMicrostates && state.selectedCounties.size > 0) {
+    eligibleItems.forEach((it) => {
+      if (it.isMicrostate && state.selectedCounties.has(it.countyName)) {
+        state.selectedTownIds.add(it.id);
+      }
+    });
+  }
+  state.selectedCounties = new Set(
+    eligibleItems.filter((t) => state.selectedTownIds.has(t.id)).map((t) => t.countyName)
+  );
 }
 
 function isCountyRevealed(countyName) {
@@ -324,8 +366,9 @@ function rebuildActivePackLookupSets() {
       const n = _normInput(item.townName);
       if (n) nextTownSet.add(n);
     }
-    if (Array.isArray(item.aliases)) {
-      item.aliases.forEach((al) => {
+    const effAliases = _getItemEffectiveAliases(item);
+    if (effAliases.length > 0) {
+      effAliases.forEach((al) => {
         const n = _normInput(_aliasStr(al));
         if (n) nextTownSet.add(n);
       });

@@ -747,54 +747,60 @@
             </button>
           </div>
 
-          <!-- 4. Host-Only Layer & Fair Play Restrictions (Preserved in Host Room Window) -->
-          <div id="host-room-restrictions-panel" class="p-3.5 rounded-2xl bg-slate-900/90 border border-amber-500/30 space-y-2.5">
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-extrabold text-amber-300 flex items-center gap-1.5" data-tip="房主可限制參賽者的底圖與路網開關（觀戰者不受限制）">
+          <!-- 4. Host-Only Layer & Fair Play Restrictions (Collapsed by default for a clean room lobby) -->
+          <div id="host-room-restrictions-panel" class="p-3 rounded-2xl bg-slate-900/90 border border-amber-500/30 space-y-2">
+            <button id="btn-toggle-room-restrictions" type="button" aria-expanded="false" class="w-full flex items-center justify-between gap-2 text-left transition hover:opacity-90" data-tip="房主可限制參賽者的底圖與路網開關（觀戰者不受限制）">
+              <span class="text-xs font-extrabold text-amber-300 flex items-center gap-1.5">
                 <span>🛡️</span>
-                <span>房主專屬：介面與圖層限制</span>
+                <span>圖層與作弊限制</span>
+                <span id="room-restrictions-active-badge" class="hidden text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-200 border border-amber-400/40 font-bold">已啟用</span>
               </span>
-              <span id="p2p-guest-settings-note" class="hidden text-[10px] text-slate-400">🔒 僅房主可調</span>
-            </div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <div>
-                <label class="text-[10px] text-slate-400 font-semibold block mb-1">🗺️ 底圖切換限制</label>
-                <select id="p2p-layer-rule-select" class="w-full bg-slate-950 text-white text-[11px] font-semibold rounded-xl px-2.5 py-1.5 border border-slate-700">
-                  <option value="free">🔓 自由切換底圖</option>
-                  <option value="locked">🔒 強制鎖定底圖</option>
-                </select>
+              <span class="flex items-center gap-1.5 shrink-0">
+                <span id="p2p-guest-settings-note" class="hidden text-[10px] text-slate-400">🔒 僅房主可調</span>
+                <span id="room-restrictions-chevron" class="text-[11px] font-bold text-slate-400">展開 ▾</span>
+              </span>
+            </button>
+            <div id="host-room-restrictions-body" class="hidden pt-2 border-t border-slate-800/80 space-y-2.5">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <label class="text-[10px] text-slate-400 font-semibold block mb-1">🗺️ 底圖限制</label>
+                  <select id="p2p-layer-rule-select" class="w-full bg-slate-950 text-white text-[11px] font-semibold rounded-xl px-2.5 py-1.5 border border-slate-700">
+                    <option value="free">🔓 自由切換底圖</option>
+                    <option value="locked">🔒 強制鎖定底圖</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-[10px] text-slate-400 font-semibold block mb-1">🗺️ 指定底圖</label>
+                  <select id="p2p-forced-layer-select" class="w-full bg-slate-950 text-sky-300 text-[11px] font-semibold rounded-xl px-2.5 py-1.5 border border-slate-700">
+                    <option value="vector">純淨向量底圖</option>
+                    <option value="terrain">無字山地地形</option>
+                    <option value="satellite">無字衛星影像</option>
+                  </select>
+                </div>
+                <div id="p2p-rail-rule-wrap">
+                  <label class="text-[10px] text-slate-400 font-semibold block mb-1">🚆 路網限制</label>
+                  <select id="p2p-rail-rule-select" class="w-full bg-slate-950 text-amber-200 text-[11px] font-semibold rounded-xl px-2.5 py-1.5 border border-slate-700">
+                    <option value="free">🔓 自由開關路網</option>
+                    <option value="ban_roads_only">🛑 禁公路 (留軌道+站)</option>
+                    <option value="ban_rail">🚫 禁所有路網</option>
+                    <option value="force_lines">🛤️ 強制完整路網</option>
+                    <option value="force_rail_only">🚄 強制純軌道路網</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-[10px] text-slate-400 font-semibold block mb-1">📐 區界限制</label>
+                  <select id="p2p-border-rule-select" class="w-full bg-slate-950 text-emerald-200 text-[11px] font-semibold rounded-xl px-2.5 py-1.5 border border-slate-700">
+                    <option value="free">🔓 自由開關區界</option>
+                    <option value="force_off">🚫 強制關閉區界</option>
+                  </select>
+                </div>
               </div>
-              <div>
-                <label class="text-[10px] text-slate-400 font-semibold block mb-1">🗺️ 指定底圖</label>
-                <select id="p2p-forced-layer-select" class="w-full bg-slate-950 text-sky-300 text-[11px] font-semibold rounded-xl px-2.5 py-1.5 border border-slate-700">
-                  <option value="vector">純淨向量底圖</option>
-                  <option value="terrain">無字山地地形</option>
-                  <option value="satellite">無字衛星影像</option>
-                </select>
+              <div class="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
+                <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="預設不勾選（Ban 提示）。房主勾選後，參賽者在指定/隨機模式下才可使用提示按鈕">
+                  <input id="chk-room-allow-target-hints" type="checkbox" class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-amber-500 accent-amber-400 cursor-pointer" />
+                  <span class="font-bold text-amber-200">💡 開放目標提示按鈕</span>
+                </label>
               </div>
-              <div id="p2p-rail-rule-wrap">
-                <label class="text-[10px] text-slate-400 font-semibold block mb-1">🚆 路網與車站限制</label>
-                <select id="p2p-rail-rule-select" class="w-full bg-slate-950 text-amber-200 text-[11px] font-semibold rounded-xl px-2.5 py-1.5 border border-slate-700">
-                  <option value="free">🔓 自由開關路網</option>
-                  <option value="ban_roads_only">🛑 禁公路 (留軌道+站)</option>
-                  <option value="ban_rail">🚫 禁所有路網</option>
-                  <option value="force_lines">🛤️ 強制完整路網</option>
-                  <option value="force_rail_only">🚄 強制純軌道路網</option>
-                </select>
-              </div>
-              <div>
-                <label class="text-[10px] text-slate-400 font-semibold block mb-1">📐 行政區界線限制</label>
-                <select id="p2p-border-rule-select" class="w-full bg-slate-950 text-emerald-200 text-[11px] font-semibold rounded-xl px-2.5 py-1.5 border border-slate-700">
-                  <option value="free">🔓 自由開關區界</option>
-                  <option value="force_off">🚫 強制關閉區界</option>
-                </select>
-              </div>
-            </div>
-            <div class="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
-              <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="預設不勾選（Ban 提示）。房主勾選後，參賽者在指定/隨機模式下才可使用提示按鈕">
-                <input id="chk-room-allow-target-hints" type="checkbox" class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-amber-500 accent-amber-400 cursor-pointer" />
-                <span class="font-bold text-amber-200">💡 開放指定/隨機模式「提示」按鈕（預設禁用 Ban）</span>
-              </label>
             </div>
           </div>
 
@@ -824,19 +830,19 @@
   </div>
 
   <!-- ===================================================================== -->
-  <!-- MODAL C (TOP-LEVEL SHARED MODE & SCOPE SETTINGS): 單人與房間共用模式設定視窗 -->
+  <!-- MODAL C (TOP-LEVEL SHARED MODE & SCOPE SETTINGS): Apple-Clean 漸進展開設定視窗 -->
   <!-- 內建【簡易設定】(預設) 與【進階設定】雙分頁 (Tab)                              -->
   <!-- ===================================================================== -->
   <div id="modal-scope" class="hidden fixed inset-0 z-[650] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 overscroll-contain">
-    <div id="modal-p2p" class="apple-glass rounded-3xl max-w-4xl w-full p-3.5 sm:p-5 border border-slate-700 shadow-2xl max-h-[92dvh] flex flex-col overflow-hidden">
-      <!-- Sticky Header + Simple / Advanced Tabs -->
+    <div id="modal-p2p" class="apple-glass rounded-3xl max-w-3xl w-full p-3.5 sm:p-5 border border-slate-700 shadow-2xl max-h-[92dvh] flex flex-col overflow-hidden">
+      <!-- Sticky Header + Simple / Advanced Tabs + Unobtrusive ? Help Toggle -->
       <div class="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-800 shrink-0">
         <div class="flex items-center gap-2">
           <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-500 to-blue-600 flex items-center justify-center text-white shadow shrink-0">
             <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>
           </div>
           <div>
-            <h3 id="hub-modal-title" class="text-sm sm:text-base font-extrabold text-white">挑戰模式與題庫設定</h3>
+            <h3 id="hub-modal-title" class="text-sm sm:text-base font-extrabold text-white">模式與題庫設定</h3>
           </div>
         </div>
 
@@ -850,44 +856,170 @@
           </button>
         </div>
 
-        <button id="btn-close-scope" type="button" aria-label="關閉" class="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-sm transition shrink-0">
-          ✕
-        </button>
+        <div class="flex items-center gap-1.5 shrink-0">
+          <button id="btn-toggle-settings-help" type="button" aria-expanded="false" aria-label="操作與資料範圍說明" class="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-800/90 hover:bg-slate-700 text-sky-300 border border-slate-700 font-extrabold text-xs transition" data-tip="查看操作與目前地圖資料範圍說明">
+            ?
+          </button>
+          <button id="btn-close-scope" type="button" aria-label="關閉" class="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-sm transition">
+            ✕
+          </button>
+        </div>
+      </div>
+
+      <!-- Compact Collapsible Help Popover (Hidden by default; toggled via ? button) -->
+      <div id="settings-help-popover" class="hidden mt-2 p-2.5 rounded-2xl bg-slate-900/95 border border-sky-500/35 text-[11px] text-slate-300 space-y-1 shrink-0">
+        <div class="flex items-center justify-between gap-2">
+          <span class="font-bold text-sky-300">操作說明</span>
+          <span class="text-slate-400">點左單選 / 點右 + 複選 · 懸停或長按項目可看詳細說明</span>
+        </div>
+        <div id="settings-help-pack-note" class="text-slate-300 leading-relaxed"></div>
       </div>
 
       <!-- Single Scrollable Settings Body -->
-      <div id="hub-scroll-body" class="flex-1 min-h-0 overflow-y-auto overscroll-contain pr-1 space-y-3.5 my-2.5">
-        <div id="unified-settings-panel" class="space-y-3.5">
-          <fieldset id="unified-settings-fieldset" class="space-y-3.5">
+      <div id="hub-scroll-body" class="flex-1 min-h-0 overflow-y-auto overscroll-contain pr-1 space-y-2.5 my-2.5">
+        <div id="unified-settings-panel" class="space-y-2.5">
+          <fieldset id="unified-settings-fieldset" class="space-y-2.5">
 
-            <!-- MapPack Switcher (Hidden whenever <= 1 pack is registered) -->
-            <div id="mappack-selector-section" class="hidden p-3 rounded-2xl bg-slate-900/90 border border-indigo-500/35">
-              <div class="flex flex-wrap items-center justify-between gap-1 mb-2">
-                <label class="text-xs font-extrabold text-indigo-300">🗺️ 地圖包切換</label>
+            <!-- Section 1: 🗺️ 地圖 (Single clean row of 4 compact pack cards) -->
+            <div id="mappack-selector-section" class="hidden p-2.5 sm:p-3 rounded-2xl bg-slate-900/90 border border-indigo-500/30">
+              <div class="flex items-center justify-between gap-2 mb-2">
+                <label class="text-xs font-extrabold text-indigo-300">🗺️ 地圖</label>
               </div>
-              <div id="mappack-selector-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-2"></div>
+              <div id="mappack-selector-grid" class="grid grid-cols-2 sm:grid-cols-4 gap-2"></div>
             </div>
 
-            <!-- Shared Step 0: Unified Dual-Action Quiz Topics (點左側單選快切 / 點右側開關複選連集) -->
-            <div id="topic-selector-card" class="p-3 rounded-2xl bg-slate-900/90 border border-sky-500/30">
-              <div class="flex flex-wrap items-center justify-between gap-1 mb-2">
-                <label class="text-xs font-extrabold text-sky-300">挑戰題庫（統一快選＋連集）</label>
-                <span class="text-[11px] text-slate-400">點左側名稱「單選快切」 · 點右側開關「複選連集」</span>
+            <!-- Section 2: 🎯 玩法與計時 (Contextual sub-panels only appear when relevant!) -->
+            <div id="playmode-timer-card" class="p-2.5 sm:p-3 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-2">
+              <div class="flex flex-wrap items-center justify-between gap-1.5">
+                <span class="text-xs font-extrabold text-emerald-300">🎯 玩法與計時</span>
+                <div class="flex flex-wrap items-center gap-1">
+                  <button type="button" data-playmode="free" class="playmode-btn px-2.5 py-1 rounded-xl text-[11px] font-bold border transition bg-emerald-500/20 border-emerald-400 text-emerald-200" data-tip="自由輸入任意行政區、國家或地標">✍️ 自由</button>
+                  <button type="button" data-playmode="target_random" class="playmode-btn px-2.5 py-1 rounded-xl text-[11px] font-bold border border-slate-700 bg-slate-950 text-slate-300" data-tip="由系統隨機高亮指定一個區塊作答">🎯 隨機</button>
+                  <button type="button" data-playmode="target_click" class="playmode-btn px-2.5 py-1 rounded-xl text-[11px] font-bold border border-slate-700 bg-slate-950 text-slate-300" data-tip="自己點選地圖區塊作答">👆 點選</button>
+                  <button id="btn-playmode-satellite" type="button" data-playmode="satellite_quiz" class="playmode-btn px-2.5 py-1 rounded-xl text-[11px] font-bold border border-slate-700 bg-slate-950 text-slate-300" data-tip="自動對準目標衛星影像並隱藏區界與地名，支援日間、夜間燈火與日夜混合盲猜">🛰️ 衛星</button>
+                  <button id="btn-playmode-pindrop" type="button" data-playmode="pin_drop" class="playmode-btn px-2.5 py-1 rounded-xl text-[11px] font-bold border border-slate-700 bg-slate-950 text-slate-300" data-tip="給地名標座標模式（類 GeoGuessr）：點擊地圖放置預覽圖釘，確認後計算距離與 0–5000 分">📍 標座標</button>
+                </div>
               </div>
-              <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                <div data-topic="region" data-accent="sky" data-state="on" class="topic-chip-btn geo-select-card" data-tip="猜台灣縣市與鄉鎮市區">
+
+              <!-- Contextual: Pin-Drop Options (ONLY visible in pin_drop mode) -->
+              <div id="pindrop-quiz-options-panel" class="hidden p-2.5 rounded-xl bg-slate-950/85 border border-amber-500/35 space-y-2">
+                <div class="flex flex-wrap items-center justify-between gap-1.5">
+                  <span class="text-[11px] font-extrabold text-amber-300">回合數</span>
+                  <div class="flex flex-wrap items-center gap-1">
+                    <button type="button" data-pindrop-rounds="5" class="pindrop-rounds-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">5 題</button>
+                    <button type="button" data-pindrop-rounds="10" class="pindrop-rounds-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border transition bg-amber-500/25 border-amber-400 text-amber-200 shadow">10 題</button>
+                    <button type="button" data-pindrop-rounds="20" class="pindrop-rounds-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">20 題</button>
+                    <button type="button" data-pindrop-rounds="0" class="pindrop-rounds-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">♾️ 無盡</button>
+                  </div>
+                </div>
+                <div class="flex flex-wrap items-center justify-between gap-1.5 pt-1 border-t border-slate-800/80">
+                  <span class="text-[11px] font-extrabold text-sky-300">無字底圖</span>
+                  <div class="flex flex-wrap items-center gap-1">
+                    <button type="button" data-pindrop-layer="satellite" class="pindrop-layer-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border transition bg-sky-500/25 border-sky-400 text-sky-200 shadow">🛰️ 衛星</button>
+                    <button type="button" data-pindrop-layer="terrain" class="pindrop-layer-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">⛰️ 地形</button>
+                    <button type="button" data-pindrop-layer="vector" class="pindrop-layer-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">🗺️ 純輪廓</button>
+                  </div>
+                </div>
+                <div class="flex flex-wrap items-center gap-3 pt-1 border-t border-slate-800/80 text-[11px]">
+                  <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="勾選後強制鎖定上方指定的底圖，作答期間不可自由切換">
+                    <input id="chk-pindrop-lock-layer" type="checkbox" class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-rose-500 accent-rose-400 cursor-pointer" />
+                    <span class="font-bold text-rose-200">🔒 鎖定底圖</span>
+                  </label>
+                  <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="預設隱藏區界以防看形狀秒殺，勾選後顯示行政區邊界格線">
+                    <input id="chk-pindrop-show-borders" type="checkbox" class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-amber-500 accent-amber-400 cursor-pointer" />
+                    <span class="font-bold text-amber-200">📐 顯示區界</span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Contextual: Satellite Quiz Options (ONLY visible in satellite_quiz mode) -->
+              <div id="satellite-quiz-options-panel" class="hidden p-2.5 rounded-xl bg-slate-950/85 border border-sky-500/35 space-y-2">
+                <div class="flex flex-wrap items-center justify-between gap-1.5">
+                  <span class="text-[11px] font-extrabold text-sky-300">影像風格</span>
+                  <div class="flex flex-wrap items-center gap-1">
+                    <button id="btn-sat-style-day" type="button" data-sat-style="day" class="satellite-style-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border transition bg-sky-500/25 border-sky-400 text-sky-200 shadow" data-tip="Esri 高解析度日間無字衛星影像">☀️ 日間</button>
+                    <button id="btn-sat-style-night" type="button" data-sat-style="night" class="satellite-style-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition" data-tip="NASA GIBS VIIRS Black Marble 夜間城市燈火">🌙 夜間</button>
+                    <button id="btn-sat-style-hybrid" type="button" data-sat-style="hybrid" class="satellite-style-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition" data-tip="每題隨機以日間衛星或夜間燈火出題">🌓 混合</button>
+                  </div>
+                </div>
+                <div class="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800/80 text-[11px]">
+                  <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="開啟時答題期間自動鎖定目標視野與最小縮放層級，防止拉遠看海岸線作弊">
+                    <input id="chk-satellite-lock-viewport" type="checkbox" checked class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-sky-500 accent-sky-400 cursor-pointer" />
+                    <span class="font-bold text-sky-200">🔒 鎖定目標視野</span>
+                  </label>
+                </div>
+                <div id="satellite-night-town-notice" class="hidden px-2 py-1 rounded-lg bg-amber-500/15 border border-amber-500/35 text-[11px] font-semibold text-amber-200">
+                  ⚠️ 夜間解析度較低，鄉鎮模式屬高難度趣味挑戰
+                </div>
+              </div>
+
+              <!-- Timer 2-Pill Toggle + Expandable Countdown Duration Row + Contextual Target Hints -->
+              <div class="pt-1.5 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <div class="inline-flex items-center bg-slate-950 p-0.5 rounded-xl border border-slate-800 gap-0.5">
+                    <button type="button" data-timermode="up" data-sec="0" class="hub-timer-btn py-1 px-2.5 rounded-lg text-[11px] font-bold border border-sky-400 bg-sky-500/20 text-white text-center transition">⏱️ 正計時</button>
+                    <button id="btn-timer-mode-countdown" type="button" class="py-1 px-2.5 rounded-lg text-[11px] font-bold border border-transparent text-slate-300 hover:text-white text-center transition">⏳ 倒數</button>
+                  </div>
+                  <div id="timer-countdown-options" class="hidden flex items-center gap-1">
+                    <button type="button" data-timermode="down" data-sec="180" class="hub-timer-btn py-1 px-2 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-950 text-slate-300 transition">3分</button>
+                    <button type="button" data-timermode="down" data-sec="300" class="hub-timer-btn py-1 px-2 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-950 text-slate-300 transition">5分</button>
+                    <button type="button" data-timermode="down" data-sec="600" class="hub-timer-btn py-1 px-2 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-950 text-slate-300 transition">10分</button>
+                    <button type="button" data-timermode="down" data-sec="1200" class="hub-timer-btn py-1 px-2 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-950 text-slate-300 transition">20分</button>
+                  </div>
+                </div>
+
+                <!-- Contextual: Target Hints Toggle (HIDDEN in free & pin_drop!) -->
+                <div id="wrap-allow-target-hints" class="hidden text-[11px]">
+                  <label class="inline-flex items-center gap-1.5 text-slate-300 cursor-pointer select-none" data-tip="預設關閉。勾選後，在隨機、點選或衛星模式下顯示提示按鈕">
+                    <input id="chk-allow-target-hints" type="checkbox" class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-amber-500 accent-amber-400 cursor-pointer" />
+                    <span class="font-bold text-amber-200">💡 允許提示</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Section 3: 📊 難度 (COMPLETELY HIDDEN when active pack has <= 1 difficulty!) -->
+            <div id="difficulty-selector-card" class="p-2.5 sm:p-3 rounded-2xl bg-slate-900/90 border border-slate-800">
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="text-xs font-extrabold text-sky-300">📊 難度</label>
+              </div>
+              <div id="difficulty-buttons-grid" class="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+                <button type="button" data-diff="casual" class="diff-btn p-2 rounded-xl border transition bg-sky-500/20 border-sky-400 text-white text-center" data-tip="免打單位後綴，同名一次解鎖">
+                  <div class="text-xs font-extrabold">🟢 休閒</div>
+                </button>
+                <button type="button" data-diff="county_only" class="diff-btn p-2 rounded-xl border border-slate-700/80 bg-slate-900/60 hover:bg-slate-800 text-slate-300 transition text-center" data-tip="只猜 22 縣市與直轄市，未解鎖縣市完全隱藏">
+                  <div class="text-xs font-extrabold">🔵 22縣市</div>
+                </button>
+                <button type="button" data-diff="hard_suffix" class="diff-btn p-2 rounded-xl border border-slate-700/80 bg-slate-900/60 hover:bg-slate-800 text-slate-300 transition text-center" data-tip="免前綴，但須輸入正確行政單位後綴">
+                  <div class="text-xs font-extrabold text-yellow-300">🟡 後綴</div>
+                </button>
+                <button type="button" data-diff="hard_full" class="diff-btn p-2 rounded-xl border border-slate-700/80 bg-slate-900/60 hover:bg-slate-800 text-slate-300 transition text-center" data-tip="須含完整縣市＋鄉鎮市區後綴，未解鎖縣市隱藏防劇透">
+                  <div class="text-xs font-extrabold text-orange-300">🟠 全名</div>
+                </button>
+                <button type="button" data-diff="master_hierarchy" class="diff-btn p-2 rounded-xl border border-slate-700/80 bg-slate-900/60 hover:bg-slate-800 text-slate-300 transition text-center col-span-2 sm:col-span-1" data-tip="須先依序解鎖省／直轄市、縣市，再精確輸入鄉鎮市區單位">
+                  <div class="text-xs font-extrabold text-amber-300">🔥 三階</div>
+                </button>
+              </div>
+            </div>
+
+            <!-- Section 4: 🧩 題庫（僅台灣顯示；超精簡單行晶片） -->
+            <div id="topic-selector-card" class="p-2.5 sm:p-3 rounded-2xl bg-slate-900/90 border border-sky-500/30">
+              <div class="flex items-center justify-between gap-2 mb-2">
+                <label class="text-xs font-extrabold text-sky-300">🧩 題庫</label>
+                <span id="topic-region-meta" class="text-[11px] font-mono-num text-slate-400">22 縣市 / 368 區</span>
+              </div>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                <div data-topic="region" data-accent="sky" data-state="on" class="topic-chip-btn geo-select-card" data-tip="猜台灣縣市與鄉鎮市區（點左單選 / 點右複選）">
                   <button type="button" class="geo-solo-btn" aria-label="單選🗺️ 行政區">
-                    <span class="text-xs sm:text-sm font-extrabold text-sky-200">🗺️ 行政區</span>
-                    <span id="topic-region-meta" class="text-[10px] text-slate-400 mt-0.5">22 縣市 / 368 區</span>
+                    <span class="text-xs font-extrabold text-sky-200">🗺️ 行政區</span>
                   </button>
                   <button type="button" class="geo-union-btn" role="checkbox" aria-checked="true" aria-label="複選切換🗺️ 行政區">
                     <span class="geo-union-pill topic-check">✓</span>
                   </button>
                 </div>
-                <div data-topic="station" data-accent="pink" data-state="off" class="topic-chip-btn geo-select-card" data-tip="猜台鐵、高鐵、捷運與輕軌車站（開啟預設台鐵主線＋捷運）">
+                <div data-topic="station" data-accent="pink" data-state="off" class="topic-chip-btn geo-select-card" data-tip="猜台鐵、高鐵、捷運與輕軌車站">
                   <button type="button" class="geo-solo-btn" aria-label="單選🚉 車站">
-                    <span class="text-xs sm:text-sm font-extrabold text-pink-300">🚉 車站</span>
-                    <span class="text-[10px] text-slate-400 mt-0.5">台鐵主線 / 捷運</span>
+                    <span class="text-xs font-extrabold text-pink-300">🚉 車站</span>
                   </button>
                   <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false" aria-label="複選切換🚉 車站">
                     <span class="geo-union-pill topic-check">+</span>
@@ -895,291 +1027,199 @@
                 </div>
                 <div data-topic="airport" data-accent="sky" data-state="off" class="topic-chip-btn geo-select-card" data-tip="猜台灣國際、國內與軍用機場（軍民合用自動去重）">
                   <button type="button" class="geo-solo-btn" aria-label="單選✈️ 機場">
-                    <span class="text-xs sm:text-sm font-extrabold text-sky-300">✈️ 機場</span>
-                    <span class="text-[10px] text-slate-400 mt-0.5">國際 / 國內 / 軍用</span>
+                    <span class="text-xs font-extrabold text-sky-300">✈️ 機場</span>
                   </button>
                   <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false" aria-label="複選切換✈️ 機場">
                     <span class="geo-union-pill topic-check">+</span>
                   </button>
                 </div>
-                <div data-topic="port" data-accent="teal" data-state="off" class="topic-chip-btn geo-select-card" data-tip="猜台灣國際商港、國際輔助港與官方9座第一類漁港（進階可選精選24座第二類漁港及工業/天然氣港）">
+                <div data-topic="port" data-accent="teal" data-state="off" class="topic-chip-btn geo-select-card" data-tip="猜台灣國際商港、國際輔助港與漁港（進階可選第二類漁港及工業/天然氣港）">
                   <button type="button" class="geo-solo-btn" aria-label="單選⚓ 港口">
-                    <span class="text-xs sm:text-sm font-extrabold text-teal-300">⚓ 港口</span>
-                    <span class="text-[10px] text-slate-400 mt-0.5">商港 / 輔助 / 漁港</span>
+                    <span class="text-xs font-extrabold text-teal-300">⚓ 港口</span>
                   </button>
                   <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false" aria-label="複選切換⚓ 港口">
                     <span class="geo-union-pill topic-check">+</span>
                   </button>
                 </div>
-                <div data-topic="reservoir" data-accent="blue" data-state="off" class="topic-chip-btn geo-select-card" data-tip="猜台灣主要水庫（進階可選其他本島水庫與離島水庫，與湖泊重疊項目自動去重）">
+                <div data-topic="reservoir" data-accent="blue" data-state="off" class="topic-chip-btn geo-select-card" data-tip="猜台灣主要、本島與離島水庫（與湖泊重疊自動去重）">
                   <button type="button" class="geo-solo-btn" aria-label="單選💧 水庫">
-                    <span class="text-xs sm:text-sm font-extrabold text-blue-300">💧 水庫</span>
-                    <span class="text-[10px] text-slate-400 mt-0.5">主要 / 本島 / 離島</span>
+                    <span class="text-xs font-extrabold text-blue-300">💧 水庫</span>
                   </button>
                   <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false" aria-label="複選切換💧 水庫">
                     <span class="geo-union-pill topic-check">+</span>
                   </button>
                 </div>
-                <div data-topic="lake" data-accent="emerald" data-state="off" class="topic-chip-btn geo-select-card" data-tip="猜台灣知名觀光平地湖泊（進階可選高山秘境湖泊，與水庫重疊項目自動去重）">
+                <div data-topic="lake" data-accent="emerald" data-state="off" class="topic-chip-btn geo-select-card" data-tip="猜台灣觀光平地與高山秘境湖泊（與水庫重疊自動去重）">
                   <button type="button" class="geo-solo-btn" aria-label="單選🏞️ 湖泊">
-                    <span class="text-xs sm:text-sm font-extrabold text-emerald-300">🏞️ 湖泊</span>
-                    <span class="text-[10px] text-slate-400 mt-0.5">觀光平地 / 高山秘境</span>
+                    <span class="text-xs font-extrabold text-emerald-300">🏞️ 湖泊</span>
                   </button>
                   <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false" aria-label="複選切換🏞️ 湖泊">
                     <span class="geo-union-pill topic-check">+</span>
                   </button>
                 </div>
-                <div data-topic="settlement" data-accent="lime" data-state="off" class="topic-chip-btn geo-select-card" data-tip="猜省道／縣道綠色指示路牌常見聚落（如路上厝、王功、九份、內灣、知本等），進階可選歷史大字與傳統部落">
-                  <button type="button" class="geo-solo-btn" aria-label="單選🪧 傳統聚落">
-                    <span class="text-xs sm:text-sm font-extrabold text-lime-300">🪧 傳統聚落</span>
-                    <span class="text-[10px] text-slate-400 mt-0.5">路牌聚落 / 歷史大字</span>
+                <div data-topic="settlement" data-accent="lime" data-state="off" class="topic-chip-btn geo-select-card" data-tip="猜省道／縣道綠牌常見聚落、歷史大字與原住民族傳統部落">
+                  <button type="button" class="geo-solo-btn" aria-label="單選🪧 聚落">
+                    <span class="text-xs font-extrabold text-lime-300">🪧 聚落</span>
                   </button>
-                  <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false" aria-label="複選切換🪧 傳統聚落">
+                  <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false" aria-label="複選切換🪧 聚落">
                     <span class="geo-union-pill topic-check">+</span>
                   </button>
                 </div>
               </div>
-              <div id="mixed-region-rail-switch-bar" class="hidden mt-2.5 pt-2.5 border-t border-slate-800/90 flex flex-wrap items-center justify-between gap-2">
-                <label class="inline-flex items-center gap-2 text-xs font-extrabold text-amber-200 cursor-pointer select-none" data-tip="開啟後，僅會出題位於目前已選行政區（如北部、西部濱海、山區、單一縣市）境內的車站、機場與港口">
+              <div id="mixed-region-rail-switch-bar" class="hidden mt-2 pt-2 border-t border-slate-800/90 flex flex-wrap items-center justify-between gap-2">
+                <label class="inline-flex items-center gap-2 text-xs font-extrabold text-amber-200 cursor-pointer select-none" data-tip="開啟後僅出題位於所選行政區境內的車站與地標">
                   <input id="chk-mixed-filter-station-region" type="checkbox" class="w-4 h-4 rounded bg-slate-950 border-amber-400 text-amber-500 accent-amber-400 cursor-pointer" />
-                  <span>📍 僅猜所選區域內的車站與地標</span>
+                  <span>📍 僅限所選區域內</span>
                 </label>
                 <span id="mixed-filter-station-badge" class="text-[11px] font-bold px-2 py-0.5 rounded-lg bg-slate-800 text-slate-300 border border-slate-700">
-                  目前：出題所選全範圍
+                  全範圍
                 </span>
               </div>
             </div>
 
-            <!-- Shared Step 1: Compact Difficulty & Timer Row -->
-            <div class="grid grid-cols-1 lg:grid-cols-12 gap-2.5">
-              <div class="lg:col-span-7 p-3 rounded-2xl bg-slate-900/90 border border-slate-800">
-                <div class="flex items-center justify-between mb-1.5">
-                  <label class="text-xs font-bold text-sky-300">難度規則</label>
-                  <span id="difficulty-tip-label" class="text-[11px] text-slate-400">點選切換，懸停或長按可看說明</span>
-                </div>
-                <div class="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
-                  <button type="button" data-diff="casual" class="diff-btn p-2 rounded-xl border transition bg-sky-500/20 border-sky-400 text-white text-center" data-tip="免打鄉鎮市區後綴，同名行政區一次解鎖">
-                    <div class="text-xs font-extrabold">🟢 休閒</div>
-                  </button>
-                  <button type="button" data-diff="county_only" class="diff-btn p-2 rounded-xl border border-slate-700/80 bg-slate-900/60 hover:bg-slate-800 text-slate-300 transition text-center" data-tip="只猜 22 縣市與直轄市，未解鎖縣市完全隱藏">
-                    <div class="text-xs font-extrabold">🔵 22縣市</div>
-                  </button>
-                  <button type="button" data-diff="hard_suffix" class="diff-btn p-2 rounded-xl border border-slate-700/80 bg-slate-900/60 hover:bg-slate-800 text-slate-300 transition text-center" data-tip="免縣市前綴，但須輸入正確「鄉鎮市區」後綴">
-                    <div class="text-xs font-extrabold text-yellow-300">🟡 後綴</div>
-                  </button>
-                  <button type="button" data-diff="hard_full" class="diff-btn p-2 rounded-xl border border-slate-700/80 bg-slate-900/60 hover:bg-slate-800 text-slate-300 transition text-center" data-tip="須含完整縣市＋鄉鎮市區後綴，未解鎖縣市隱藏防劇透">
-                    <div class="text-xs font-extrabold text-orange-300">🟠 困難全名</div>
-                  </button>
-                  <button type="button" data-diff="master_hierarchy" class="diff-btn p-2 rounded-xl border border-slate-700/80 bg-slate-900/60 hover:bg-slate-800 text-slate-300 transition text-center col-span-2 sm:col-span-1" data-tip="困難模式（需先輸入省、直轄市，精確輸入鄉鎮市區單位）">
-                    <div class="text-xs font-extrabold text-amber-300">🔥 三階困難</div>
-                  </button>
-                </div>
-              </div>
-
-              <div class="lg:col-span-5 p-3 rounded-2xl bg-slate-900/90 border border-slate-800 flex flex-col justify-between gap-2">
-                <div class="flex flex-wrap items-center justify-between gap-1">
-                  <span class="text-xs font-bold text-emerald-300">出題與計時</span>
-                  <div class="flex flex-wrap items-center gap-1">
-                    <button type="button" data-playmode="free" class="playmode-btn px-2 py-1 rounded-lg text-[11px] font-bold border transition bg-emerald-500/20 border-emerald-400 text-emerald-200" data-tip="自由輸入任意行政區或車站">✍️ 自由</button>
-                    <button type="button" data-playmode="target_random" class="playmode-btn px-2 py-1 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-950 text-slate-300" data-tip="由系統隨機高亮指定一個區塊作答">🎯 隨機</button>
-                    <button type="button" data-playmode="target_click" class="playmode-btn px-2 py-1 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-950 text-slate-300" data-tip="自己點選地圖區塊作答">👆 點選</button>
-                    <button id="btn-playmode-satellite" type="button" data-playmode="satellite_quiz" class="playmode-btn px-2 py-1 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-950 text-slate-300" data-tip="自動對準目標衛星外接框並隱藏區界與地名，支援日間、夜間燈火與日夜混合盲猜">🛰️ 衛星</button>
-                    <button id="btn-playmode-pindrop" type="button" data-playmode="pin_drop" class="playmode-btn px-2 py-1 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-950 text-slate-300" data-tip="給地名標座標模式（類 GeoGuessr）：點擊地圖放置預覽圖釘，確認後計算最近邊界距離與 0–5000 分">📍 給地名標座標</button>
-                  </div>
-                </div>
-                <div id="pindrop-quiz-options-panel" class="hidden p-2.5 rounded-xl bg-slate-950/85 border border-amber-500/35 space-y-2">
-                  <div class="flex flex-wrap items-center justify-between gap-1.5">
-                    <span class="text-[11px] font-extrabold text-amber-300">📍 每局出題回合數</span>
-                    <div class="flex flex-wrap items-center gap-1">
-                      <button type="button" data-pindrop-rounds="5" class="pindrop-rounds-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">5 題</button>
-                      <button type="button" data-pindrop-rounds="10" class="pindrop-rounds-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border transition bg-amber-500/25 border-amber-400 text-amber-200 shadow">10 題</button>
-                      <button type="button" data-pindrop-rounds="20" class="pindrop-rounds-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">20 題</button>
-                      <button type="button" data-pindrop-rounds="0" class="pindrop-rounds-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">♾️ 無盡</button>
-                    </div>
-                  </div>
-                  <div class="flex flex-wrap items-center justify-between gap-1.5 pt-1 border-t border-slate-800/80">
-                    <span class="text-[11px] font-extrabold text-sky-300">🗺️ 無字底圖選擇</span>
-                    <div class="flex flex-wrap items-center gap-1">
-                      <button type="button" data-pindrop-layer="satellite" class="pindrop-layer-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border transition bg-sky-500/25 border-sky-400 text-sky-200 shadow">🛰️ 無字衛星</button>
-                      <button type="button" data-pindrop-layer="terrain" class="pindrop-layer-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">⛰️ 無字地形</button>
-                      <button type="button" data-pindrop-layer="vector" class="pindrop-layer-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">🗺️ 純輪廓</button>
-                    </div>
-                  </div>
-                  <div class="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800/80 text-[11px]">
-                    <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="勾選後強制鎖定上方指定的底圖，作答期間不可自由切換；不勾選時可隨時切換且每題會沿用上一題底圖">
-                      <input id="chk-pindrop-lock-layer" type="checkbox" class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-rose-500 accent-rose-400 cursor-pointer" />
-                      <span class="font-bold text-rose-200">🔒 強制鎖定底圖（遊玩中不可切換）</span>
-                    </label>
-                  </div>
-                  <div class="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800/80 text-[11px]">
-                    <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="預設關閉區界（僅留台灣海岸線外輪廓），開啟後將顯示鄉鎮市區邊界格線">
-                      <input id="chk-pindrop-show-borders" type="checkbox" class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-amber-500 accent-amber-400 cursor-pointer" />
-                      <span class="font-bold text-amber-200">📐 顯示鄉鎮市區界線（預設隱藏防看形狀秒殺）</span>
-                    </label>
-                  </div>
-                </div>
-                <div id="satellite-quiz-options-panel" class="hidden p-2.5 rounded-xl bg-slate-950/85 border border-sky-500/35 space-y-2">
-                  <div class="flex flex-wrap items-center justify-between gap-1.5">
-                    <span class="text-[11px] font-extrabold text-sky-300">🛰️ 衛星影像風格</span>
-                    <div class="flex flex-wrap items-center gap-1">
-                      <button id="btn-sat-style-day" type="button" data-sat-style="day" class="satellite-style-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border transition bg-sky-500/25 border-sky-400 text-sky-200 shadow" data-tip="Esri 高解析度日間無字衛星影像">☀️ 日間衛星</button>
-                      <button id="btn-sat-style-night" type="button" data-sat-style="night" class="satellite-style-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition" data-tip="NASA GIBS VIIRS Black Marble 台灣夜間城市燈火">🌙 夜間燈火</button>
-                      <button id="btn-sat-style-hybrid" type="button" data-sat-style="hybrid" class="satellite-style-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition" data-tip="每題隨機以日間衛星或夜間燈火出題（縣市高機率夜間、鄉鎮偏日間）">🌓 日夜混合</button>
-                    </div>
-                  </div>
-                  <div class="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800/80 text-[11px]">
-                    <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="開啟時，答題期間自動鎖定目標外接框視野與最小縮放層級，防止拉遠看全台灣海岸線作弊">
-                      <input id="chk-satellite-lock-viewport" type="checkbox" checked class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-sky-500 accent-sky-400 cursor-pointer" />
-                      <span class="font-bold text-sky-200">🔒 防作弊鎖定目標視野（禁拉遠看全島）</span>
-                    </label>
-                  </div>
-                  <div id="satellite-night-town-notice" class="hidden px-2 py-1 rounded-lg bg-amber-500/15 border border-amber-500/35 text-[11px] font-semibold text-amber-200">
-                    ⚠️ 夜間解析度較低，鄉鎮模式屬高難度趣味挑戰（建議搭配「22縣市」模式體驗最佳）
-                  </div>
-                </div>
-                <div class="flex flex-wrap items-center gap-1">
-                  <button type="button" data-timermode="up" data-sec="0" class="hub-timer-btn flex-1 py-1.5 px-2 rounded-xl text-[11px] font-bold border border-sky-400 bg-sky-500/20 text-white text-center">⏱️ 正計時</button>
-                  <button type="button" data-timermode="down" data-sec="180" class="hub-timer-btn py-1.5 px-2 rounded-xl text-[11px] font-bold border border-slate-700 bg-slate-950 text-slate-300">3分</button>
-                  <button type="button" data-timermode="down" data-sec="300" class="hub-timer-btn py-1.5 px-2 rounded-xl text-[11px] font-bold border border-slate-700 bg-slate-950 text-slate-300">5分</button>
-                  <button type="button" data-timermode="down" data-sec="600" class="hub-timer-btn py-1.5 px-2 rounded-xl text-[11px] font-bold border border-slate-700 bg-slate-950 text-slate-300">10分</button>
-                  <button type="button" data-timermode="down" data-sec="1200" class="hub-timer-btn py-1.5 px-2 rounded-xl text-[11px] font-bold border border-slate-700 bg-slate-950 text-slate-300">20分</button>
-                </div>
-                <div class="pt-1 border-t border-slate-800/80 flex items-center justify-between gap-2 text-[11px]">
-                  <label class="inline-flex items-center gap-1.5 text-slate-300 cursor-pointer select-none" data-tip="預設關閉（Ban 提示）。勾選後，在『隨機』或『點選』指定模式下才會顯示提示按鈕">
-                    <input id="chk-allow-target-hints" type="checkbox" class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-amber-500 accent-amber-400 cursor-pointer" />
-                    <span class="font-bold text-amber-200">💡 允許指定/隨機模式提示（預設關閉）</span>
-                  </label>
-                </div>
-              </div>
-            </div>
-
             <!-- =============================================================== -->
-            <!-- TAB 1: SIMPLE SETTINGS PANE (預設簡易設定：精簡好按，不滿版)      -->
+            <!-- TAB 1: SIMPLE SETTINGS PANE (Section 5: 範圍與地圖選項 — 預設收合！) -->
             <!-- =============================================================== -->
-            <div id="settings-pane-simple" class="space-y-3">
-              <!-- Simple Region Selection: 北 / 中 / 南 / 東 / 外島 / 山 / 西部平原 / 東部平原 / 全臺 -->
-              <div id="simple-region-box" class="p-3.5 rounded-2xl bg-slate-900/90 border border-amber-500/30 space-y-2.5">
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                  <label class="text-xs sm:text-sm font-extrabold text-amber-300">🗺️ 選擇區域範圍</label>
-                  <div class="flex items-center gap-1.5">
-                    <span class="text-[11px] text-slate-400 hidden sm:inline">點左側單選 · 點右側開關複選</span>
-                    <button type="button" data-scope-action="select-all" data-scope-target="region" class="scope-bulk-btn px-2 py-0.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 text-[11px] font-bold transition">全選</button><button type="button" data-scope-action="clear" data-scope-target="region" class="scope-bulk-btn px-2 py-0.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-[11px] font-bold transition">清除</button>
-                  </div>
-                </div>
-                <div id="simple-region-tw-grid" class="grid grid-cols-3 sm:grid-cols-5 gap-2">
-                  <div data-simple-region="all" data-accent="sky" data-state="off" class="simple-region-btn geo-select-card" data-tip="全臺灣 22 縣市共 368 鄉鎮市區">
-                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold ">🇹🇼 全臺</span></button>
-                    <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
-                  </div>
-                  <div data-simple-region="north" data-accent="sky" data-state="off" class="simple-region-btn geo-select-card" data-tip="北部：北北基桃竹宜 (89區)">
-                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold ">⬆️ 北</span></button>
-                    <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
-                  </div>
-                  <div data-simple-region="central" data-accent="sky" data-state="off" class="simple-region-btn geo-select-card" data-tip="中部：苗中彰投雲 (105區)">
-                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold ">⛰️ 中</span></button>
-                    <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
-                  </div>
-                  <div data-simple-region="south" data-accent="sky" data-state="off" class="simple-region-btn geo-select-card" data-tip="南部：嘉南高屏澎 (132區)">
-                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold ">☀️ 南</span></button>
-                    <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
-                  </div>
-                  <div data-simple-region="east" data-accent="sky" data-state="off" class="simple-region-btn geo-select-card" data-tip="東部：花蓮、臺東 (29區)">
-                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold ">🌊 東</span></button>
-                    <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
-                  </div>
-                  <div data-simple-region="islands" data-accent="sky" data-state="off" class="simple-region-btn geo-select-card" data-tip="外島：澎湖、金門、馬祖連江 (16區)">
-                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold ">🏝️ 外島</span></button>
-                    <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
-                  </div>
-                  <div data-simple-region="mountain" data-accent="sky" data-state="off" class="simple-region-btn geo-select-card" data-tip="山區：台灣本島 29 山地原民區與內陸高山丘陵鄉鎮，不含蘭嶼 (57區)">
-                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold ">⛰️ 山區</span></button>
-                    <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
-                  </div>
-                  <div data-simple-region="west_plain" data-accent="sky" data-state="off" class="simple-region-btn geo-select-card" data-tip="西部平原：西半部本島平原、盆地與台地鄉鎮，不含小琉球 (262區)">
-                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold ">🌾 西部平原</span></button>
-                    <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
-                  </div>
-                  <div data-simple-region="east_plain" data-accent="sky" data-state="off" class="simple-region-btn geo-select-card" data-tip="東部平原：蘭陽平原、花東縱谷與海岸平地鄉鎮，不含綠島蘭嶼 (30區)">
-                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold ">🌾 東部平原</span></button>
-                    <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
-                  </div>
-                  <div data-simple-region="west_coast" data-accent="sky" data-state="off" class="simple-region-btn geo-select-card" data-tip="西部濱海：西濱台61線與台灣海峽沿岸臨海鄉鎮 (57區)">
-                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold ">🌊 西部濱海</span></button>
-                    <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
-                  </div>
-                  <div data-simple-region="east_coast" data-accent="sky" data-state="off" class="simple-region-btn geo-select-card" data-tip="東部濱海：蘇花與花東海岸台11線臨太平洋本島鄉鎮 (19區)">
-                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold ">🌊 東部濱海</span></button>
-                    <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
-                  </div>
-                </div>
-                <div id="simple-region-dynamic-grid" class="hidden grid grid-cols-2 sm:grid-cols-4 gap-2"></div>
+            <div id="settings-pane-simple" class="space-y-2.5">
+              <!-- Pack-Specific Options Bar (ONLY visible for world_countries & cn_prov!) -->
+              <div id="pack-options-bar" class="hidden p-2.5 sm:p-3 rounded-2xl bg-slate-900/90 border border-cyan-500/30 flex flex-wrap items-center gap-2">
+                <label id="pack-opt-world-micro-wrap" class="hidden inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-950/90 border border-cyan-500/40 text-xs font-bold text-cyan-200 cursor-pointer select-none hover:bg-slate-800/90 transition" data-tip="開啟包含梵蒂岡、摩納哥、新加坡、太平洋島國等微型國（完整 196 國）；關閉切換為排除微型國的標準版">
+                  <input id="chk-pack-world-microstates" type="checkbox" checked class="w-3.5 h-3.5 rounded bg-slate-950 border-cyan-400 text-cyan-500 accent-cyan-400 cursor-pointer" />
+                  <span id="lbl-pack-world-microstates">🏝️ 含微型國（完整 196 國）</span>
+                </label>
+                <label id="pack-opt-cn-singlechar-wrap" class="hidden inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-950/90 border border-amber-500/40 text-xs font-bold text-amber-200 cursor-pointer select-none hover:bg-slate-800/90 transition" data-tip="預設關閉。開啟後可用「京、滬、粵、川、港、澳」等一字省級簡稱直接作答">
+                  <input id="chk-pack-cn-singlechar" type="checkbox" class="w-3.5 h-3.5 rounded bg-slate-950 border-amber-400 text-amber-500 accent-amber-400 cursor-pointer" />
+                  <span>🔤 允許一字簡稱（京/滬/粵）</span>
+                </label>
               </div>
 
-              <!-- Simple Station Selection: 北捷 / 高捷 / 中捷 / 台鐵西部主線（山海） / 台鐵東部主線 / 高鐵 / 全（不含休閒設施 纜車台車） -->
-              <div id="simple-station-box" class="p-3.5 rounded-2xl bg-slate-900/90 border border-pink-500/30 space-y-2.5">
+              <!-- Section 5: Region Scope Disclosure Row (Collapsed by default!) -->
+              <div id="simple-region-box" class="p-2.5 sm:p-3 rounded-2xl bg-slate-900/90 border border-amber-500/30 space-y-2">
+                <button id="btn-toggle-scope-drawer" type="button" aria-expanded="false" class="w-full flex items-center justify-between gap-2 text-left transition hover:opacity-90">
+                  <span id="scope-drawer-summary-text" class="text-xs sm:text-sm font-extrabold text-amber-200 truncate">📍 範圍：全台 368 區</span>
+                  <span id="scope-drawer-chevron" class="text-xs font-bold px-2.5 py-1 rounded-xl bg-slate-800 text-amber-300 border border-slate-700 shrink-0">調整 ▾</span>
+                </button>
+                <div id="simple-region-drawer-body" class="hidden pt-2 border-t border-slate-800/80 space-y-2">
+                  <div class="flex items-center justify-end gap-1.5">
+                    <button type="button" data-scope-action="select-all" data-scope-target="region" class="scope-bulk-btn px-2 py-0.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 text-[11px] font-bold transition">全選</button>
+                    <button type="button" data-scope-action="clear" data-scope-target="region" class="scope-bulk-btn px-2 py-0.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-[11px] font-bold transition">清除</button>
+                  </div>
+                  <div id="simple-region-tw-grid" class="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
+                    <div data-simple-region="all" data-accent="sky" data-state="off" class="simple-region-btn geo-select-card" data-tip="全臺灣 22 縣市共 368 鄉鎮市區">
+                      <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🇹🇼 全臺</span></button>
+                      <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
+                    </div>
+                    <div data-simple-region="north" data-accent="sky" data-state="off" class="simple-region-btn geo-select-card" data-tip="北部：北北基桃竹宜 (89區)">
+                      <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">⬆️ 北</span></button>
+                      <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
+                    </div>
+                    <div data-simple-region="central" data-accent="sky" data-state="off" class="simple-region-btn geo-select-card" data-tip="中部：苗中彰投雲 (105區)">
+                      <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">⛰️ 中</span></button>
+                      <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
+                    </div>
+                    <div data-simple-region="south" data-accent="sky" data-state="off" class="simple-region-btn geo-select-card" data-tip="南部：嘉南高屏澎 (132區)">
+                      <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">☀️ 南</span></button>
+                      <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
+                    </div>
+                    <div data-simple-region="east" data-accent="sky" data-state="off" class="simple-region-btn geo-select-card" data-tip="東部：花蓮、臺東 (29區)">
+                      <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🌊 東</span></button>
+                      <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
+                    </div>
+                    <div data-simple-region="islands" data-accent="sky" data-state="off" class="simple-region-btn geo-select-card" data-tip="外島：澎湖、金門、馬祖連江 (16區)">
+                      <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🏝️ 外島</span></button>
+                      <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
+                    </div>
+                    <div data-simple-region="mountain" data-accent="sky" data-state="off" class="simple-region-btn geo-select-card" data-tip="山區：台灣本島山地原民區與內陸高山丘陵鄉鎮 (57區)">
+                      <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">⛰️ 山區</span></button>
+                      <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
+                    </div>
+                    <div data-simple-region="west_plain" data-accent="sky" data-state="off" class="simple-region-btn geo-select-card" data-tip="西部平原：西半部本島平原、盆地與台地鄉鎮 (262區)">
+                      <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🌾 西部平原</span></button>
+                      <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
+                    </div>
+                    <div data-simple-region="east_plain" data-accent="sky" data-state="off" class="simple-region-btn geo-select-card" data-tip="東部平原：蘭陽平原、花東縱谷與海岸平地鄉鎮 (30區)">
+                      <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🌾 東部平原</span></button>
+                      <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
+                    </div>
+                    <div data-simple-region="west_coast" data-accent="sky" data-state="off" class="simple-region-btn geo-select-card" data-tip="西部濱海：西濱台61線與台灣海峽沿岸臨海鄉鎮 (57區)">
+                      <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🌊 西部濱海</span></button>
+                      <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
+                    </div>
+                    <div data-simple-region="east_coast" data-accent="sky" data-state="off" class="simple-region-btn geo-select-card" data-tip="東部濱海：蘇花與花東海岸台11線臨太平洋本島鄉鎮 (19區)">
+                      <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🌊 東部濱海</span></button>
+                      <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
+                    </div>
+                  </div>
+                  <div id="simple-region-dynamic-grid" class="hidden grid grid-cols-2 sm:grid-cols-4 gap-1.5"></div>
+                </div>
+              </div>
+
+              <!-- Simple Station Selection (Hidden unless Station topic is ON) -->
+              <div id="simple-station-box" class="hidden p-3 rounded-2xl bg-slate-900/90 border border-pink-500/30 space-y-2">
                 <div class="flex flex-wrap items-center justify-between gap-2">
-                  <label class="text-xs sm:text-sm font-extrabold text-pink-300">🚉 選擇車站範圍</label>
-                  <div class="flex flex-wrap items-center gap-2">
-                    <label id="wrap-simple-filter-st-region" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-amber-500/15 border border-amber-400/40 text-amber-200 cursor-pointer select-none text-[11px] font-extrabold transition hover:bg-amber-500/25" data-tip="開啟後，在混合模式下只會出題位於目前已選行政區境內的鐵道與捷運車站">
+                  <label class="text-xs font-extrabold text-pink-300">🚉 車站範圍</label>
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <label id="wrap-simple-filter-st-region" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-amber-500/15 border border-amber-400/40 text-amber-200 cursor-pointer select-none text-[11px] font-bold transition hover:bg-amber-500/25" data-tip="開啟後僅出題位於所選行政區境內的鐵道與捷運車站">
                       <input id="chk-simple-filter-station-region" type="checkbox" class="w-3.5 h-3.5 rounded bg-slate-900 border-amber-400 text-amber-500 accent-amber-400 cursor-pointer" />
-                      <span>📍 僅猜所選區域內的鐵道</span>
+                      <span>📍 僅限所選區</span>
                     </label>
-                    <span class="text-[11px] text-slate-400 hidden sm:inline">點左側單選 · 點右側複選</span>
-                    <button type="button" data-scope-action="select-all" data-scope-target="station" class="scope-bulk-btn px-2 py-0.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 text-[11px] font-bold transition">全選</button><button type="button" data-scope-action="clear" data-scope-target="station" class="scope-bulk-btn px-2 py-0.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-[11px] font-bold transition">清除</button>
+                    <button type="button" data-scope-action="select-all" data-scope-target="station" class="scope-bulk-btn px-2 py-0.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 text-[11px] font-bold transition">全選</button>
+                    <button type="button" data-scope-action="clear" data-scope-target="station" class="scope-bulk-btn px-2 py-0.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-[11px] font-bold transition">清除</button>
                   </div>
                 </div>
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                   <div data-simple-station="tpemrt" data-accent="pink" data-state="off" class="simple-station-btn geo-select-card" data-tip="北捷：淡水信義、板南、松山新店、中和新蘆、文湖、環狀線">
-                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold ">🚇 北捷</span></button>
+                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🚇 北捷</span></button>
                     <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
                   </div>
                   <div data-simple-station="khmrt" data-accent="pink" data-state="off" class="simple-station-btn geo-select-card" data-tip="高捷：紅線、橘線">
-                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold ">🚇 高捷</span></button>
+                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🚇 高捷</span></button>
                     <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
                   </div>
                   <div data-simple-station="tcmrt" data-accent="pink" data-state="off" class="simple-station-btn geo-select-card" data-tip="中捷：綠線">
-                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold ">🚇 中捷</span></button>
+                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🚇 中捷</span></button>
                     <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
                   </div>
                   <div data-simple-station="thsr" data-accent="pink" data-state="off" class="simple-station-btn geo-select-card" data-tip="台灣高鐵 12 座車站">
-                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold ">🚄 高鐵</span></button>
+                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🚄 高鐵</span></button>
                     <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
                   </div>
-                  <div data-simple-station="tra_coast" data-accent="pink" data-state="off" class="simple-station-btn geo-select-card" data-tip="台鐵海岸線（海線：竹南—大甲—清水—追分—彰化，18站）">
-                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold ">🌊 台鐵海線</span></button>
+                  <div data-simple-station="tra_coast" data-accent="pink" data-state="off" class="simple-station-btn geo-select-card" data-tip="台鐵海岸線（18站）">
+                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🌊 台鐵海線</span></button>
                     <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
                   </div>
-                  <div data-simple-station="tra_mountain" data-accent="pink" data-state="off" class="simple-station-btn geo-select-card" data-tip="台鐵臺中線（山線：竹南—苗栗—豐原—臺中—彰化，23站）">
-                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold ">⛰️ 台鐵山線</span></button>
+                  <div data-simple-station="tra_mountain" data-accent="pink" data-state="off" class="simple-station-btn geo-select-card" data-tip="台鐵臺中線山線（23站）">
+                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">⛰️ 台鐵山線</span></button>
                     <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
                   </div>
-                  <div data-simple-station="tra_west_main" data-accent="pink" data-state="off" class="simple-station-btn geo-select-card" data-tip="台鐵西部幹線（縱貫線北段、山線、海線、成追線、縱貫線南段、屏東線）">
-                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold ">🚆 西部主線全</span></button>
+                  <div data-simple-station="tra_west_main" data-accent="pink" data-state="off" class="simple-station-btn geo-select-card" data-tip="台鐵西部幹線（縱貫、山海、成追、屏東線）">
+                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🚆 西部主線</span></button>
                     <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
                   </div>
-                  <div data-simple-station="tra_east_main" data-accent="pink" data-state="off" class="simple-station-btn geo-select-card" data-tip="台鐵東部幹線（宜蘭線、北迴線、花東線、南迴線）">
-                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold ">🚆 東部主線全</span></button>
+                  <div data-simple-station="tra_east_main" data-accent="pink" data-state="off" class="simple-station-btn geo-select-card" data-tip="台鐵東部幹線（宜蘭、北迴、花東、南迴線）">
+                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🚆 東部主線</span></button>
                     <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
                   </div>
-                  <div data-simple-station="all_main" data-accent="pink" data-state="off" class="simple-station-btn geo-select-card col-span-2 sm:col-span-4" data-tip="全台高鐵、台鐵、捷運、輕軌（不含纜車、林鐵蹦蹦車、烏來台車、糖鐵五分車等休閒設施）">
-                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold text-amber-200">✅ 全（不含休閒設施 纜車台車）</span></button>
+                  <div data-simple-station="all_main" data-accent="pink" data-state="off" class="simple-station-btn geo-select-card col-span-2 sm:col-span-4" data-tip="全台高鐵、台鐵、捷運、輕軌（不含纜車、林鐵、糖鐵）">
+                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold text-amber-200">✅ 全部主線（不含纜車觀光鐵道）</span></button>
                     <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
                   </div>
                 </div>
               </div>
 
               <!-- Simple Airport Box -->
-              <div id="simple-airport-box" class="hidden p-3.5 rounded-2xl bg-slate-900/90 border border-sky-500/30 space-y-2.5">
+              <div id="simple-airport-box" class="hidden p-3 rounded-2xl bg-slate-900/90 border border-sky-500/30 space-y-2">
                 <div class="flex flex-wrap items-center justify-between gap-1.5">
-                  <label class="text-xs sm:text-sm font-extrabold text-sky-300">✈️ 選擇機場分類</label>
+                  <label class="text-xs font-extrabold text-sky-300">✈️ 機場分類</label>
                   <div class="flex items-center gap-1.5">
                     <span id="simple-airport-total-badge" class="text-[11px] font-bold px-2 py-0.5 rounded-lg bg-sky-500/15 text-sky-200 border border-sky-400/40 font-mono-num">
-                      去重總計：24 座
+                      24 座
                     </span>
-                    <button type="button" data-scope-action="select-all" data-scope-target="airport" class="scope-bulk-btn px-2 py-0.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 text-[11px] font-bold transition">全選</button><button type="button" data-scope-action="clear" data-scope-target="airport" class="scope-bulk-btn px-2 py-0.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-[11px] font-bold transition">清除</button>
+                    <button type="button" data-scope-action="select-all" data-scope-target="airport" class="scope-bulk-btn px-2 py-0.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 text-[11px] font-bold transition">全選</button>
+                    <button type="button" data-scope-action="clear" data-scope-target="airport" class="scope-bulk-btn px-2 py-0.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-[11px] font-bold transition">清除</button>
                   </div>
                 </div>
-                <div class="grid grid-cols-3 gap-2">
+                <div class="grid grid-cols-3 gap-1.5">
                   <div data-poi-cat="airport" data-poi-sub="intl" data-accent="sky" data-state="off" class="poi-subtype-btn geo-select-card" data-tip="桃園、松山、臺中清泉崗、高雄國際機場">
                     <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🌐 國際</span></button>
                     <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill"><span class="poi-sub-state">+</span><span class="poi-sub-count font-mono-num">4</span></span></button>
@@ -1193,131 +1233,126 @@
                     <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill"><span class="poi-sub-state">+</span><span class="poi-sub-count font-mono-num">15</span></span></button>
                   </div>
                 </div>
-                <div class="text-[11px] text-slate-400">軍民合用機場於各子項各自計入，但總題數自動去重僅計 1 次。</div>
               </div>
 
               <!-- Simple Port Box -->
-              <div id="simple-port-box" class="hidden p-3.5 rounded-2xl bg-slate-900/90 border border-teal-500/30 space-y-2.5">
+              <div id="simple-port-box" class="hidden p-3 rounded-2xl bg-slate-900/90 border border-teal-500/30 space-y-2">
                 <div class="flex flex-wrap items-center justify-between gap-1.5">
-                  <label class="text-xs sm:text-sm font-extrabold text-teal-300">⚓ 選擇港口分類（預設）</label>
+                  <label class="text-xs font-extrabold text-teal-300">⚓ 港口分類</label>
                   <div class="flex items-center gap-1.5">
                     <span id="simple-port-total-badge" class="text-[11px] font-bold px-2 py-0.5 rounded-lg bg-teal-500/15 text-teal-200 border border-teal-400/40 font-mono-num">
-                      去重總計：16 座
+                      16 座
                     </span>
-                    <button type="button" data-scope-action="select-all" data-scope-target="port" data-scope-mode="simple" class="scope-bulk-btn px-2 py-0.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 text-[11px] font-bold transition">全選</button><button type="button" data-scope-action="clear" data-scope-target="port" data-scope-mode="simple" class="scope-bulk-btn px-2 py-0.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-[11px] font-bold transition">清除</button>
+                    <button id="btn-jump-port-advanced" type="button" class="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-teal-300 font-bold text-[11px] border border-teal-500/30 transition" data-tip="開啟第二類漁港、工業港與天然氣港">
+                      🛠️ 更多
+                    </button>
+                    <button type="button" data-scope-action="select-all" data-scope-target="port" data-scope-mode="simple" class="scope-bulk-btn px-2 py-0.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 text-[11px] font-bold transition">全選</button>
+                    <button type="button" data-scope-action="clear" data-scope-target="port" data-scope-mode="simple" class="scope-bulk-btn px-2 py-0.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-[11px] font-bold transition">清除</button>
                   </div>
                 </div>
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
                   <div data-poi-cat="port" data-poi-sub="intl_commercial" data-accent="teal" data-state="off" class="poi-subtype-btn geo-select-card" data-tip="基隆港、臺中港、高雄港、花蓮港">
                     <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🚢 國際商港</span></button>
                     <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill"><span class="poi-sub-state">+</span><span class="poi-sub-count font-mono-num">4</span></span></button>
                   </div>
-                  <div data-poi-cat="port" data-poi-sub="intl_aux" data-accent="teal" data-state="off" class="poi-subtype-btn geo-select-card" data-tip="臺北港、蘇澳港、安平港（已排除石化天然氣與工業港）">
-                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">⚓ 國際輔助港</span></button>
+                  <div data-poi-cat="port" data-poi-sub="intl_aux" data-accent="teal" data-state="off" class="poi-subtype-btn geo-select-card" data-tip="臺北港、蘇澳港、安平港">
+                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">⚓ 輔助港</span></button>
                     <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill"><span class="poi-sub-state">+</span><span class="poi-sub-count font-mono-num">3</span></span></button>
                   </div>
                   <div data-poi-cat="port" data-poi-sub="fishery_cat1" data-accent="teal" data-state="off" class="poi-subtype-btn geo-select-card" data-tip="漁業署官方 9 座第一類大型漁港">
-                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🐟 第一類漁港(大)</span></button>
+                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🐟 第一類漁港</span></button>
                     <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill"><span class="poi-sub-state">+</span><span class="poi-sub-count font-mono-num">9</span></span></button>
                   </div>
                 </div>
-                <div class="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px] text-slate-400">
-                  <span id="simple-port-adv-hint">如需第二類漁港（精選 24 處／其餘 188 處，共 212 處）、工業港、石化天然氣港，可至進階設定勾選</span>
-                  <button id="btn-jump-port-advanced" type="button" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-teal-300 font-bold border border-teal-500/30 transition">
-                    🛠️ 開啟進階港類 ➔
-                  </button>
-                </div>
+                <span id="simple-port-adv-hint" class="hidden text-[11px] text-teal-300/90 block"></span>
               </div>
 
               <!-- Simple Reservoir Box -->
-              <div id="simple-reservoir-box" class="hidden p-3.5 rounded-2xl bg-slate-900/90 border border-blue-500/30 space-y-2.5">
+              <div id="simple-reservoir-box" class="hidden p-3 rounded-2xl bg-slate-900/90 border border-blue-500/30 space-y-2">
                 <div class="flex flex-wrap items-center justify-between gap-1.5">
-                  <label class="text-xs sm:text-sm font-extrabold text-blue-300">💧 選擇水庫分類（預設主要水庫）</label>
+                  <label class="text-xs font-extrabold text-blue-300">💧 水庫分類</label>
                   <div class="flex items-center gap-1.5">
                     <span id="simple-reservoir-total-badge" class="text-[11px] font-bold px-2 py-0.5 rounded-lg bg-blue-500/15 text-blue-200 border border-blue-400/40 font-mono-num">
-                      已選：21 座
+                      21 座
                     </span>
-                    <button type="button" data-scope-action="select-all" data-scope-target="reservoir" class="scope-bulk-btn px-2 py-0.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 text-[11px] font-bold transition">全選</button><button type="button" data-scope-action="clear" data-scope-target="reservoir" class="scope-bulk-btn px-2 py-0.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-[11px] font-bold transition">清除</button>
+                    <button id="btn-jump-reservoir-advanced" type="button" class="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-blue-300 font-bold text-[11px] border border-blue-500/30 transition" data-tip="前往進階水庫細選">
+                      🛠️ 更多
+                    </button>
+                    <button type="button" data-scope-action="select-all" data-scope-target="reservoir" class="scope-bulk-btn px-2 py-0.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 text-[11px] font-bold transition">全選</button>
+                    <button type="button" data-scope-action="clear" data-scope-target="reservoir" class="scope-bulk-btn px-2 py-0.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-[11px] font-bold transition">清除</button>
                   </div>
                 </div>
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <div data-poi-cat="reservoir" data-poi-sub="res_major" data-accent="blue" data-state="off" class="poi-subtype-btn geo-select-card" data-tip="經濟部水利署主要水情監測水庫（石門、翡翠、曾文、日月潭、德基、鯉魚潭等 21 座）">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                  <div data-poi-cat="reservoir" data-poi-sub="res_major" data-accent="blue" data-state="off" class="poi-subtype-btn geo-select-card" data-tip="經濟部水利署主要水庫（21 座）">
                     <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">💧 主要水庫</span></button>
                     <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill"><span class="poi-sub-state">+</span><span class="poi-sub-count font-mono-num">21</span></span></button>
                   </div>
-                  <div data-poi-cat="reservoir" data-poi-sub="res_other" data-accent="blue" data-state="off" class="poi-subtype-btn geo-select-card" data-tip="其他知名本島水庫（澄清湖、虎頭埤、鳳山、大埔、西勢、鳥嘴潭人工湖等）">
+                  <div data-poi-cat="reservoir" data-poi-sub="res_other" data-accent="blue" data-state="off" class="poi-subtype-btn geo-select-card" data-tip="其他知名本島水庫（14 座）">
                     <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🌊 其他本島</span></button>
                     <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill"><span class="poi-sub-state">+</span><span class="poi-sub-count font-mono-num">14</span></span></button>
                   </div>
-                  <div data-poi-cat="reservoir" data-poi-sub="res_offshore" data-accent="blue" data-state="off" class="poi-subtype-btn geo-select-card" data-tip="澎湖（成功/興仁/七美）、金門（太湖）、馬祖（勝利）、綠島（酬勤）">
+                  <div data-poi-cat="reservoir" data-poi-sub="res_offshore" data-accent="blue" data-state="off" class="poi-subtype-btn geo-select-card" data-tip="澎湖、金門、馬祖、綠島水庫（6 座）">
                     <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🏝️ 離島水庫</span></button>
                     <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill"><span class="poi-sub-state">+</span><span class="poi-sub-count font-mono-num">6</span></span></button>
                   </div>
                 </div>
-                <div class="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px] text-slate-400">
-                  <span id="simple-reservoir-adv-hint">如需其他本島水庫（如澄清湖、虎頭埤、鳳山）或離島水庫，可至進階設定勾選</span>
-                  <button id="btn-jump-reservoir-advanced" type="button" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-blue-300 font-bold border border-blue-500/30 transition">
-                    🛠️ 進階水庫 ➔
-                  </button>
-                </div>
+                <span id="simple-reservoir-adv-hint" class="hidden text-[11px] text-blue-300/90 block"></span>
               </div>
 
               <!-- Simple Lake Box -->
-              <div id="simple-lake-box" class="hidden p-3.5 rounded-2xl bg-slate-900/90 border border-emerald-500/30 space-y-2.5">
+              <div id="simple-lake-box" class="hidden p-3 rounded-2xl bg-slate-900/90 border border-emerald-500/30 space-y-2">
                 <div class="flex flex-wrap items-center justify-between gap-1.5">
-                  <label class="text-xs sm:text-sm font-extrabold text-emerald-300">🏞️ 選擇湖泊分類（與水庫重疊自動去重）</label>
+                  <label class="text-xs font-extrabold text-emerald-300">🏞️ 湖泊分類</label>
                   <div class="flex items-center gap-1.5">
                     <span id="simple-lake-total-badge" class="text-[11px] font-bold px-2 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-200 border border-emerald-400/40 font-mono-num">
-                      已選：22 座
+                      22 座
                     </span>
-                    <button type="button" data-scope-action="select-all" data-scope-target="lake" class="scope-bulk-btn px-2 py-0.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 text-[11px] font-bold transition">全選</button><button type="button" data-scope-action="clear" data-scope-target="lake" class="scope-bulk-btn px-2 py-0.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-[11px] font-bold transition">清除</button>
+                    <button id="btn-jump-lake-advanced" type="button" class="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 font-bold text-[11px] border border-emerald-500/30 transition" data-tip="前往進階湖泊細選">
+                      🛠️ 更多
+                    </button>
+                    <button type="button" data-scope-action="select-all" data-scope-target="lake" class="scope-bulk-btn px-2 py-0.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 text-[11px] font-bold transition">全選</button>
+                    <button type="button" data-scope-action="clear" data-scope-target="lake" class="scope-bulk-btn px-2 py-0.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-[11px] font-bold transition">清除</button>
                   </div>
                 </div>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div data-poi-cat="lake" data-poi-sub="lake_scenic" data-accent="emerald" data-state="off" class="poi-subtype-btn geo-select-card" data-tip="日月潭、花蓮/埔里鯉魚潭、大坡池、梅花湖、夢幻湖、蓮池潭、澄清湖等 22 座">
-                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🏞️ 觀光與平地湖泊</span></button>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                  <div data-poi-cat="lake" data-poi-sub="lake_scenic" data-accent="emerald" data-state="off" class="poi-subtype-btn geo-select-card" data-tip="觀光與平地湖泊（22 座）">
+                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🏞️ 觀光平地</span></button>
                     <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill"><span class="poi-sub-state">+</span><span class="poi-sub-count font-mono-num">22</span></span></button>
                   </div>
-                  <div data-poi-cat="lake" data-poi-sub="lake_alpine" data-accent="emerald" data-state="off" class="poi-subtype-btn geo-select-card" data-tip="嘉明湖、翠峰湖、松蘿湖、明池、七彩湖、翠池、大小鬼湖、水漾森林等 12 座">
-                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">⛰️ 高山與秘境湖泊</span></button>
+                  <div data-poi-cat="lake" data-poi-sub="lake_alpine" data-accent="emerald" data-state="off" class="poi-subtype-btn geo-select-card" data-tip="高山與秘境湖泊（12 座）">
+                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">⛰️ 高山秘境</span></button>
                     <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill"><span class="poi-sub-state">+</span><span class="poi-sub-count font-mono-num">12</span></span></button>
                   </div>
                 </div>
-                <div class="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px] text-slate-400">
-                  <span id="simple-lake-adv-hint">如需高山秘境湖泊（嘉明湖、翠峰湖、松蘿湖、水漾森林等），可至進階設定勾選</span>
-                  <button id="btn-jump-lake-advanced" type="button" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 font-bold border border-emerald-500/30 transition">
-                    🛠️ 進階湖泊 ➔
-                  </button>
-                </div>
+                <span id="simple-lake-adv-hint" class="hidden text-[11px] text-emerald-300/90 block"></span>
               </div>
 
               <!-- Simple Settlement Box -->
-              <div id="simple-settlement-box" class="hidden p-3.5 rounded-2xl bg-slate-900/90 border border-lime-500/30 space-y-2.5">
+              <div id="simple-settlement-box" class="hidden p-3 rounded-2xl bg-slate-900/90 border border-lime-500/30 space-y-2">
                 <div class="flex flex-wrap items-center justify-between gap-1.5">
-                  <label class="text-xs sm:text-sm font-extrabold text-lime-300">🪧 選擇傳統聚落／路牌地名（不與 368 鄉鎮重疊）</label>
+                  <label class="text-xs font-extrabold text-lime-300">🪧 聚落分類</label>
                   <div class="flex items-center gap-1.5">
                     <span id="simple-settlement-total-badge" class="text-[11px] font-bold px-2 py-0.5 rounded-lg bg-lime-500/15 text-lime-200 border border-lime-400/40 font-mono-num">
-                      已選：117 處
+                      117 處
                     </span>
-                    <button type="button" data-scope-action="select-all" data-scope-target="settlement" class="scope-bulk-btn px-2 py-0.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 text-[11px] font-bold transition">全選</button><button type="button" data-scope-action="clear" data-scope-target="settlement" class="scope-bulk-btn px-2 py-0.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-[11px] font-bold transition">清除</button>
+                    <button id="btn-jump-settlement-advanced" type="button" class="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-lime-300 font-bold text-[11px] border border-lime-500/30 transition" data-tip="前往進階聚落細選">
+                      🛠️ 更多
+                    </button>
+                    <button type="button" data-scope-action="select-all" data-scope-target="settlement" class="scope-bulk-btn px-2 py-0.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 text-[11px] font-bold transition">全選</button>
+                    <button type="button" data-scope-action="clear" data-scope-target="settlement" class="scope-bulk-btn px-2 py-0.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-[11px] font-bold transition">清除</button>
                   </div>
                 </div>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div data-poi-cat="settlement" data-poi-sub="signage_major" data-accent="lime" data-state="off" class="poi-subtype-btn geo-select-card" data-tip="省道與主要縣道綠牌高頻聚落（路上/路上厝、王功、九份、金瓜石、十分、福隆、南崁、內壢、富岡、內灣、白沙屯、清泉崗、關子嶺、墾丁、楓港、知本、太魯閣等 117 處）">
-                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🪧 幹線路牌聚落（精選）</span></button>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                  <div data-poi-cat="settlement" data-poi-sub="signage_major" data-accent="lime" data-state="off" class="poi-subtype-btn geo-select-card" data-tip="省道與主要縣道綠牌高頻聚落（117 處）">
+                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🪧 幹線路牌聚落</span></button>
                     <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill"><span class="poi-sub-state">+</span><span class="poi-sub-count font-mono-num">117</span></span></button>
                   </div>
-                  <div data-poi-cat="settlement" data-poi-sub="historic_oaza" data-accent="lime" data-state="off" class="poi-subtype-btn geo-select-card" data-tip="日治大字、老聚落與原住民族傳統部落（大稻埕、艋舺、景美、六家、中港、頂番婆、霧社、伊達邵、司馬庫斯、萬金、利稻、都歷、奇美、靜浦等 94 處）">
-                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🏘️ 歷史大字與傳統部落</span></button>
+                  <div data-poi-cat="settlement" data-poi-sub="historic_oaza" data-accent="lime" data-state="off" class="poi-subtype-btn geo-select-card" data-tip="日治大字、老聚落與原住民族傳統部落（94 處）">
+                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🏘️ 歷史大字與部落</span></button>
                     <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill"><span class="poi-sub-state">+</span><span class="poi-sub-count font-mono-num">94</span></span></button>
                   </div>
                 </div>
-                <div class="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px] text-slate-400">
-                  <span id="simple-settlement-adv-hint">如需日治大字、老聚落與原住民傳統部落（大稻埕、霧社、司馬庫斯、利稻等），可至進階設定勾選</span>
-                  <button id="btn-jump-settlement-advanced" type="button" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-lime-300 font-bold border border-lime-500/30 transition">
-                    🛠️ 進階聚落 ➔
-                  </button>
-                </div>
+                <span id="simple-settlement-adv-hint" class="hidden text-[11px] text-lime-300/90 block"></span>
               </div>
             </div>
 
@@ -1329,7 +1364,7 @@
               <div id="scope-region-section" class="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-2.5">
                 <div class="flex flex-wrap items-center justify-between gap-2">
                   <label class="text-xs font-bold text-amber-300">
-                    進階行政區細選（點左側單選 · 點右側複選）
+                    📍 行政區細選
                   </label>
                   <div class="flex items-center gap-1.5">
                     <button id="btn-scope-random-one" type="button" class="px-2.5 py-1 rounded-lg bg-fuchsia-500/20 hover:bg-fuchsia-500/30 text-fuchsia-300 border border-fuchsia-500/40 text-[11px] font-bold transition">
@@ -1407,7 +1442,7 @@
               <!-- Advanced Airport Section -->
               <div id="scope-airport-section" class="hidden p-3.5 rounded-2xl bg-slate-900/90 border border-sky-500/30 space-y-2.5">
                 <div class="flex flex-wrap items-center justify-between gap-2">
-                  <label class="text-xs font-bold text-sky-300">✈️ 機場分類細選（軍民合用自動去重）</label>
+                  <label class="text-xs font-bold text-sky-300">✈️ 機場細選</label>
                   <div class="flex items-center gap-1.5">
                     <span id="adv-airport-total-badge" class="text-[11px] font-bold px-2 py-0.5 rounded-lg bg-sky-500/15 text-sky-200 border border-sky-400/40 font-mono-num">
                       去重總計：24 座
@@ -1434,7 +1469,7 @@
               <!-- Advanced Port Section -->
               <div id="scope-port-section" class="hidden p-3.5 rounded-2xl bg-slate-900/90 border border-teal-500/30 space-y-2.5">
                 <div class="flex flex-wrap items-center justify-between gap-2">
-                  <label class="text-xs font-bold text-teal-300">⚓ 港口分類細選（預設＋進階港類，雙屬性自動去重）</label>
+                  <label class="text-xs font-bold text-teal-300">⚓ 港口細選</label>
                   <div class="flex items-center gap-1.5">
                     <span id="adv-port-total-badge" class="text-[11px] font-bold px-2 py-0.5 rounded-lg bg-teal-500/15 text-teal-200 border border-teal-400/40 font-mono-num">
                       去重總計：16 座
@@ -1481,7 +1516,7 @@
               <!-- Advanced Reservoir Section -->
               <div id="scope-reservoir-section" class="hidden p-3.5 rounded-2xl bg-slate-900/90 border border-blue-500/30 space-y-2.5">
                 <div class="flex flex-wrap items-center justify-between gap-2">
-                  <label class="text-xs font-bold text-blue-300">💧 水庫分類細選（與湖泊重疊自動去重）</label>
+                  <label class="text-xs font-bold text-blue-300">💧 水庫細選</label>
                   <div class="flex items-center gap-1.5">
                     <span id="adv-reservoir-total-badge" class="text-[11px] font-bold px-2 py-0.5 rounded-lg bg-blue-500/15 text-blue-200 border border-blue-400/40 font-mono-num">
                       已選：21 座
@@ -1508,7 +1543,7 @@
               <!-- Advanced Lake Section -->
               <div id="scope-lake-section" class="hidden p-3.5 rounded-2xl bg-slate-900/90 border border-emerald-500/30 space-y-2.5">
                 <div class="flex flex-wrap items-center justify-between gap-2">
-                  <label class="text-xs font-bold text-emerald-300">🏞️ 湖泊分類細選（與水庫重疊自動去重）</label>
+                  <label class="text-xs font-bold text-emerald-300">🏞️ 湖泊細選</label>
                   <div class="flex items-center gap-1.5">
                     <span id="adv-lake-total-badge" class="text-[11px] font-bold px-2 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-200 border border-emerald-400/40 font-mono-num">
                       已選：22 座
@@ -1531,7 +1566,7 @@
               <!-- Advanced Settlement Section -->
               <div id="scope-settlement-section" class="hidden p-3.5 rounded-2xl bg-slate-900/90 border border-lime-500/30 space-y-2.5">
                 <div class="flex flex-wrap items-center justify-between gap-2">
-                  <label class="text-xs font-bold text-lime-300">🪧 傳統聚落與路牌地名細選（不與 368 鄉鎮重疊）</label>
+                  <label class="text-xs font-bold text-lime-300">🪧 聚落細選</label>
                   <div class="flex items-center gap-1.5">
                     <span id="adv-settlement-total-badge" class="text-[11px] font-bold px-2 py-0.5 rounded-lg bg-lime-500/15 text-lime-200 border border-lime-400/40 font-mono-num">
                       已選：117 處

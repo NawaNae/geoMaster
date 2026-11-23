@@ -288,6 +288,10 @@ function getHostSyncConfig(isSettingChange = false, changeLabel = "", changeDeta
   const allItems = _p2pItems();
   return {
     mapPackId: state.activeMapPackId || "tw_modern",
+    packOptions: {
+      worldIncludeMicrostates: state.packOptions ? state.packOptions.worldIncludeMicrostates !== false : true,
+      cnAllowSingleCharAlias: Boolean(state.packOptions && state.packOptions.cnAllowSingleCharAlias)
+    },
     quizTargetMode: typeof syncLegacyQuizTargetMode === "function" ? syncLegacyQuizTargetMode() : (state.quizTargetMode || "region"),
     regionQuizEnabled: Boolean(state.regionQuizEnabled),
     stationQuizEnabled: Boolean(state.stationQuizEnabled),
@@ -384,8 +388,13 @@ function getConciseRegionSummaryText() {
   if (townIds.size === 0) return "";
 
   if (!_p2pIsTwModern()) {
-    if (townIds.size === allItems.length && allItems.length > 0) {
-      return unitLabels.fullScopeLabel || (pack && (pack.displayName || pack.shortLabel)) || `全境（共 ${allItems.length} ${unitLabels.itemShort}）`;
+    const eligibleItems = typeof getPackEligibleItems === "function" ? getPackEligibleItems(pack, state) : allItems;
+    const eligibleCount = eligibleItems.length;
+    if (eligibleCount > 0 && townIds.size === eligibleCount && eligibleItems.every((it) => townIds.has(it.id))) {
+      if (pack && pack.id === "world_countries" && state.packOptions && state.packOptions.worldIncludeMicrostates === false) {
+        return `標準版全境（共 ${eligibleCount} ${unitLabels.itemShort}）`;
+      }
+      return unitLabels.fullScopeLabel || (pack && (pack.displayName || pack.shortLabel)) || `全境（共 ${eligibleCount} ${unitLabels.itemShort}）`;
     }
     const filters = typeof getActiveRegionFilters === "function" ? getActiveRegionFilters() : [];
     const nonAllFilters = filters
@@ -393,7 +402,7 @@ function getConciseRegionSummaryText() {
       .map((f) => ({
         label: f.shortLabel || f.label || f.id,
         ids: typeof resolveRegionFilterItemIds === "function"
-          ? resolveRegionFilterItemIds(f, allItems)
+          ? resolveRegionFilterItemIds(f, eligibleItems, state)
           : (Array.isArray(f.itemIds) ? f.itemIds : [])
       }))
       .filter((f) => f.ids.length > 0);
@@ -586,7 +595,16 @@ function renderRoomConciseSettingsSummary() {
   const rows = [];
   // 0. Map Pack Line (when multiple packs registered or non-tw_modern)
   if (registeredCount > 1 || packId !== "tw_modern") {
-    const packLabel = (pack && (pack.displayName || pack.shortLabel)) || packId;
+    let packLabel = (pack && (pack.displayName || pack.shortLabel)) || packId;
+    if (packId === "world_countries") {
+      const includeMicro = !state.packOptions || state.packOptions.worldIncludeMicrostates !== false;
+      const eligLen = typeof getPackEligibleItems === "function" ? getPackEligibleItems(pack, state).length : _p2pItems().length;
+      packLabel = includeMicro
+        ? `${packLabel} · 含微型國 (${eligLen || 196} 國)`
+        : `${packLabel} · 標準版 (排除微型國${eligLen ? ` · ${eligLen} 國` : ""})`;
+    } else if (packId === "cn_prov" && state.packOptions && state.packOptions.cnAllowSingleCharAlias) {
+      packLabel = `${packLabel} · 含一字簡稱`;
+    }
     rows.push({ label: "🗺️ 地圖：", text: packLabel, highlight: "text-cyan-200 font-bold" });
   }
 
@@ -1382,6 +1400,29 @@ function describeConfigDiff(patch) {
     const curLabel = (curPack && curPack.shortLabel) || curPackId;
     lines.push(`🗺️ 地圖：${curLabel} ➔ ${nextLabel}`);
   }
+  if (patch.packOptions && typeof patch.packOptions === "object") {
+    const curOpts = state.packOptions || {};
+    if (
+      typeof patch.packOptions.worldIncludeMicrostates === "boolean" &&
+      patch.packOptions.worldIncludeMicrostates !== (curOpts.worldIncludeMicrostates !== false)
+    ) {
+      lines.push(
+        patch.packOptions.worldIncludeMicrostates
+          ? "🏝️ 含微型國（完整 196 國）"
+          : "🌍 標準版（排除微型國）"
+      );
+    }
+    if (
+      typeof patch.packOptions.cnAllowSingleCharAlias === "boolean" &&
+      patch.packOptions.cnAllowSingleCharAlias !== Boolean(curOpts.cnAllowSingleCharAlias)
+    ) {
+      lines.push(
+        patch.packOptions.cnAllowSingleCharAlias
+          ? "🔤 開啟一字簡稱（京/滬/粵）"
+          : "🔤 關閉一字簡稱"
+      );
+    }
+  }
   if (patch.difficulty && patch.difficulty !== state.difficulty) {
     lines.push(`${diffNames[state.difficulty] || state.difficulty} ➔ ${diffNames[patch.difficulty] || patch.difficulty}`);
   }
@@ -1436,6 +1477,12 @@ function buildProposedConfigFromPatch(patch) {
   const curPackId = state.activeMapPackId || "tw_modern";
   const isSwitchingPack = Boolean(patch.mapPackId && patch.mapPackId !== curPackId);
   if (patch.mapPackId) base.mapPackId = patch.mapPackId;
+  if (patch.packOptions && typeof patch.packOptions === "object") {
+    base.packOptions = {
+      ...(base.packOptions || { worldIncludeMicrostates: true, cnAllowSingleCharAlias: false }),
+      ...patch.packOptions
+    };
+  }
   if (isSwitchingPack) {
     // Drop previous pack's scope IDs so target pack initializes its full scope cleanly unless patch supplies new IDs
     delete base.selectedCounties;
@@ -1988,9 +2035,12 @@ function dispatchP2PMessage(msg, sourceConn = null) {
   } else if (msg.type === "SYNC_START") {
     if (state.isHost) return;
     startSynchronizedP2PCountdown(msg.payload, false);
-  } else if (msg.type === "SYNC_CONFIG") {
+  } else if (msg.type === "SYNC_CONFIG" || msg.type === "HOST_CONFIG_UPDATE") {
     if (state.isHost) return;
-    applyRemoteSyncConfig(msg.payload, false, true);
+    const cfgRes = applyRemoteSyncConfig(msg.payload, false, true);
+    if (cfgRes && typeof cfgRes.then === "function") {
+      cfgRes.catch(() => {});
+    }
   } else if (msg.type === "SYNC_READY_STATUS") {
     const targetId = msg.senderId;
     if (state.players[targetId]) {
@@ -2155,6 +2205,7 @@ function updateP2PLobbyUI() {
   if (activeView) activeView.classList.toggle("hidden", !inRoom);
   if (roomFooter) roomFooter.classList.toggle("hidden", !inRoom);
   if (hostRestrictPanel) hostRestrictPanel.classList.toggle("hidden", !state.isHost);
+  if (typeof syncRoomRestrictionsDrawerUI === "function") syncRoomRestrictionsDrawerUI();
 
   const roleIndicator = document.getElementById("p2p-role-indicator");
   const myReadyBtn = document.getElementById("btn-p2p-toggle-ready");
@@ -3466,13 +3517,23 @@ function applyRemoteSyncConfig(cfg, fromCountdown = false, isAuthorized = false)
   }
 
   const curPackId = state.activeMapPackId || "tw_modern";
-  if (
-    cfg.mapPackId &&
-    cfg.mapPackId !== curPackId &&
-    typeof switchActiveMapPack === "function" &&
-    typeof getMapPackById === "function" &&
-    getMapPackById(cfg.mapPackId)
-  ) {
+  const targetPack =
+    cfg.mapPackId && typeof getMapPackById === "function" ? getMapPackById(cfg.mapPackId) : null;
+  const needsPackSwitch = Boolean(
+    targetPack &&
+      typeof switchActiveMapPack === "function" &&
+      (cfg.mapPackId !== curPackId || (targetPack._isLazyStub && !targetPack._isFullPack))
+  );
+
+  if (needsPackSwitch) {
+    if (cfg.packOptions && typeof cfg.packOptions === "object") {
+      state.packOptions = {
+        worldIncludeMicrostates: true,
+        cnAllowSingleCharAlias: false,
+        ...(state.packOptions || {}),
+        ...cfg.packOptions
+      };
+    }
     return Promise.resolve(
       switchActiveMapPack(cfg.mapPackId, {
         skipReset: true,
@@ -3489,14 +3550,31 @@ function applyRemoteSyncConfig(cfg, fromCountdown = false, isAuthorized = false)
 }
 
 function _applyRemoteSyncConfigAfterPack(cfg, fromCountdown = false) {
+  const prevWorldMicro = state.packOptions ? state.packOptions.worldIncludeMicrostates !== false : true;
+  if (cfg.packOptions && typeof cfg.packOptions === "object") {
+    state.packOptions = {
+      worldIncludeMicrostates: true,
+      cnAllowSingleCharAlias: false,
+      ...(state.packOptions || {}),
+      ...cfg.packOptions
+    };
+    if (typeof rebuildActivePackLookupSets === "function") {
+      rebuildActivePackLookupSets();
+    }
+  }
+  const nextWorldMicro = state.packOptions ? state.packOptions.worldIncludeMicrostates !== false : true;
+  const worldMicroTurnedOn = !prevWorldMicro && nextWorldMicro;
+
+  const pack = _p2pPack();
   const allItems = _p2pItems();
+  const eligibleItems =
+    typeof getPackEligibleItems === "function" ? getPackEligibleItems(pack, state) : allItems;
   const allGroups = _p2pGroups();
-  const validItemIdSet = new Set(allItems.map((t) => t.id));
+  const validItemIdSet = new Set(eligibleItems.map((t) => t.id));
   const validGroupNameSet = new Set(allGroups.map((g) => g.name));
   const features = _p2pFeatures();
   const unitLabels = _p2pUnitLabels();
   const isTw = _p2pIsTwModern();
-  const pack = _p2pPack();
 
   const wasReadyBeforeConfig = Boolean(
     state.isReady || state._readyJustClearedByHost || state.players?.[state.localInstanceId]?.isReady
@@ -3544,7 +3622,10 @@ function _applyRemoteSyncConfigAfterPack(cfg, fromCountdown = false) {
       state.selectedTownIds = new Set(validItemIdSet);
     }
   } else if (Array.isArray(cfg.selectedCounties)) {
-    state.selectedTownIds = new Set(allItems.filter((t) => state.selectedCounties.has(t.countyName)).map((t) => t.id));
+    state.selectedTownIds = new Set(eligibleItems.filter((t) => state.selectedCounties.has(t.countyName)).map((t) => t.id));
+  }
+  if (typeof syncScopeWithPackOptions === "function") {
+    syncScopeWithPackOptions(worldMicroTurnedOn);
   }
   if (Array.isArray(cfg.quizStationLines)) {
     state.quizStationLines = new Set(cfg.quizStationLines);
@@ -3681,9 +3762,11 @@ function _applyRemoteSyncConfigAfterPack(cfg, fromCountdown = false) {
   } else {
     const fullLabel = isTw
       ? `全台 ${allItems.length} 區`
-      : (unitLabels.fullScopeLabel || `${(pack && pack.shortLabel) || "全境"} (${allItems.length}${unitLabels.itemShort})`);
+      : pack && pack.id === "world_countries" && !nextWorldMicro
+      ? `標準版 (${eligibleItems.length}${unitLabels.itemShort})`
+      : (unitLabels.fullScopeLabel || `${(pack && pack.shortLabel) || "全境"} (${eligibleItems.length}${unitLabels.itemShort})`);
     const adminStr =
-      totalTowns === allItems.length && allItems.length > 0
+      totalTowns === eligibleItems.length && eligibleItems.length > 0
         ? fullLabel
         : !_p2pIsSingleLayer() && state.selectedCounties.size === 1
         ? `${Array.from(state.selectedCounties)[0]} (${totalTowns}${unitLabels.itemShort})`

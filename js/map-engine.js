@@ -63,6 +63,10 @@ if (typeof window.L === "undefined") {
       getNorthEast() { return { lat: this._ne.lat, lng: this._ne.lng }; },
       getNorthWest() { return { lat: this._ne.lat, lng: this._sw.lng }; },
       getSouthEast() { return { lat: this._sw.lat, lng: this._ne.lng }; },
+      getSouth() { return this._sw.lat; },
+      getNorth() { return this._ne.lat; },
+      getWest() { return this._sw.lng; },
+      getEast() { return this._ne.lng; },
       getCenter() {
         if (!this.isValid()) return { lat: 23.75, lng: 120.95 };
         return {
@@ -1510,6 +1514,60 @@ function matchFeatureToTownObj(props) {
 
 let loadedTopoData = null;
 
+function _decodeTopologyToFeatureCollection(topology, obj) {
+  if (!topology || !obj) return null;
+  if (typeof topojson !== "undefined" && typeof topojson.feature === "function") {
+    return topojson.feature(topology, obj);
+  }
+  // Lightweight built-in TopoJSON -> GeoJSON decoder for offline file:// / Node VM environments when topojson CDN is absent
+  const tf = topology.transform;
+  const scale = tf && Array.isArray(tf.scale) ? tf.scale : [1, 1];
+  const translate = tf && Array.isArray(tf.translate) ? tf.translate : [0, 0];
+  const rawArcs = Array.isArray(topology.arcs) ? topology.arcs : [];
+  const decodedArcs = rawArcs.map((arc) => {
+    let x = 0;
+    let y = 0;
+    return arc.map((pt) => {
+      x += pt[0];
+      y += pt[1];
+      return [x * scale[0] + translate[0], y * scale[1] + translate[1]];
+    });
+  });
+  const stitchRing = (arcIndices) => {
+    const coords = [];
+    for (let i = 0; i < arcIndices.length; i++) {
+      const idx = arcIndices[i];
+      const arc = idx >= 0 ? decodedArcs[idx] : (decodedArcs[~idx] ? decodedArcs[~idx].slice().reverse() : []);
+      if (!arc || arc.length === 0) continue;
+      for (let j = 0; j < arc.length; j++) {
+        if (i > 0 && j === 0 && coords.length > 0) continue;
+        coords.push([arc[j][0], arc[j][1]]);
+      }
+    }
+    if (coords.length >= 3) {
+      const first = coords[0];
+      const last = coords[coords.length - 1];
+      if (first[0] !== last[0] || first[1] !== last[1]) {
+        coords.push([first[0], first[1]]);
+      }
+    }
+    return coords;
+  };
+  const geomToFeature = (g) => {
+    let geometry = null;
+    if (g.type === "Polygon") {
+      geometry = { type: "Polygon", coordinates: (g.arcs || []).map(stitchRing) };
+    } else if (g.type === "MultiPolygon") {
+      geometry = { type: "MultiPolygon", coordinates: (g.arcs || []).map((poly) => poly.map(stitchRing)) };
+    }
+    const feat = { type: "Feature", properties: g.properties ? { ...g.properties } : {}, geometry };
+    if (g.id !== undefined) feat.id = g.id;
+    return feat;
+  };
+  const geoms = obj.type === "GeometryCollection" && Array.isArray(obj.geometries) ? obj.geometries : [obj];
+  return { type: "FeatureCollection", features: geoms.map(geomToFeature) };
+}
+
 function _normalizePackTopoInput(rawTopoData, pack) {
   if (!rawTopoData) return null;
   if (rawTopoData.townsGeo || rawTopoData.regionsGeo) {
@@ -1521,13 +1579,13 @@ function _normalizePackTopoInput(rawTopoData, pack) {
   if (rawTopoData.type === "FeatureCollection") {
     return { townsGeo: rawTopoData, countiesGeo: null };
   }
-  if (rawTopoData.type === "Topology" && rawTopoData.objects && typeof topojson !== "undefined") {
+  if (rawTopoData.type === "Topology" && rawTopoData.objects) {
     const keys = (pack && pack.topoObjectKeys) || {};
     const itemKey = keys.items || keys.regions || (rawTopoData.objects.towns ? "towns" : Object.keys(rawTopoData.objects)[0]);
     const groupKey = keys.groups || (rawTopoData.objects.counties ? "counties" : null);
     return {
-      townsGeo: itemKey && rawTopoData.objects[itemKey] ? topojson.feature(rawTopoData, rawTopoData.objects[itemKey]) : null,
-      countiesGeo: groupKey && rawTopoData.objects[groupKey] ? topojson.feature(rawTopoData, rawTopoData.objects[groupKey]) : null
+      townsGeo: itemKey && rawTopoData.objects[itemKey] ? _decodeTopologyToFeatureCollection(rawTopoData, rawTopoData.objects[itemKey]) : null,
+      countiesGeo: groupKey && rawTopoData.objects[groupKey] ? _decodeTopologyToFeatureCollection(rawTopoData, rawTopoData.objects[groupKey]) : null
     };
   }
   return null;
@@ -1683,16 +1741,41 @@ function rebuildMapLayers(topoData) {
     }
   }
 
-  // Render clickable circleMarker hotspots for microstates or small territories (TRACK-C / TRACK-D ready)
+  // Honor explicit mainland presetMainBounds (e.g. Tokyo excl. Ogasawara, Okinawa, France, USA, Netherlands, Denmark, Russia, Fiji)
+  activeItems.forEach((townObj) => {
+    if (!townObj || !townObj.presetMainBounds) return;
+    const presetB = _toLeafletBounds(townObj.presetMainBounds);
+    if (!presetB || !presetB.isValid()) return;
+    townObj.mainBounds = presetB;
+    if (!townObj.bounds || !townObj.bounds.isValid()) {
+      townObj.bounds = presetB;
+    }
+    const curPt = townObj.mainPoint;
+    const ptInside =
+      curPt &&
+      Number.isFinite(curPt.lat) &&
+      Number.isFinite(curPt.lng) &&
+      typeof presetB.contains === "function" &&
+      presetB.contains([curPt.lat, curPt.lng]);
+    if (!ptInside) {
+      const c = presetB.getCenter();
+      townObj.mainPoint = { lat: c.lat, lng: c.lng };
+      townObj.lat = c.lat;
+      townObj.lng = c.lng;
+    }
+  });
+
+  // Render clickable circleMarker hotspots for microstates or small territories (TRACK-C / TRACK-D)
   if (microstateLayerGroup && typeof L !== "undefined" && typeof L.circleMarker === "function") {
     activeItems.forEach((item) => {
       const needsDot = Boolean(item.isMicrostate) || (item.layers.length === 0 && Boolean(item.useHotspotDot));
       if (!needsDot || !Number.isFinite(item.lat) || !Number.isFinite(item.lng)) return;
+      const hotspotStyle = computeHotspotStyle(item);
       const dot = L.circleMarker([item.lat, item.lng], {
         renderer: canvasRenderer,
-        radius: Number.isFinite(item.hotspotRadius) ? item.hotspotRadius : 6,
-        ...computePolygonStyle(item)
+        ...hotspotStyle
       });
+      dot._isHotspotMarker = true;
       bindPolygonEvents(dot, item);
       dot.addTo(microstateLayerGroup);
       item.layers.push(dot);
@@ -1700,6 +1783,22 @@ function rebuildMapLayers(topoData) {
       _itemLayersById.get(item.id).push(dot);
       if (!item.mainPoint) {
         item.mainPoint = { lat: item.lat, lng: item.lng };
+      }
+      if (!item.bounds || (typeof item.bounds.isValid === "function" && !item.bounds.isValid())) {
+        item.bounds = L.latLngBounds([item.lat - 0.3, item.lng - 0.3], [item.lat + 0.3, item.lng + 0.3]);
+      }
+      if (!item.mainBounds || (typeof item.mainBounds.isValid === "function" && !item.mainBounds.isValid())) {
+        item.mainBounds = item.presetMainBounds
+          ? (_toLeafletBounds(item.presetMainBounds) || item.bounds)
+          : item.bounds;
+      }
+      const cObj = _mapActiveGroupByName(item.countyName);
+      if (cObj) {
+        if (!cObj.bounds || (typeof cObj.bounds.isValid === "function" && !cObj.bounds.isValid())) {
+          cObj.bounds = L.latLngBounds(item.bounds.getSouthWest(), item.bounds.getNorthEast());
+        } else {
+          cObj.bounds.extend(item.bounds);
+        }
       }
     });
   }
@@ -1731,6 +1830,14 @@ function bindPolygonEvents(layer, townObj) {
 }
 
 function isTownInScope(townObj) {
+  const activePack = typeof getActiveMapPack === "function" ? getActiveMapPack() : null;
+  if (
+    activePack &&
+    typeof activePack.isItemEnabledByOptions === "function" &&
+    !activePack.isItemEnabledByOptions(townObj, state)
+  ) {
+    return false;
+  }
   if (state.selectedTownIds instanceof Set) {
     return state.selectedTownIds.has(townObj.id);
   }
@@ -1897,10 +2004,180 @@ function computePolygonStyle(townObj) {
   };
 }
 
+function computeHotspotStyle(item) {
+  const baseRadius = Number.isFinite(item && item.hotspotRadius) ? item.hotspotRadius : 6;
+  const activePack = typeof getActiveMapPack === "function" ? getActiveMapPack() : null;
+  const optionDisabled = Boolean(
+    activePack &&
+      typeof activePack.isItemEnabledByOptions === "function" &&
+      !activePack.isItemEnabledByOptions(item, state)
+  );
+  if (optionDisabled) {
+    return {
+      stroke: false,
+      color: "transparent",
+      weight: 0,
+      opacity: 0,
+      fillColor: "transparent",
+      fillOpacity: 0,
+      radius: 0
+    };
+  }
+
+  if (state.playMode === "pin_drop") {
+    if (typeof isPinDropTargetPolygon === "function" && isPinDropTargetPolygon(item)) {
+      return {
+        stroke: true,
+        color: "#ecfdf5",
+        weight: 2.2,
+        opacity: 1,
+        fillColor: "#10b981",
+        fillOpacity: 0.92,
+        radius: baseRadius + 2
+      };
+    }
+    if (!state.showDistrictBorders) {
+      return {
+        stroke: false,
+        color: "transparent",
+        weight: 0,
+        opacity: 0,
+        fillColor: "transparent",
+        fillOpacity: 0,
+        radius: 0
+      };
+    }
+    return {
+      stroke: true,
+      color: "rgba(248, 250, 252, 0.45)",
+      weight: 1.1,
+      opacity: 0.45,
+      fillColor: "#334155",
+      fillOpacity: 0.35,
+      radius: Math.max(4, baseRadius - 1)
+    };
+  }
+
+  const vState = typeof getActiveViewState === "function" ? getActiveViewState() : state;
+  const inScope = isTownInScope(item);
+  if (!inScope) {
+    if (state.playMode === "satellite_quiz" && !vState.isGameOver) {
+      return {
+        stroke: false,
+        color: "transparent",
+        weight: 0,
+        opacity: 0,
+        fillColor: "transparent",
+        fillOpacity: 0,
+        radius: 0
+      };
+    }
+    return {
+      stroke: true,
+      color: "rgba(248, 250, 252, 0.3)",
+      weight: 1,
+      opacity: 0.2,
+      fillColor: "#475569",
+      fillOpacity: 0.15,
+      radius: 4
+    };
+  }
+
+  const isUnlocked =
+    state.difficulty === "county_only"
+      ? vState.unlockedCounties.has(item.countyName)
+      : vState.unlockedTowns.has(item.id);
+  const isMissed = vState.missedTowns.has(item.id);
+  const isTarget =
+    (state.playMode === "target_random" || state.playMode === "target_click" || state.playMode === "satellite_quiz") &&
+    !isUnlocked &&
+    !isMissed &&
+    (state.difficulty === "county_only"
+      ? vState.targetId === item.countyName
+      : vState.targetId === item.id);
+
+  if (state.playMode === "satellite_quiz" && !isUnlocked && !isMissed && !vState.isGameOver) {
+    if (isTarget && state.satelliteOutlineRevealed) {
+      return {
+        stroke: true,
+        color: "#fef08a",
+        weight: 2.4,
+        opacity: 1,
+        fillColor: "#f59e0b",
+        fillOpacity: 0.28,
+        radius: baseRadius + 2
+      };
+    }
+    return {
+      stroke: false,
+      color: "transparent",
+      weight: 0,
+      opacity: 0,
+      fillColor: "transparent",
+      fillOpacity: 0,
+      radius: 0
+    };
+  }
+
+  const baseCountyColor = _mapActiveGroupColor(item.countyName);
+
+  if (isTarget) {
+    return {
+      stroke: true,
+      color: "#fef08a",
+      weight: 2.4,
+      opacity: 1,
+      fillColor: "#f59e0b",
+      fillOpacity: 0.94,
+      radius: baseRadius + 2
+    };
+  }
+
+  if (isUnlocked) {
+    return {
+      stroke: true,
+      color: "#f8fafc",
+      weight: 1.8,
+      opacity: 1,
+      fillColor: baseCountyColor,
+      fillOpacity: 0.92,
+      radius: baseRadius
+    };
+  }
+
+  if (isMissed) {
+    return {
+      stroke: true,
+      color: "#fecdd3",
+      weight: 1.6,
+      opacity: 1,
+      fillColor: "#e11d48",
+      fillOpacity: 0.88,
+      radius: baseRadius
+    };
+  }
+
+  return {
+    stroke: true,
+    color: "#f8fafc",
+    weight: 1.6,
+    opacity: 0.92,
+    fillColor: "#334155",
+    fillOpacity: 0.9,
+    radius: baseRadius
+  };
+}
+
 function refreshAllPolygonStyles() {
   _mapActiveItems().forEach((t) => {
     const layers = Array.isArray(t.layers) && t.layers.length > 0 ? t.layers : (_itemLayersById.get(t.id) || []);
-    layers.forEach((l) => l.setStyle(computePolygonStyle(t)));
+    layers.forEach((l) => {
+      const styleObj = l && l._isHotspotMarker ? computeHotspotStyle(t) : computePolygonStyle(t);
+      l.setStyle(styleObj);
+      if (l && l._isHotspotMarker && typeof l.setRadius === "function" && Number.isFinite(styleObj.radius)) {
+        l.setRadius(styleObj.radius);
+      }
+    });
   });
   renderSmartLabelsAndLeaderLines();
 }

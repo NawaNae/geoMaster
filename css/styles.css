@@ -1224,3 +1224,13 @@ body.perf-lite .tw-poi-state-missed {
   border-color: #34d399;
   color: #a7f3d0;
 }
+
+/* Offline Tailwind fallbacks for progressive-disclosure settings & pack options */
+.border-transparent { border-color: transparent; }
+.border-cyan-500\/30 { border-color: rgba(6, 182, 212, 0.3); }
+.border-cyan-500\/40 { border-color: rgba(6, 182, 212, 0.4); }
+.border-amber-500\/40 { border-color: rgba(245, 158, 11, 0.4); }
+.text-cyan-200 { color: #a5f3fc; }
+.text-indigo-100 { color: #e0e7ff; }
+.bg-indigo-400\/25 { background-color: rgba(129, 140, 248, 0.25); }
+.bg-indigo-500\/25 { background-color: rgba(99, 102, 241, 0.25); }

@@ -130,6 +130,10 @@ function normalizeMapPackDefinition(raw) {
     typeof raw.ensureLoaded === "function"
       ? raw.ensureLoaded
       : async () => {
+          const existing = window.GEOMASTER_PACKS[raw.id];
+          if (existing && existing._isFullPack) {
+            return existing;
+          }
           if (raw.scriptUrl && !raw._scriptLoaded) {
             await loadMapPackScript(raw.scriptUrl);
             raw._scriptLoaded = true;
@@ -191,7 +195,16 @@ function normalizeMapPackDefinition(raw) {
 }
 
 function registerMapPack(rawPack) {
-  const pack = normalizeMapPackDefinition(rawPack);
+  const prev = rawPack && rawPack.id ? window.GEOMASTER_PACKS[rawPack.id] : null;
+  const mergedRaw =
+    prev && prev._isLazyStub && rawPack && !rawPack._isLazyStub
+      ? {
+          badgeText: prev.badgeText,
+          dataNote: prev.dataNote,
+          ...rawPack
+        }
+      : rawPack;
+  const pack = normalizeMapPackDefinition(mergedRaw);
   window.GEOMASTER_PACKS[pack.id] = pack;
   if (typeof renderMapPackSwitcherUI === "function") {
     try {
@@ -327,19 +340,42 @@ function isActivePackSingleLayer() {
   return Boolean(pack && pack.hierarchyDepth === 1);
 }
 
-function resolveRegionFilterItemIds(filter, items) {
+function getPackEligibleItems(pack = null, st = null) {
+  const p = pack || getActiveMapPack();
+  const items = p && typeof p.getItems === "function" ? p.getItems() : getActiveItems();
+  if (!Array.isArray(items)) return [];
+  const targetState = st || (typeof state !== "undefined" ? state : null);
+  if (p && typeof p.isItemEnabledByOptions === "function") {
+    return items.filter((it) => Boolean(p.isItemEnabledByOptions(it, targetState)));
+  }
+  return items;
+}
+
+function resolveRegionFilterItemIds(filter, items, st = null) {
   if (!filter) return [];
-  const allItems = Array.isArray(items) ? items : getActiveItems();
+  const pack = getActiveMapPack();
+  const targetState = st || (typeof state !== "undefined" ? state : null);
+  const rawItems = Array.isArray(items) ? items : getActiveItems();
+  const eligibleItems =
+    pack && typeof pack.isItemEnabledByOptions === "function"
+      ? rawItems.filter((it) => Boolean(pack.isItemEnabledByOptions(it, targetState)))
+      : rawItems;
+  const eligibleIdSet = new Set(eligibleItems.map((it) => it.id));
+
+  let resolvedIds;
   if (typeof filter.getItemIds === "function") {
-    return Array.from(filter.getItemIds(allItems) || []);
-  }
-  if (Array.isArray(filter.itemIds)) return filter.itemIds;
-  if (filter.itemIds instanceof Set) return Array.from(filter.itemIds);
-  if (Array.isArray(filter.groupNames)) {
+    resolvedIds = Array.from(filter.getItemIds(eligibleItems) || []);
+  } else if (Array.isArray(filter.itemIds)) {
+    resolvedIds = filter.itemIds;
+  } else if (filter.itemIds instanceof Set) {
+    resolvedIds = Array.from(filter.itemIds);
+  } else if (Array.isArray(filter.groupNames)) {
     const gSet = new Set(filter.groupNames);
-    return allItems.filter((it) => gSet.has(it.countyName)).map((it) => it.id);
+    resolvedIds = eligibleItems.filter((it) => gSet.has(it.countyName)).map((it) => it.id);
+  } else {
+    resolvedIds = eligibleItems.map((it) => it.id);
   }
-  return allItems.map((it) => it.id);
+  return resolvedIds.filter((id) => eligibleIdSet.has(id));
 }
 
 // =========================================================================
@@ -404,8 +440,11 @@ function matchTaiwanModernFeature(props) {
 if (typeof TAIWAN_ADMIN_DATA !== "undefined" && typeof ALL_TOWNS !== "undefined") {
   registerMapPack({
     id: DEFAULT_MAP_PACK_ID,
+    _isFullPack: true,
     displayName: "現代臺灣（22縣市 / 368鄉鎮）",
     shortLabel: "🇹🇼 台灣",
+    badgeText: "368區",
+    dataNote: "收錄臺灣 22 縣市、368 鄉鎮市區，支援鐵道車站與機場/港口/水庫/湖泊/傳統聚落地標。",
     version: "1.0",
     hierarchyDepth: 2,
     unitLabels: {
@@ -482,6 +521,137 @@ if (typeof TAIWAN_ADMIN_DATA !== "undefined" && typeof ALL_TOWNS !== "undefined"
 }
 
 // =========================================================================
+// LAZY METADATA STUBS: TRACK-D (jp_pref, cn_prov) & TRACK-C (world_countries)
+// Full pack files self-register over these stubs via registerMapPack({ _isFullPack: true })
+// =========================================================================
+const BUILT_IN_LAZY_MAP_PACK_STUBS = [
+  {
+    id: "jp_pref",
+    _isLazyStub: true,
+    scriptUrl: "data/packs/jp-pref-pack.js",
+    displayName: "日本（47 都道府縣）",
+    shortLabel: "🇯🇵 日本",
+    badgeText: "47區",
+    dataNote: "收錄日本全國 47 都道府縣（8 大地方），支援繁體中文、日文漢字、平假名與羅馬拼音作答。",
+    version: "1.0",
+    hierarchyDepth: 1,
+    unitLabels: {
+      group: "地方",
+      item: "都道府縣",
+      itemShort: "區",
+      fullScopeLabel: "全日本 47 都道府縣"
+    },
+    mapView: {
+      center: [36.2, 138.0],
+      defaultZoom: 5,
+      minZoom: 4,
+      maxZoom: 18,
+      maxBounds: [[20.0, 118.0], [49.0, 152.0]],
+      fullViewBounds: [[24.2, 123.0], [45.6, 145.9]],
+      pinDropScaleKm: 150,
+      targetFocusZoom: 8,
+      groupFocusZoom: 7,
+      targetMaxZoom: 10,
+      mainPolygonDistThresholdDeg: 0.6,
+      worldCopyJump: false
+    },
+    features: {
+      supportsTransportQuiz: false,
+      supportsPoiQuiz: false,
+      supportsMasterHierarchy: false,
+      supportsSuffixDifficulty: true,
+      quickSuffixes: ["都", "道", "府", "縣"],
+      supportedDifficulties: ["casual", "hard_suffix"]
+    }
+  },
+  {
+    id: "cn_prov",
+    _isLazyStub: true,
+    scriptUrl: "data/packs/cn-prov-pack.js",
+    displayName: "中國（33 省級行政區）",
+    shortLabel: "🇨🇳 中國",
+    badgeText: "33區",
+    dataNote: "收錄 31 省市自治區 + 香港、澳門（共 33 區）",
+    version: "1.0",
+    hierarchyDepth: 1,
+    unitLabels: {
+      group: "大區",
+      item: "省級行政區",
+      itemShort: "區",
+      fullScopeLabel: "全部 33 省級區"
+    },
+    mapView: {
+      center: [35.5, 104.0],
+      defaultZoom: 4,
+      minZoom: 3,
+      maxZoom: 18,
+      maxBounds: [[10.0, 65.0], [58.0, 145.0]],
+      fullViewBounds: [[18.0, 73.5], [53.6, 135.1]],
+      pinDropScaleKm: 400,
+      targetFocusZoom: 6,
+      groupFocusZoom: 5,
+      targetMaxZoom: 9,
+      mainPolygonDistThresholdDeg: 1.5,
+      worldCopyJump: false
+    },
+    features: {
+      supportsTransportQuiz: false,
+      supportsPoiQuiz: false,
+      supportsMasterHierarchy: false,
+      supportsSuffixDifficulty: true,
+      quickSuffixes: ["省", "市", "自治區", "特別行政區"],
+      supportedDifficulties: ["casual", "hard_suffix"]
+    }
+  },
+  {
+    id: "world_countries",
+    _isLazyStub: true,
+    scriptUrl: "data/packs/world-countries-pack.js",
+    displayName: "世界各國（196 國）",
+    shortLabel: "🌍 世界",
+    badgeText: "196國",
+    dataNote: "193 UN 會員國 + 梵蒂岡 + 巴勒斯坦 + 台灣（共 196 國；不含南極洲，格陵蘭歸屬丹麥標註）",
+    version: "1.0",
+    hierarchyDepth: 1,
+    unitLabels: {
+      group: "大洲",
+      item: "國家",
+      itemShort: "國",
+      fullScopeLabel: "全部 196 國"
+    },
+    mapView: {
+      center: [20, 15],
+      defaultZoom: 2,
+      minZoom: 2,
+      maxZoom: 18,
+      maxBounds: [[-85, -195], [85, 195]],
+      fullViewBounds: [[-55, -165], [72, 175]],
+      pinDropScaleKm: 1500,
+      targetFocusZoom: 5,
+      groupFocusZoom: 4,
+      targetMaxZoom: 8,
+      mainPolygonDistThresholdDeg: 3.0,
+      worldCopyJump: true
+    },
+    features: {
+      supportsTransportQuiz: false,
+      supportsPoiQuiz: false,
+      supportsMasterHierarchy: false,
+      supportsSuffixDifficulty: false,
+      quickSuffixes: [],
+      supportedDifficulties: ["casual"]
+    }
+  }
+];
+
+BUILT_IN_LAZY_MAP_PACK_STUBS.forEach((stub) => {
+  const existing = window.GEOMASTER_PACKS[stub.id];
+  if (!existing || !existing._isFullPack) {
+    registerMapPack(stub);
+  }
+});
+
+// =========================================================================
 // LIFECYCLE: switchActiveMapPack(packId, options)
 // =========================================================================
 async function switchActiveMapPack(packId, options = {}) {
@@ -521,6 +691,7 @@ async function switchActiveMapPack(packId, options = {}) {
 
   const groups = nextPack.getGroups() || [];
   const items = nextPack.getItems() || [];
+  const eligibleItems = getPackEligibleItems(nextPack, typeof state !== "undefined" ? state : null);
   const features = nextPack.features || {};
   const mapView = nextPack.mapView || {};
 
@@ -568,10 +739,15 @@ async function switchActiveMapPack(packId, options = {}) {
       state.difficulty = supportedDiffs[0];
     }
 
-    // 6. Re-initialize scope to the new pack's full groups & items (unless caller sets custom scope right after)
+    // 6. Re-initialize scope to the new pack's eligible groups & items (respects isItemEnabledByOptions)
     if (!options.skipScopeReset) {
-      state.selectedCounties = new Set(groups.map((g) => g.name));
-      state.selectedTownIds = new Set(items.map((it) => it.id));
+      const eligibleGroupNames = new Set(eligibleItems.map((it) => it.countyName).filter(Boolean));
+      state.selectedCounties = new Set(
+        groups
+          .filter((g) => eligibleGroupNames.size === 0 || eligibleGroupNames.has(g.name))
+          .map((g) => g.name)
+      );
+      state.selectedTownIds = new Set(eligibleItems.map((it) => it.id));
     }
 
     // 7. Reset match progress unless explicitly skipped
@@ -606,7 +782,7 @@ async function switchActiveMapPack(packId, options = {}) {
         maxStreak: 0
       };
       if (state.opponent) {
-        state.opponent.total = items.length;
+        state.opponent.total = eligibleItems.length;
         state.opponent.finished = false;
         state.opponent.finalStats = null;
       }

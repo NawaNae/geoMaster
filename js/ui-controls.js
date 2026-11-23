@@ -91,6 +91,157 @@ function handleMapPackSelection(packId) {
   }
 }
 
+function _getActivePackEligibleItems() {
+  if (typeof getPackEligibleItems === "function") {
+    return getPackEligibleItems(_getActivePack(), state);
+  }
+  return _getActivePackItems();
+}
+
+let _scopeDrawerExpanded = false;
+let _roomRestrictionsExpanded = false;
+
+function setScopeDrawerExpanded(expanded) {
+  _scopeDrawerExpanded = Boolean(expanded);
+  const body = document.getElementById("simple-region-drawer-body");
+  const btn = document.getElementById("btn-toggle-scope-drawer");
+  const chev = document.getElementById("scope-drawer-chevron");
+  if (body) body.classList.toggle("hidden", !_scopeDrawerExpanded);
+  if (btn) btn.setAttribute("aria-expanded", _scopeDrawerExpanded ? "true" : "false");
+  if (chev) chev.textContent = _scopeDrawerExpanded ? "收合 ▴" : "調整 ▾";
+}
+
+function updateSettingsHelpPopoverContent() {
+  const noteEl = document.getElementById("settings-help-pack-note");
+  if (!noteEl) return;
+  const pack = _getActivePack();
+  if (pack && pack.dataNote) {
+    noteEl.textContent = `資料範圍：${pack.dataNote}`;
+    noteEl.classList.remove("hidden");
+  } else {
+    noteEl.textContent = "";
+    noteEl.classList.add("hidden");
+  }
+}
+
+function syncPackOptionsUI() {
+  const pack = _getActivePack();
+  const packId = (pack && pack.id) || state.activeMapPackId || "tw_modern";
+  const bar = document.getElementById("pack-options-bar");
+  const worldWrap = document.getElementById("pack-opt-world-micro-wrap");
+  const cnWrap = document.getElementById("pack-opt-cn-singlechar-wrap");
+  const isWorld = packId === "world_countries";
+  const isCn = packId === "cn_prov";
+
+  if (bar) bar.classList.toggle("hidden", !isWorld && !isCn);
+  if (worldWrap) worldWrap.classList.toggle("hidden", !isWorld);
+  if (cnWrap) cnWrap.classList.toggle("hidden", !isCn);
+
+  const chkWorld = document.getElementById("chk-pack-world-microstates");
+  const lblWorld = document.getElementById("lbl-pack-world-microstates");
+  const includeMicro = !state.packOptions || state.packOptions.worldIncludeMicrostates !== false;
+  if (chkWorld) chkWorld.checked = includeMicro;
+  if (lblWorld && isWorld) {
+    const eligCount = _getActivePackEligibleItems().length;
+    lblWorld.textContent = includeMicro
+      ? `🏝️ 含微型國（完整 ${eligCount || 196} 國）`
+      : `🏝️ 含微型國（標準版 ${eligCount || 169} 國）`;
+  }
+
+  const chkCn = document.getElementById("chk-pack-cn-singlechar");
+  if (chkCn) chkCn.checked = Boolean(state.packOptions && state.packOptions.cnAllowSingleCharAlias);
+}
+
+function syncScopeDrawerSummaryUI() {
+  const textEl = document.getElementById("scope-drawer-summary-text");
+  if (!textEl) return;
+  const pack = _getActivePack();
+  const unitLabels = _getActivePackUnitLabels();
+  const eligibleItems = _getActivePackEligibleItems();
+  const scopeTowns = typeof getScopeTowns === "function" ? getScopeTowns() : [];
+  const count = scopeTowns.length;
+
+  let summary = "";
+  if (count === 0) {
+    summary = "未選取任何區域";
+  } else if (count === eligibleItems.length && eligibleItems.length > 0) {
+    if (pack && pack.id === "world_countries" && state.packOptions && state.packOptions.worldIncludeMicrostates === false) {
+      summary = `標準版 ${count} ${unitLabels.itemShort}`;
+    } else {
+      summary = unitLabels.fullScopeLabel || `全部 ${count} ${unitLabels.itemShort}`;
+    }
+  } else if (typeof getConciseRegionSummaryText === "function") {
+    const regDesc = getConciseRegionSummaryText();
+    summary = regDesc ? `${regDesc}（${count} ${unitLabels.itemShort}）` : `${count} ${unitLabels.itemShort}`;
+  } else {
+    summary = `${count} ${unitLabels.itemShort}`;
+  }
+  textEl.textContent = `📍 範圍：${summary}`;
+}
+
+function applyPackOptionToggle(optionKey, checked) {
+  if (!canLocalModifyGameConfig()) {
+    setFeedback("🔒 僅房主可調整地圖包選項！", "warn");
+    if (typeof playTone === "function") playTone("error");
+    syncPackOptionsUI();
+    return;
+  }
+  const nextVal = Boolean(checked);
+  const nextOpts = {
+    worldIncludeMicrostates: state.packOptions ? state.packOptions.worldIncludeMicrostates !== false : true,
+    cnAllowSingleCharAlias: Boolean(state.packOptions && state.packOptions.cnAllowSingleCharAlias),
+    [optionKey]: nextVal
+  };
+  const label = optionKey === "worldIncludeMicrostates" ? "世界微型國開關" : "中國一字簡稱";
+
+  if (state.isHost && state.roomCode && typeof requestOrApplyConfigChange === "function") {
+    requestOrApplyConfigChange({ packOptions: nextOpts }, label);
+    return;
+  }
+
+  const prevWorldMicro = state.packOptions ? state.packOptions.worldIncludeMicrostates !== false : true;
+  state.packOptions = nextOpts;
+  if (optionKey === "worldIncludeMicrostates" && typeof syncScopeWithPackOptions === "function") {
+    syncScopeWithPackOptions(!prevWorldMicro && nextVal);
+  }
+  if (typeof rebuildActivePackLookupSets === "function") {
+    rebuildActivePackLookupSets();
+  }
+  if (typeof refreshAllPolygonStyles === "function") {
+    refreshAllPolygonStyles();
+  }
+  renderScopeModalGrid();
+  if (typeof updateScoreAndProgressUI === "function") {
+    updateScoreAndProgressUI();
+  }
+  if (typeof renderRoomConciseSettingsSummary === "function") {
+    renderRoomConciseSettingsSummary();
+  }
+}
+
+function syncRoomRestrictionsDrawerUI(explicitExpanded = null) {
+  const hasNonDefault = Boolean(
+    (state.p2pLayerRule && state.p2pLayerRule !== "free") ||
+      (state.p2pRailRule && state.p2pRailRule !== "free") ||
+      (state.p2pBorderRule && state.p2pBorderRule !== "free") ||
+      state.allowTargetHints
+  );
+  if (typeof explicitExpanded === "boolean") {
+    _roomRestrictionsExpanded = explicitExpanded;
+  } else if (hasNonDefault) {
+    _roomRestrictionsExpanded = true;
+  }
+
+  const body = document.getElementById("host-room-restrictions-body");
+  const btn = document.getElementById("btn-toggle-room-restrictions");
+  const chev = document.getElementById("room-restrictions-chevron");
+  const badge = document.getElementById("room-restrictions-active-badge");
+  if (body) body.classList.toggle("hidden", !_roomRestrictionsExpanded);
+  if (btn) btn.setAttribute("aria-expanded", _roomRestrictionsExpanded ? "true" : "false");
+  if (chev) chev.textContent = _roomRestrictionsExpanded ? "收合 ▴" : "展開 ▾";
+  if (badge) badge.classList.toggle("hidden", !hasNonDefault);
+}
+
 function renderMapPackSwitcherUI() {
   const section = document.getElementById("mappack-selector-section");
   const grid = document.getElementById("mappack-selector-grid");
@@ -110,9 +261,10 @@ function renderMapPackSwitcherUI() {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.setAttribute("data-mappack-id", pack.id);
+    if (pack.displayName) btn.setAttribute("data-tip", pack.displayName);
     btn.className = isActive
-      ? "p-2 rounded-xl border border-indigo-400 bg-indigo-500/25 text-white text-left transition shadow flex flex-col gap-0.5"
-      : "p-2 rounded-xl border border-slate-700/80 bg-slate-950/70 hover:bg-slate-800 text-slate-300 text-left transition flex flex-col gap-0.5";
+      ? "px-2.5 py-2 rounded-xl border border-indigo-400 bg-indigo-500/25 text-white text-left transition shadow flex items-center justify-between gap-1.5"
+      : "px-2.5 py-2 rounded-xl border border-slate-700/80 bg-slate-950/70 hover:bg-slate-800 text-slate-300 text-left transition flex items-center justify-between gap-1.5";
 
     const titleEl = document.createElement("span");
     titleEl.className = isActive
@@ -120,12 +272,20 @@ function renderMapPackSwitcherUI() {
       : "text-xs font-extrabold text-slate-200 truncate";
     titleEl.textContent = pack.shortLabel || pack.displayName || pack.id;
 
-    const subEl = document.createElement("span");
-    subEl.className = "text-[10px] text-slate-400 truncate";
-    subEl.textContent = pack.displayName || pack.id;
+    const badgeEl = document.createElement("span");
+    badgeEl.className = isActive
+      ? "text-[10px] font-mono-num font-bold px-1.5 py-0.5 rounded-md bg-indigo-400/25 text-indigo-100 shrink-0"
+      : "text-[10px] font-mono-num font-bold px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-400 shrink-0";
+    let badgeStr = pack.badgeText || "";
+    if (!badgeStr) {
+      const pItems = typeof pack.getItems === "function" ? pack.getItems() : [];
+      const uShort = (pack.unitLabels && pack.unitLabels.itemShort) || "區";
+      badgeStr = pItems.length > 0 ? `${pItems.length}${uShort}` : "";
+    }
+    badgeEl.textContent = badgeStr;
 
     btn.appendChild(titleEl);
-    btn.appendChild(subEl);
+    if (badgeStr) btn.appendChild(badgeEl);
     btn.addEventListener("click", () => handleMapPackSelection(pack.id));
     return btn;
   });
@@ -146,6 +306,17 @@ function applyActivePackFeatureGatingUI() {
       ? features.supportedDifficulties
       : ["casual"]
   );
+  const diffCard = document.getElementById("difficulty-selector-card");
+  if (diffCard) {
+    diffCard.classList.toggle("hidden", supportedDiffs.size <= 1);
+  }
+  const diffGrid = document.getElementById("difficulty-buttons-grid");
+  if (diffGrid) {
+    diffGrid.className =
+      supportedDiffs.size === 2
+        ? "grid grid-cols-2 gap-1.5"
+        : "grid grid-cols-2 sm:grid-cols-5 gap-1.5";
+  }
   document.querySelectorAll(".diff-btn[data-diff]").forEach((btn) => {
     const d = btn.getAttribute("data-diff");
     btn.classList.toggle("hidden", !supportedDiffs.has(d));
@@ -154,6 +325,8 @@ function applyActivePackFeatureGatingUI() {
       inner.textContent = `🔵 ${groups.length}${unitLabels.group}`;
     }
   });
+  syncPackOptionsUI();
+  updateSettingsHelpPopoverContent();
 
   const hierBar = document.getElementById("hierarchy-guide-bar");
   if (hierBar && !features.supportsMasterHierarchy) {
@@ -383,32 +556,28 @@ function syncConfigButtonsUI() {
       const advOn = ["fishery_cat2", "fishery_cat2_other", "industrial", "petro_lng"]
         .filter((k) => state.portSubTypes && state.portSubTypes.has(k))
         .map((k) => (getPoiSubTypeMeta("port", k) || {}).shortLabel || k);
-      advHint.textContent = advOn.length > 0
-        ? `進階港類已開啟：${advOn.join("、")}`
-        : "如需第二類漁港（精選 24 處／其餘 188 處，共 212 處）、工業港、石化天然氣港，可至進階設定勾選";
+      advHint.textContent = advOn.length > 0 ? `已含進階港類：${advOn.join("、")}` : "";
+      advHint.classList.toggle("hidden", advOn.length === 0);
     }
     const resAdvHint = document.getElementById("simple-reservoir-adv-hint");
     if (resAdvHint) {
       const advOn = ["res_other", "res_offshore"]
         .filter((k) => state.reservoirSubTypes && state.reservoirSubTypes.has(k))
         .map((k) => (getPoiSubTypeMeta("reservoir", k) || {}).shortLabel || k);
-      resAdvHint.textContent = advOn.length > 0
-        ? `進階水庫已開啟：${advOn.join("、")}`
-        : "如需其他本島水庫（如澄清湖、虎頭埤、鳳山）或離島水庫，可至進階設定勾選";
+      resAdvHint.textContent = advOn.length > 0 ? `已含進階水庫：${advOn.join("、")}` : "";
+      resAdvHint.classList.toggle("hidden", advOn.length === 0);
     }
     const lkAdvHint = document.getElementById("simple-lake-adv-hint");
     if (lkAdvHint) {
       const hasAlpine = Boolean(state.lakeSubTypes && state.lakeSubTypes.has("lake_alpine"));
-      lkAdvHint.textContent = hasAlpine
-        ? "進階高山秘境湖泊已開啟（嘉明湖、翠峰湖、松蘿湖等）"
-        : "如需高山秘境湖泊（嘉明湖、翠峰湖、松蘿湖、水漾森林等），可至進階設定勾選";
+      lkAdvHint.textContent = hasAlpine ? "已含高山秘境湖泊" : "";
+      lkAdvHint.classList.toggle("hidden", !hasAlpine);
     }
     const stlAdvHint = document.getElementById("simple-settlement-adv-hint");
     if (stlAdvHint) {
       const hasHist = Boolean(state.settlementSubTypes && state.settlementSubTypes.has("historic_oaza"));
-      stlAdvHint.textContent = hasHist
-        ? "進階歷史大字與原住民傳統部落已開啟（大稻埕、霧社、司馬庫斯、利稻等）"
-        : "如需日治大字、老聚落與原住民傳統部落（大稻埕、霧社、司馬庫斯、利稻等），可至進階設定勾選";
+      stlAdvHint.textContent = hasHist ? "已含歷史大字與傳統部落" : "";
+      stlAdvHint.classList.toggle("hidden", !hasHist);
     }
   }
 
@@ -422,11 +591,22 @@ function syncConfigButtonsUI() {
       ? features.supportedDifficulties
       : ["casual"]
   );
+  const diffCard = document.getElementById("difficulty-selector-card");
+  if (diffCard) {
+    diffCard.classList.toggle("hidden", supportedDiffs.size <= 1);
+  }
+  const diffGrid = document.getElementById("difficulty-buttons-grid");
+  if (diffGrid) {
+    diffGrid.className =
+      supportedDiffs.size === 2
+        ? "grid grid-cols-2 gap-1.5"
+        : "grid grid-cols-2 sm:grid-cols-5 gap-1.5";
+  }
   document.querySelectorAll(".diff-btn").forEach((btn) => {
     const d = btn.getAttribute("data-diff");
     const isCurrent = d === state.difficulty;
     const isHidden = !supportedDiffs.has(d);
-    const spanClass = d === "master_hierarchy" ? " col-span-2 sm:col-span-1" : "";
+    const spanClass = d === "master_hierarchy" && supportedDiffs.size > 2 ? " col-span-2 sm:col-span-1" : "";
     const hiddenClass = isHidden ? " hidden" : "";
     btn.className = isCurrent
       ? `diff-btn p-2 rounded-xl border transition bg-sky-500/25 border-sky-400 text-white text-center shadow${spanClass}${hiddenClass}`
@@ -436,8 +616,8 @@ function syncConfigButtonsUI() {
   document.querySelectorAll(".playmode-btn").forEach((btn) => {
     const isCurrent = btn.getAttribute("data-playmode") === state.playMode;
     btn.className = isCurrent
-      ? "playmode-btn px-2 py-1 rounded-lg text-[11px] font-bold border transition bg-emerald-500/20 border-emerald-400 text-emerald-200"
-      : "playmode-btn px-2 py-1 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-950 text-slate-300 hover:bg-slate-800";
+      ? "playmode-btn px-2.5 py-1 rounded-xl text-[11px] font-bold border transition bg-emerald-500/20 border-emerald-400 text-emerald-200"
+      : "playmode-btn px-2.5 py-1 rounded-xl text-[11px] font-bold border border-slate-700 bg-slate-950 text-slate-300 hover:bg-slate-800";
   });
 
   const satPanel = document.getElementById("satellite-quiz-options-panel");
@@ -491,6 +671,15 @@ function syncConfigButtonsUI() {
     chkPinBorders.checked = Boolean(state.pinDropShowBorders);
   }
 
+  // Target hints toggle is ONLY relevant in target_random / target_click / satellite_quiz!
+  const showTargetHintsToggle =
+    state.playMode === "target_random" ||
+    state.playMode === "target_click" ||
+    state.playMode === "satellite_quiz";
+  const wrapTargetHints = document.getElementById("wrap-allow-target-hints");
+  if (wrapTargetHints) {
+    wrapTargetHints.classList.toggle("hidden", !showTargetHintsToggle);
+  }
   ["chk-allow-target-hints", "chk-room-allow-target-hints"].forEach((cid) => {
     const el = document.getElementById(cid);
     if (el) el.checked = Boolean(state.allowTargetHints);
@@ -498,17 +687,38 @@ function syncConfigButtonsUI() {
 
   if (typeof updateSuffixControlsUI === "function") updateSuffixControlsUI();
 
+  // Compact 2-pill Timer Toggle + expandable countdown duration pills
+  const isCountdown = state.timerMode === "down";
+  const countdownOpts = document.getElementById("timer-countdown-options");
+  if (countdownOpts) {
+    countdownOpts.classList.toggle("hidden", !isCountdown);
+  }
+  const countdownToggleBtn = document.getElementById("btn-timer-mode-countdown");
+  if (countdownToggleBtn) {
+    countdownToggleBtn.className = isCountdown
+      ? "py-1 px-2.5 rounded-lg text-[11px] font-bold border border-sky-400 bg-sky-500/20 text-white text-center transition"
+      : "py-1 px-2.5 rounded-lg text-[11px] font-bold border border-transparent text-slate-300 hover:text-white text-center transition";
+  }
   document.querySelectorAll(".hub-timer-btn").forEach((btn) => {
     const tMode = btn.getAttribute("data-timermode");
     const tSec = parseInt(btn.getAttribute("data-sec"), 10) || 0;
     const isCurrent =
       (state.timerMode === "up" && tMode === "up") ||
       (state.timerMode === "down" && tMode === "down" && state.countdownTotalSec === tSec);
-    const flexCls = tMode === "up" ? " flex-1" : "";
-    btn.className = isCurrent
-      ? `hub-timer-btn${flexCls} py-1.5 px-2 rounded-xl text-[11px] font-bold border border-sky-400 bg-sky-500/20 text-white text-center transition`
-      : `hub-timer-btn${flexCls} py-1.5 px-2 rounded-xl text-[11px] font-bold border border-slate-700 bg-slate-950 text-slate-300 hover:bg-slate-800 text-center transition`;
+    if (tMode === "up") {
+      btn.className = isCurrent
+        ? "hub-timer-btn py-1 px-2.5 rounded-lg text-[11px] font-bold border border-sky-400 bg-sky-500/20 text-white text-center transition"
+        : "hub-timer-btn py-1 px-2.5 rounded-lg text-[11px] font-bold border border-transparent text-slate-300 hover:text-white text-center transition";
+    } else {
+      btn.className = isCurrent
+        ? "hub-timer-btn py-1 px-2 rounded-lg text-[11px] font-bold border border-sky-400 bg-sky-500/20 text-white text-center transition"
+        : "hub-timer-btn py-1 px-2 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-950 text-slate-300 hover:bg-slate-800 text-center transition";
+    }
   });
+
+  syncPackOptionsUI();
+  syncScopeDrawerSummaryUI();
+  updateSettingsHelpPopoverContent();
 }
 
 function setDifficulty(diff) {
@@ -843,7 +1053,7 @@ const STATION_PRESETS = [
 
 function applyRegionScopeSelection(targetTownIds, isMultiSelect = false) {
   if (!canLocalModifyGameConfig()) return;
-  const activeItems = _getActivePackItems();
+  const activeItems = _getActivePackEligibleItems();
   if (!(state.selectedTownIds instanceof Set)) {
     state.selectedTownIds = new Set(activeItems.filter((t) => state.selectedCounties.has(t.countyName)).map((t) => t.id));
   }
@@ -941,7 +1151,7 @@ function renderDynamicRegionFiltersUI() {
   if (isTw) return;
 
   const filters = typeof getActiveRegionFilters === "function" ? getActiveRegionFilters() : [];
-  const items = _getActivePackItems();
+  const items = _getActivePackEligibleItems();
 
   if (simpleDyn) {
     const simpleCards = filters.map((f) => buildDynamicRegionFilterCard(f, items, false));
@@ -954,7 +1164,7 @@ function renderDynamicRegionFiltersUI() {
 }
 
 function syncPresetButtonsUI() {
-  const activeItems = _getActivePackItems();
+  const activeItems = _getActivePackEligibleItems();
   if (!(state.selectedTownIds instanceof Set)) {
     state.selectedTownIds = new Set(activeItems.filter((t) => state.selectedCounties.has(t.countyName)).map((t) => t.id));
   }
@@ -1048,7 +1258,7 @@ function renderScopeModalGrid() {
   renderDynamicRegionFiltersUI();
 
   const activeGroups = _getActivePackGroups();
-  const activeItems = _getActivePackItems();
+  const activeItems = _getActivePackEligibleItems();
   const unitLabels = _getActivePackUnitLabels();
   const features = _getActivePackFeatures();
 
@@ -1255,6 +1465,7 @@ function syncModalBodyScrollLock() {
 function openRoomModal() {
   document.getElementById("modal-scope")?.classList.add("hidden");
   updateP2PLobbyUI();
+  syncRoomRestrictionsDrawerUI();
   const modal = document.getElementById("modal-room");
   if (modal) modal.classList.remove("hidden");
   syncModalBodyScrollLock();
@@ -1264,11 +1475,17 @@ function openRoomModal() {
 }
 
 // Opens the Shared Top-Level Mode & Scope Settings Modal (#modal-scope)
-// Defaults to Simple Settings Tab per user requirement!
+// Defaults to Simple Settings Tab with scope drawer collapsed for a calm progressive-disclosure view!
 function openModeSettingsModal(defaultTab = "simple") {
   if (typeof syncLegacyQuizTargetMode === "function") {
     syncLegacyQuizTargetMode();
   }
+
+  setScopeDrawerExpanded(false);
+  const helpPop = document.getElementById("settings-help-popover");
+  if (helpPop) helpPop.classList.add("hidden");
+  const helpBtn = document.getElementById("btn-toggle-settings-help");
+  if (helpBtn) helpBtn.setAttribute("aria-expanded", "false");
 
   setSettingsTab(defaultTab || state.settingsTab || "simple");
   renderScopeModalGrid();
@@ -2321,6 +2538,44 @@ function bindAllUIEvents() {
     document.getElementById("modal-scope")?.classList.add("hidden");
   });
 
+  // Progressive-disclosure controls for the minimalist settings sheet
+  document.getElementById("btn-toggle-scope-drawer")?.addEventListener("click", () => {
+    setScopeDrawerExpanded(!_scopeDrawerExpanded);
+  });
+  document.getElementById("btn-toggle-settings-help")?.addEventListener("click", () => {
+    const pop = document.getElementById("settings-help-popover");
+    const btn = document.getElementById("btn-toggle-settings-help");
+    if (!pop) return;
+    updateSettingsHelpPopoverContent();
+    const nowHidden = !pop.classList.contains("hidden");
+    pop.classList.toggle("hidden", nowHidden);
+    if (btn) btn.setAttribute("aria-expanded", nowHidden ? "false" : "true");
+  });
+  document.getElementById("chk-pack-world-microstates")?.addEventListener("change", (e) => {
+    applyPackOptionToggle("worldIncludeMicrostates", e.target.checked);
+  });
+  document.getElementById("chk-pack-cn-singlechar")?.addEventListener("change", (e) => {
+    applyPackOptionToggle("cnAllowSingleCharAlias", e.target.checked);
+  });
+  document.getElementById("btn-timer-mode-countdown")?.addEventListener("click", () => {
+    if (!canLocalModifyGameConfig()) return;
+    const secs = state.timerMode === "down" && state.countdownTotalSec > 0 ? state.countdownTotalSec : 300;
+    if (state.isHost && state.roomCode) {
+      requestOrApplyConfigChange({ timerMode: "down", countdownTotalSec: secs }, "計時模式");
+      return;
+    }
+    state.timerMode = "down";
+    state.countdownTotalSec = secs;
+    const tBtn = document.getElementById("btn-timer-mode");
+    if (tBtn) tBtn.textContent = `倒數 ${Math.round(secs / 60)}m`;
+    syncConfigButtonsUI();
+    resetGame();
+    if (typeof renderRoomConciseSettingsSummary === "function") renderRoomConciseSettingsSummary();
+  });
+  document.getElementById("btn-toggle-room-restrictions")?.addEventListener("click", () => {
+    syncRoomRestrictionsDrawerUI(!_roomRestrictionsExpanded);
+  });
+
   document.getElementById("btn-top-create-room")?.addEventListener("click", () => openRoomModal());
   document.getElementById("btn-top-open-room")?.addEventListener("click", () => openRoomModal());
   document.getElementById("btn-top-leave-room")?.addEventListener("click", () => leaveP2PRoom());
@@ -2416,7 +2671,7 @@ function bindAllUIEvents() {
 
   document.getElementById("btn-scope-random-one")?.addEventListener("click", () => {
     const activeGroups = _getActivePackGroups();
-    const activeItems = _getActivePackItems();
+    const activeItems = _getActivePackEligibleItems();
     if (!activeGroups.length) return;
     const pick = activeGroups[Math.floor(Math.random() * activeGroups.length)];
     const pickTownIds = activeItems.filter((t) => t.countyName === pick.name).map((t) => t.id);
@@ -2451,7 +2706,7 @@ function bindAllUIEvents() {
       const mode = btn.getAttribute("data-scope-mode") || "all";
 
       if (target === "region") {
-        const allIds = action === "select-all" ? _getActivePackItems().map((t) => t.id) : [];
+        const allIds = action === "select-all" ? _getActivePackEligibleItems().map((t) => t.id) : [];
         applyRegionScopeSelection(allIds, false);
         return;
       }
@@ -2513,7 +2768,7 @@ function bindAllUIEvents() {
     if (typeof syncLegacyQuizTargetMode === "function") syncLegacyQuizTargetMode();
 
     const activeGroups = _getActivePackGroups();
-    const activeItems = _getActivePackItems();
+    const activeItems = _getActivePackEligibleItems();
     const unitLabels = _getActivePackUnitLabels();
     const features = _getActivePackFeatures();
     const pack = _getActivePack();
@@ -2552,7 +2807,14 @@ function bindAllUIEvents() {
     const activeSt = features.supportsTransportQuiz && typeof getActiveQuizStations === "function" ? getActiveQuizStations() : [];
     const sumParts = [];
     if (state.regionQuizEnabled && totalTowns > 0) {
-      const fullLabel = unitLabels.fullScopeLabel || `全部 ${totalPackItems} ${unitLabels.itemShort}`;
+      const isWorldStd =
+        pack &&
+        pack.id === "world_countries" &&
+        state.packOptions &&
+        state.packOptions.worldIncludeMicrostates === false;
+      const fullLabel = isWorldStd
+        ? `標準版 ${totalPackItems} ${unitLabels.itemShort}`
+        : (unitLabels.fullScopeLabel || `全部 ${totalPackItems} ${unitLabels.itemShort}`);
       sumParts.push(
         totalTowns === totalPackItems
           ? fullLabel
