@@ -710,6 +710,7 @@ function isStationMatch(st, core, comb, cNorm, combNorm, cStripped, combStripped
 
 // Try matching user input against active stations!
 function tryMatchAndUnlockStation(core, combined, isAutoCheck) {
+  state._lastStationLockedCounty = false;
   const activeStations = getActiveQuizStations();
   if (activeStations.length === 0) return false;
 
@@ -727,6 +728,10 @@ function tryMatchAndUnlockStation(core, combined, isAutoCheck) {
     if (!targetSt) {
       state.targetStationKey = null;
     } else if (isStationMatch(targetSt, core, combined, cNorm, combNorm, cStripped, combStripped)) {
+      if (typeof isPoiOrStationCountyUnlocked === "function" && !isPoiOrStationCountyUnlocked(targetSt.countyName, targetSt.countyNames)) {
+        state._lastStationLockedCounty = true;
+        return false;
+      }
       state.unlockedStations.add(targetSt.key);
       state.lastTargetLat = targetSt.lat;
       state.lastTargetLng = targetSt.lng;
@@ -744,10 +749,19 @@ function tryMatchAndUnlockStation(core, combined, isAutoCheck) {
     }
   }
 
-  const matched = activeStations.filter((st) => {
+  const allMatched = activeStations.filter((st) => {
     if (state.unlockedStations.has(st.key)) return false;
     return isStationMatch(st, core, combined, cNorm, combNorm, cStripped, combStripped);
   });
+  const matched = allMatched.filter((st) =>
+    typeof isPoiOrStationCountyUnlocked === "function"
+      ? isPoiOrStationCountyUnlocked(st.countyName, st.countyNames)
+      : true
+  );
+  if (allMatched.length > 0 && matched.length === 0) {
+    state._lastStationLockedCounty = true;
+    return false;
+  }
 
   if (matched.length > 0) {
     matched.forEach((st) => state.unlockedStations.add(st.key));

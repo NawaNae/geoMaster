@@ -189,6 +189,32 @@ function isSuffixRequiredDifficulty(diff = state.difficulty) {
   return diff === "hard_suffix" || diff === "hard_full" || diff === "master_hierarchy";
 }
 
+function requiresCountyUnlockForPoiOrStation() {
+  return Boolean(
+    state.playMode === "free" &&
+    state.regionQuizEnabled &&
+    (state.difficulty === "hard_full" || state.difficulty === "master_hierarchy")
+  );
+}
+
+function isPoiOrStationCountyUnlocked(countyName, countyNames = null) {
+  if (!requiresCountyUnlockForPoiOrStation()) return true;
+  if (Array.isArray(countyNames) && countyNames.length > 0) {
+    return countyNames.some((cn) => state.unlockedCounties.has(cn));
+  }
+  if (!countyName) return true;
+  return state.unlockedCounties.has(countyName);
+}
+
+function shouldHidePoiAdminLocationHint() {
+  return Boolean(
+    state.regionQuizEnabled &&
+    isSuffixRequiredDifficulty() &&
+    !state.isGameOver &&
+    state.role !== "spectator"
+  );
+}
+
 function getActiveQuickSuffixes() {
   if (!isSuffixRequiredDifficulty()) return [];
   const list = [""];
@@ -196,7 +222,7 @@ function getActiveQuickSuffixes() {
   if (state.stationQuizEnabled && state.quizStationLines && state.quizStationLines.size > 0) list.push("站");
   if (typeof isPoiCategoryActive === "function") {
     if (isPoiCategoryActive("airport")) list.push("機場");
-    if (isPoiCategoryActive("port")) list.push("港", "漁港");
+    if (isPoiCategoryActive("port")) list.push("港");
     if (isPoiCategoryActive("reservoir")) list.push("水庫");
     if (isPoiCategoryActive("lake")) list.push("湖");
   }
@@ -455,9 +481,10 @@ function evaluateGuess(rawInput, isAutoCheck = false) {
         }
 
         const unlockedList = Array.isArray(poiRes.unlockedList) && poiRes.unlockedList.length > 1 ? poiRes.unlockedList : null;
+        const locHint = shouldHidePoiAdminLocationHint() ? "" : `（${p.countyName}${p.townName}）`;
         const unlockMsg = unlockedList
           ? `${catMeta.icon} 同時解鎖 ${unlockedList.length} 處${catMeta.label}：${unlockedList.map((x) => x.name).join("、")}${bonusText}`
-          : `${catMeta.icon} 解鎖${catMeta.label}：${p.name}（${p.countyName}${p.townName}）${bonusText}`;
+          : `${catMeta.icon} 解鎖${catMeta.label}：${p.name}${locHint}${bonusText}`;
         onSuccessfulUnlock(unlockMsg, p.shortName, Boolean(isTargetingPoi));
       if (isTargetingPoi) {
         if (state.playMode === "target_random") {
@@ -470,6 +497,12 @@ function evaluateGuess(rawInput, isAutoCheck = false) {
       }
         return true;
       }
+    }
+    if (poiRes && poiRes.lockedCounty) {
+      if (!isAutoCheck) {
+        triggerWrongFeedback("🔒 縣市未解鎖：困難模式下，須先解鎖所屬縣市才能猜此地標！");
+      }
+      return false;
     }
     if (isTargetingPoi || isPurePoiQuiz) {
       if (!isAutoCheck) {
@@ -495,6 +528,12 @@ function evaluateGuess(rawInput, isAutoCheck = false) {
   ) {
     if (tryMatchAndUnlockStation(core, coreWithSuffix, isAutoCheck)) {
       return true;
+    }
+    if (state._lastStationLockedCounty) {
+      if (!isAutoCheck) {
+        triggerWrongFeedback("🔒 縣市未解鎖：困難模式下，須先解鎖所屬縣市才能猜此車站！");
+      }
+      return false;
     }
     if (isPureStationQuiz || isTargetingStation || looksLikeStationInput) {
       if (!isAutoCheck) {
@@ -754,6 +793,12 @@ function evaluateGuess(rawInput, isAutoCheck = false) {
     }
     if (isStationQuizActive && tryMatchAndUnlockStation(core, combined, isAutoCheck)) {
       return true;
+    }
+    if (state._lastStationLockedCounty) {
+      if (!isAutoCheck) {
+        triggerWrongFeedback("🔒 縣市未解鎖：困難模式下，須先解鎖所屬縣市才能猜此車站！");
+      }
+      return false;
     }
     if (!isAutoCheck) {
       triggerWrongFeedback(`找不到或後綴不符：「${combined}」（進階後綴模式需含正確鄉/鎮/市/區後綴，或輸入車站名稱）`);
