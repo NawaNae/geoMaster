@@ -5,6 +5,8 @@
 
 let poiLayerGroup = null;
 const poiMarkersById = new Map();
+const poiMarkerStatusById = new Map();
+let activePoiListCache = [];
 
 function normalizePoiText(raw) {
   return String(raw || "")
@@ -382,52 +384,109 @@ function initPoiMapEngine() {
   refreshPoiMapLayer();
 }
 
-function refreshPoiMapLayer() {
-  if (!poiLayerGroup || typeof L === "undefined") return;
-  poiLayerGroup.clearLayers();
-  poiMarkersById.clear();
+function getPoiViewportBounds() {
+  if (typeof map === "undefined" || !map || typeof map.getBounds !== "function") return null;
+  try {
+    const b = map.getBounds();
+    if (!b || (typeof b.isValid === "function" && !b.isValid())) return null;
+    return typeof b.pad === "function" ? b.pad(0.25) : b;
+  } catch (_) {
+    return null;
+  }
+}
 
-  const activePois = getActiveQuizPois();
-  if (activePois.length === 0) return;
+function isPoiInsideViewport(poi, bounds) {
+  if (!bounds || typeof bounds.contains !== "function") return true;
+  return bounds.contains([poi.lat, poi.lng]);
+}
+
+function resolvePoiMarkerStatus(poi, unlockedSet, missedSet, activeTargetId) {
+  if (unlockedSet && unlockedSet.has(poi.id)) return "unlocked";
+  if (missedSet && missedSet.has(poi.id)) return "missed";
+  if (activeTargetId === poi.id && (state.playMode === "target_random" || state.playMode === "target_click")) {
+    return "target";
+  }
+  return "locked";
+}
+
+function buildPoiLeafletMarker(poi, status) {
+  const pinEl = createPoiPinElement(poi, status);
+  const icon = L.divIcon({
+    className: "tw-poi-icon-host",
+    html: pinEl,
+    iconSize: [20, 20],
+    iconAnchor: [10, 10]
+  });
+
+  const marker = L.marker([poi.lat, poi.lng], {
+    pane: "poiMarkerPane",
+    icon: icon,
+    keyboard: false,
+    riseOnHover: true
+  });
+
+  marker.on("click", (e) => {
+    if (e && e.originalEvent) e.originalEvent.stopPropagation();
+    handlePoiMarkerClick(poi);
+  });
+  return marker;
+}
+
+function syncPoiViewportMarkers(forceRebuild = false) {
+  if (!poiLayerGroup || typeof L === "undefined") return;
+
+  if (activePoiListCache.length === 0) {
+    if (poiMarkersById.size > 0) {
+      poiLayerGroup.clearLayers();
+      poiMarkersById.clear();
+      poiMarkerStatusById.clear();
+    }
+    return;
+  }
 
   const viewState = typeof getActiveViewState === "function" ? getActiveViewState() : state;
   const unlockedSet = viewState.unlockedPois || state.unlockedPois;
   const missedSet = viewState.missedPois || state.missedPois;
   const activeTargetId = viewState.targetPoiId !== undefined ? viewState.targetPoiId : state.targetPoiId;
+  const viewportBounds = getPoiViewportBounds();
+  const visibleIds = new Set();
 
-  for (const poi of activePois) {
-    let status = "locked";
-    if (unlockedSet && unlockedSet.has(poi.id)) {
-      status = "unlocked";
-    } else if (missedSet && missedSet.has(poi.id)) {
-      status = "missed";
-    } else if (activeTargetId === poi.id && (state.playMode === "target_random" || state.playMode === "target_click")) {
-      status = "target";
+  for (const poi of activePoiListCache) {
+    const status = resolvePoiMarkerStatus(poi, unlockedSet, missedSet, activeTargetId);
+    const inView = status === "target" || isPoiInsideViewport(poi, viewportBounds);
+    if (!inView) continue;
+
+    visibleIds.add(poi.id);
+    const existing = poiMarkersById.get(poi.id);
+    const prevStatus = poiMarkerStatusById.get(poi.id);
+    const statusKey = `${getPoiDisplayCategory(poi)}:${status}`;
+
+    if (existing && !forceRebuild && prevStatus === statusKey) {
+      continue;
+    }
+    if (existing) {
+      poiLayerGroup.removeLayer(existing);
     }
 
-    const pinEl = createPoiPinElement(poi, status);
-    const icon = L.divIcon({
-      className: "tw-poi-icon-host",
-      html: pinEl,
-      iconSize: [20, 20],
-      iconAnchor: [10, 10]
-    });
-
-    const marker = L.marker([poi.lat, poi.lng], {
-      pane: "poiMarkerPane",
-      icon: icon,
-      keyboard: false,
-      riseOnHover: true
-    });
-
-    marker.on("click", (e) => {
-      if (e && e.originalEvent) e.originalEvent.stopPropagation();
-      handlePoiMarkerClick(poi);
-    });
-
+    const marker = buildPoiLeafletMarker(poi, status);
     marker.addTo(poiLayerGroup);
     poiMarkersById.set(poi.id, marker);
+    poiMarkerStatusById.set(poi.id, statusKey);
   }
+
+  for (const [id, marker] of poiMarkersById.entries()) {
+    if (!visibleIds.has(id)) {
+      poiLayerGroup.removeLayer(marker);
+      poiMarkersById.delete(id);
+      poiMarkerStatusById.delete(id);
+    }
+  }
+}
+
+function refreshPoiMapLayer() {
+  if (!poiLayerGroup || typeof L === "undefined") return;
+  activePoiListCache = getActiveQuizPois();
+  syncPoiViewportMarkers(false);
 }
 
 function handlePoiMarkerClick(poi) {

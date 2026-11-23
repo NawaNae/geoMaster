@@ -100,4 +100,41 @@ assert(css.includes(".tw-poi-state-missed"), "Must style missed POI state");
 assert(css.includes("dashed"), "Missed POI halo must use dashed ring for non-color-only status distinction");
 assert(css.includes(".tw-poi-pin,\n  .geo-select-card") || css.includes(".tw-poi-pin {\n    transition: none"), "Must respect prefers-reduced-motion for POI pins");
 
-console.log("PASS: All GeoMaster POI visual scaling & frameless halo tests passed!");
+// 6. Mobile pan performance regressions:
+//    - Zero expensive CSS filter: drop-shadow() or radial-gradient(color-mix()) on POI pins/glyphs
+assert(!/\.tw-poi-[^{]*\{[^}]*filter:\s*drop-shadow/s.test(css), "POI pins/glyphs must not use expensive CSS filter: drop-shadow()");
+assert(!/\.tw-poi-pin\s*\{[^}]*radial-gradient\(/s.test(css), ".tw-poi-pin must avoid per-node radial-gradient() rasterization");
+assert(css.includes("contain: layout style;"), ".tw-poi-icon-host should declare CSS layout/style containment");
+
+//    - applyMapZoomVisualVars must skip redundant setProperty writes when zoom bucket is unchanged
+let setCount = 0;
+const countingHost = {
+  style: {
+    setProperty() { setCount++; }
+  }
+};
+const perfSandbox = {
+  Math,
+  Number,
+  document: { getElementById: () => countingHost }
+};
+vm.createContext(perfSandbox);
+vm.runInContext(helperMatch[0], perfSandbox);
+perfSandbox.applyMapZoomVisualVars(8);
+const firstCount = setCount;
+assert.strictEqual(firstCount, 6, "First zoom apply should set 6 CSS vars");
+perfSandbox.applyMapZoomVisualVars(8);
+assert.strictEqual(setCount, firstCount, "Pure pan at same zoom must NOT rewrite CSS custom properties");
+perfSandbox.applyMapZoomVisualVars(10);
+assert.strictEqual(setCount, firstCount + 6, "Zoom change should update CSS custom properties");
+
+//    - poi-engine.js must perform viewport culling & hook into map-engine.js moveend/zoomend
+assert(poiJs.includes("syncPoiViewportMarkers"), "poi-engine.js must expose syncPoiViewportMarkers for viewport culling");
+assert(poiJs.includes("getPoiViewportBounds"), "poi-engine.js must compute padded viewport bounds");
+assert(mapJs.includes("syncPoiViewportMarkers"), "map-engine.js must sync viewport-culled POI markers on moveend/zoomend");
+
+//    - transport-engine.js must skip redundant classList writes on pure pan
+const trJs = read("js/transport-engine.js");
+assert(trJs.includes("if (mapEl.classList.contains(nextClass)) return;"), "updateTransportZoomClass must skip redundant classList churn on pure pan");
+
+console.log("PASS: All GeoMaster POI visual scaling, frameless halo & mobile pan performance tests passed!");

@@ -10,10 +10,10 @@ function updateTransportZoomClass() {
   const mapEl = document.getElementById("leaflet-map");
   if (!mapEl || !map) return;
   const z = map.getZoom();
+  const nextClass = z < 8.5 ? "z-low" : z < 10 ? "z-mid" : "z-high";
+  if (mapEl.classList.contains(nextClass)) return;
   mapEl.classList.remove("z-low", "z-mid", "z-high");
-  if (z < 8.5) mapEl.classList.add("z-low");
-  else if (z < 10) mapEl.classList.add("z-mid");
-  else mapEl.classList.add("z-high");
+  mapEl.classList.add(nextClass);
 }
 function ensureExactOsmForCurrentView() {}
 function renderTransportLayerNow() {

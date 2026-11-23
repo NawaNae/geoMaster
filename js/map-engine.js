@@ -91,6 +91,9 @@ function applyMapZoomVisualVars(zoom) {
   const host = document.getElementById("map-container") || document.getElementById("leaflet-map");
   if (!host || !host.style) return;
   const m = computeMapZoomScaleMetrics(zoom);
+  const key = `${m.labelFontPx}|${m.poiGlyphPx}|${m.poiHaloPx}|${m.poiTagOffsetPx}|${m.stTipPadYPx}|${m.stTipPadXPx}`;
+  if (applyMapZoomVisualVars._lastMetricsKey === key) return;
+  applyMapZoomVisualVars._lastMetricsKey = key;
   host.style.setProperty("--map-label-size", `${m.labelFontPx}px`);
   host.style.setProperty("--poi-glyph-size", `${m.poiGlyphPx}px`);
   host.style.setProperty("--poi-halo-size", `${m.poiHaloPx}px`);
@@ -175,6 +178,7 @@ function initMap() {
     if (domEl) domEl.classList.remove("overlay-moving-hidden");
     applyMapZoomVisualVars(map.getZoom());
     updateTransportZoomClass();
+    if (typeof syncPoiViewportMarkers === "function") syncPoiViewportMarkers(false);
     renderSmartLabelsAndLeaderLines();
   });
 
