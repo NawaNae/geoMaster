@@ -31,6 +31,7 @@ function createSandbox() {
     replaceChildren() {},
     appendChild() {},
     focus() {},
+    addEventListener() {},
     querySelector() { return null; },
     getAttribute() { return ""; },
     offsetWidth: 0
@@ -537,7 +538,7 @@ resetState({
   settlementQuizEnabled: true
 });
 const activeSuffixes = sb.getActiveQuickSuffixes();
-for (const needed of ["", "區", "鄉", "鎮", "市", "站", "機場", "港", "漁港", "水庫", "湖"]) {
+for (const needed of ["", "區", "鄉", "鎮", "市", "站", "機場", "港", "水庫", "湖"]) {
   check(activeSuffixes.includes(needed), "5c.QuickSuffixVisible", `Missing quick suffix "${needed}" in ${JSON.stringify(activeSuffixes)}`);
 }
 
@@ -839,6 +840,104 @@ check(
   "7f.Settlement.NoForcedAdminSuffix",
   `Expected [""], got ${JSON.stringify(stlQuickSuffixes)}`
 );
+
+// =========================================================================
+// SECTION 8: Port Quick Suffix Consolidation, Anti-Spoiler & County Lock
+// =========================================================================
+
+// 8a. Quick suffix bar keeps only "港" (not "漁港"), while fishery ports & Anping/Hualien exceptions still work
+resetState({ difficulty: "hard_suffix", regionQuizEnabled: false, portQuizEnabled: true });
+const portQuickSuffixes = sb.getActiveQuickSuffixes();
+check(
+  portQuickSuffixes.includes("港") && !portQuickSuffixes.includes("漁港"),
+  "8a.Port.SingleQuickSuffix",
+  `Expected ["", "港"], got ${JSON.stringify(portQuickSuffixes)}`
+);
+sb.document.getElementById("suffix-input").value = "港";
+const okZhengbin = sb.evaluateGuess("正濱", false);
+const okAnpingPort = sb.evaluateGuess("安平", false);
+const okAnpingFishery = sb.evaluateGuess("安平漁港", false);
+check(
+  okZhengbin && okAnpingPort && okAnpingFishery &&
+    vm.runInContext("state.unlockedPois.has(\"pt_zhengbin\") && state.unlockedPois.has(\"pt_anping\") && state.unlockedPois.has(\"pt_anping_fish\")", sb),
+  "8a.Port.QuickSuffixAndExceptions",
+  `zhengbin=${okZhengbin}, anping=${okAnpingPort}, anpingFish=${okAnpingFishery}`
+);
+
+// 8b. Anti-spoiler: hard modes with regionQuizEnabled hide county/town in unlock & click feedback; casual/pure-POI still show it
+resetState({ difficulty: "hard_suffix", regionQuizEnabled: true, lakeQuizEnabled: true });
+const okLakeHard = sb.evaluateGuess("日月潭", false);
+const lakeHardFb = sb.lastFeedback?.text || "";
+check(
+  okLakeHard && !lakeHardFb.includes("南投縣") && !lakeHardFb.includes("魚池鄉"),
+  "8b.Poi.AntiSpoilerUnlock(hard_suffix)",
+  `fb="${lakeHardFb}"`
+);
+const sunMoonPoi = TAIWAN_POI_DATA.find((p) => p.id === "lk_sunmoon");
+sb.handlePoiMarkerClick(sunMoonPoi);
+const lakeClickHardFb = sb.lastFeedback?.text || "";
+check(
+  !lakeClickHardFb.includes("南投縣") && !lakeClickHardFb.includes("魚池鄉"),
+  "8b.Poi.AntiSpoilerClick(hard_suffix)",
+  `fb="${lakeClickHardFb}"`
+);
+
+resetState({ difficulty: "hard_suffix", regionQuizEnabled: false, lakeQuizEnabled: true });
+const okLakePure = sb.evaluateGuess("日月潭", false);
+const lakePureFb = sb.lastFeedback?.text || "";
+check(
+  okLakePure && lakePureFb.includes("南投縣") && lakePureFb.includes("魚池鄉"),
+  "8b.Poi.ShowLocationInPurePoiMode",
+  `fb="${lakePureFb}"`
+);
+
+// 8c. County unlock prerequisite for POI & Station in hard_full & master_hierarchy (when regionQuizEnabled is true)
+for (const diff of ["hard_full", "master_hierarchy"]) {
+  resetState({
+    difficulty: diff,
+    regionQuizEnabled: true,
+    stationQuizEnabled: true,
+    quizStationLines: new Set(["tra_west"]),
+    lakeQuizEnabled: true,
+    airportQuizEnabled: true
+  });
+
+  // Before unlocking 桃園市 / 南投縣: both POI and Station should be blocked without leaking county name
+  const lockedPoiTry = sb.evaluateGuess("桃園機場", false);
+  const lockedPoiFb = sb.lastFeedback?.text || "";
+  const lockedStTry = sb.evaluateGuess("桃園站", false);
+  const lockedStFb = sb.lastFeedback?.text || "";
+  check(
+    !lockedPoiTry && lockedPoiFb.includes("縣市未解鎖") && !lockedPoiFb.includes("桃園市"),
+    `8c.CountyLock.PoiBlocked(${diff})`,
+    `ok=${lockedPoiTry}, fb="${lockedPoiFb}"`
+  );
+  check(
+    !lockedStTry && lockedStFb.includes("縣市未解鎖") && !lockedStFb.includes("桃園市"),
+    `8c.CountyLock.StationBlocked(${diff})`,
+    `ok=${lockedStTry}, fb="${lockedStFb}"`
+  );
+
+  // Unlock 桃園市 (via hierarchy in master_hierarchy or direct county in hard_full)
+  if (diff === "master_hierarchy") {
+    sb.evaluateGuess("桃園市", false);
+  } else {
+    sb.evaluateGuess("桃園市", false);
+  }
+  const unlockedPoiTry = sb.evaluateGuess("桃園機場", false);
+  const unlockedPoiFb = sb.lastFeedback?.text || "";
+  const unlockedStTry = sb.evaluateGuess("桃園站", false);
+  check(
+    unlockedPoiTry && !unlockedPoiFb.includes("桃園市") && !unlockedPoiFb.includes("大園區"),
+    `8c.CountyLock.PoiUnlockedAfterCounty(${diff})`,
+    `ok=${unlockedPoiTry}, fb="${unlockedPoiFb}"`
+  );
+  check(
+    unlockedStTry && vm.runInContext("Array.from(state.unlockedStations).some(k => k.includes(\"桃園\"))", sb),
+    `8c.CountyLock.StationUnlockedAfterCounty(${diff})`,
+    `ok=${unlockedStTry}, fb="${sb.lastFeedback?.text}"`
+  );
+}
 
 const elapsedMs = Date.now() - t0;
 console.log(`Ran ${totalChecks} exhaustive checks in ${elapsedMs}ms (${ALL_TOWNS.length} towns, ${allStations.length} stations, ${TAIWAN_POI_DATA.length} POIs).`);

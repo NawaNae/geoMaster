@@ -276,6 +276,9 @@ function tryMatchAndUnlockPoi(rawInput, isAutoCheck = false) {
     const targetPoi = TAIWAN_POI_BY_ID.get(state.targetPoiId);
     if (targetPoi && activePois.some((p) => p.id === targetPoi.id)) {
       if (matchSinglePoi(targetPoi, normInput, !requireSuffix, requireSuffix)) {
+        if (typeof isPoiOrStationCountyUnlocked === "function" && !isPoiOrStationCountyUnlocked(targetPoi.countyName)) {
+          return { matched: false, lockedCounty: true, poi: targetPoi };
+        }
         if (state.unlockedPois.has(targetPoi.id)) {
           return { matched: true, alreadyUnlocked: true, poi: targetPoi };
         }
@@ -288,8 +291,14 @@ function tryMatchAndUnlockPoi(rawInput, isAutoCheck = false) {
   }
 
   // Free recall mode (or no POI target locked)
-  const candidates = activePois.filter((p) => matchSinglePoi(p, normInput, allowBareStem, requireSuffix));
-  if (candidates.length === 0) return { matched: false };
+  const allMatched = activePois.filter((p) => matchSinglePoi(p, normInput, allowBareStem, requireSuffix));
+  if (allMatched.length === 0) return { matched: false };
+  const candidates = allMatched.filter((p) =>
+    typeof isPoiOrStationCountyUnlocked === "function" ? isPoiOrStationCountyUnlocked(p.countyName) : true
+  );
+  if (candidates.length === 0) {
+    return { matched: false, lockedCounty: true, poi: allMatched[0] };
+  }
 
   // Duplicate settlement name disambiguation guard (e.g. 桃園楊梅「富岡」 vs 臺東市「富岡」)
   // Never mis-lock a unique settlement when >=2 active settlements share the exact same bare name.
@@ -530,7 +539,9 @@ function handlePoiMarkerClick(poi) {
   // Free recall or target_random: show non-spoiler info
   if (typeof setFeedback === "function") {
     if (unlockedSet && unlockedSet.has(poi.id)) {
-      setFeedback(`${catMeta.icon} ${poi.name}（${poi.countyName}${poi.townName} · ${getPoiSubTypeLabelList(poi)}）`, "info");
+      const hideLoc = typeof shouldHidePoiAdminLocationHint === "function" && shouldHidePoiAdminLocationHint();
+      const locPrefix = hideLoc ? "" : `${poi.countyName}${poi.townName} · `;
+      setFeedback(`${catMeta.icon} ${poi.name}（${locPrefix}${getPoiSubTypeLabelList(poi)}）`, "info");
     } else {
       const subTxt = getPoiSubTypeLabelList(poi);
       setFeedback(`${catMeta.icon} 尚未解鎖的${catMeta.label}（分類：${subTxt}）`, "info");
