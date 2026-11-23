@@ -94,7 +94,7 @@ function renderSmartLabelsAndLeaderLines() {
   }
 
   // Dynamic Font Size based on Zoom Level (先稍微縮小字，隨放大變大)
-  const fontSizePx = zoom >= 12 ? 12.5 : zoom === 11 ? 11.5 : zoom === 10 ? 10.5 : zoom === 9 ? 9.5 : 8.5;
+  const fontSizePx = typeof computeMapZoomScaleMetrics === "function" ? computeMapZoomScaleMetrics(zoom).labelFontPx : (zoom >= 12 ? 12.5 : zoom === 11 ? 11.5 : zoom === 10 ? 10.5 : zoom === 9 ? 9.5 : 8.5);
   const charPx = fontSizePx * 0.92;
 
   const calloutQueue = [];

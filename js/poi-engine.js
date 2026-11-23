@@ -373,6 +373,9 @@ function initPoiMapEngine() {
     const p = map.createPane("poiMarkerPane");
     p.style.zIndex = "465";
   }
+  if (typeof applyMapZoomVisualVars === "function") {
+    applyMapZoomVisualVars(map.getZoom());
+  }
   if (!poiLayerGroup) {
     poiLayerGroup = L.layerGroup().addTo(map);
   }
@@ -406,8 +409,8 @@ function refreshPoiMapLayer() {
     const icon = L.divIcon({
       className: "tw-poi-icon-host",
       html: pinEl,
-      iconSize: [26, 26],
-      iconAnchor: [13, 13]
+      iconSize: [20, 20],
+      iconAnchor: [10, 10]
     });
 
     const marker = L.marker([poi.lat, poi.lng], {

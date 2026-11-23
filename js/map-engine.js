@@ -66,6 +66,39 @@ const GIS_TILES = {
   gis_railway_overlay: "https://{s}.tiles.openrailwaymap.org/signals/{z}/{x}/{y}.png"
 };
 
+// Unified zoom-responsive typography & POI marker scale (shared by townships, stations, and POIs)
+function computeMapZoomScaleMetrics(zoom) {
+  const z = Number.isFinite(zoom) ? zoom : 8;
+  if (z >= 12) {
+    return { labelFontPx: 12.5, poiGlyphPx: 18, poiHaloPx: 25, poiTagOffsetPx: 15, stTipPadYPx: 1.5, stTipPadXPx: 6 };
+  }
+  if (z >= 11) {
+    return { labelFontPx: 11.5, poiGlyphPx: 16, poiHaloPx: 22, poiTagOffsetPx: 13.5, stTipPadYPx: 1, stTipPadXPx: 5.5 };
+  }
+  if (z >= 10) {
+    return { labelFontPx: 10.5, poiGlyphPx: 14, poiHaloPx: 19, poiTagOffsetPx: 12, stTipPadYPx: 1, stTipPadXPx: 5 };
+  }
+  if (z >= 9) {
+    return { labelFontPx: 9.5, poiGlyphPx: 12, poiHaloPx: 16.5, poiTagOffsetPx: 10.5, stTipPadYPx: 0.5, stTipPadXPx: 4.5 };
+  }
+  if (z >= 8) {
+    return { labelFontPx: 8.5, poiGlyphPx: 10.5, poiHaloPx: 14.5, poiTagOffsetPx: 9.5, stTipPadYPx: 0.5, stTipPadXPx: 4 };
+  }
+  return { labelFontPx: 8, poiGlyphPx: 9.5, poiHaloPx: 13, poiTagOffsetPx: 8.5, stTipPadYPx: 0.5, stTipPadXPx: 3.5 };
+}
+
+function applyMapZoomVisualVars(zoom) {
+  const host = document.getElementById("map-container") || document.getElementById("leaflet-map");
+  if (!host || !host.style) return;
+  const m = computeMapZoomScaleMetrics(zoom);
+  host.style.setProperty("--map-label-size", `${m.labelFontPx}px`);
+  host.style.setProperty("--poi-glyph-size", `${m.poiGlyphPx}px`);
+  host.style.setProperty("--poi-halo-size", `${m.poiHaloPx}px`);
+  host.style.setProperty("--poi-tag-offset", `${m.poiTagOffsetPx}px`);
+  host.style.setProperty("--st-tip-pad-y", `${m.stTipPadYPx}px`);
+  host.style.setProperty("--st-tip-pad-x", `${m.stTipPadXPx}px`);
+}
+
 function initMap() {
   // Use HTML5 Canvas Renderer instead of 368 separate SVG DOM nodes for 60FPS performance!
   canvasRenderer = L.canvas({ padding: 0.4 });
@@ -83,6 +116,7 @@ function initMap() {
     attributionControl: true
   });
 
+  applyMapZoomVisualVars(map.getZoom());
   geoLayerGroup = L.layerGroup().addTo(map);
   countyBorderLayerGroup = L.layerGroup().addTo(map);
 
@@ -139,6 +173,7 @@ function initMap() {
     isCssZoomAnimActive = false;
     if (svgEl) svgEl.classList.remove("overlay-moving-hidden");
     if (domEl) domEl.classList.remove("overlay-moving-hidden");
+    applyMapZoomVisualVars(map.getZoom());
     updateTransportZoomClass();
     renderSmartLabelsAndLeaderLines();
   });
