@@ -1,6 +1,59 @@
 // ============================================================================
 // 10. P2P WEBRTC ENGINE (Multiplayer >2, Spectator View, Session, Host Handover & Kick/Ban)
 // ============================================================================
+function _p2pPack() {
+  return typeof getActiveMapPack === "function" ? getActiveMapPack() : null;
+}
+
+function _p2pPackId() {
+  const p = _p2pPack();
+  return (p && p.id) || (typeof state !== "undefined" && state.activeMapPackId) || "tw_modern";
+}
+
+function _p2pIsTwModern() {
+  return _p2pPackId() === "tw_modern";
+}
+
+function _p2pItems() {
+  if (typeof getActiveItems === "function") return getActiveItems();
+  return typeof ALL_TOWNS !== "undefined" ? ALL_TOWNS : [];
+}
+
+function _p2pGroups() {
+  if (typeof getActiveGroups === "function") return getActiveGroups();
+  return typeof TAIWAN_ADMIN_DATA !== "undefined" ? TAIWAN_ADMIN_DATA : [];
+}
+
+function _p2pFeatures() {
+  if (typeof getActivePackFeatures === "function") return getActivePackFeatures();
+  return {
+    supportsTransportQuiz: true,
+    supportsPoiQuiz: true,
+    supportsMasterHierarchy: true,
+    supportsSuffixDifficulty: true,
+    quickSuffixes: ["區", "鄉", "鎮", "市"],
+    supportedDifficulties: ["casual", "county_only", "hard_suffix", "hard_full", "master_hierarchy"]
+  };
+}
+
+function _p2pUnitLabels() {
+  if (typeof getActivePackUnitLabels === "function") return getActivePackUnitLabels();
+  return { group: "縣市", item: "鄉鎮市區", itemShort: "區", fullScopeLabel: "全台 368 區" };
+}
+
+function _p2pIsSingleLayer() {
+  if (typeof isActivePackSingleLayer === "function") return isActivePackSingleLayer();
+  return false;
+}
+
+function _p2pUnlockViewport(opts) {
+  if (typeof unlockMapViewportToPack === "function") {
+    unlockMapViewportToPack(opts);
+  } else if (typeof unlockMapViewportToTaiwan === "function") {
+    unlockMapViewportToTaiwan(opts);
+  }
+}
+
 function isMultiplayerActive() {
   return Boolean(
     state.roomCode ||
@@ -27,6 +80,8 @@ function getSpectators() {
 }
 
 function getLocalGrandCounts() {
+  const allItems = _p2pItems();
+  const features = _p2pFeatures();
   const scopeCounties = getScopeCounties();
   const scopeTowns = getScopeTowns();
   const regionTotal = state.difficulty === "county_only" ? scopeCounties.length : scopeTowns.length;
@@ -34,44 +89,48 @@ function getLocalGrandCounts() {
     state.difficulty === "county_only"
       ? Array.from(state.unlockedCounties).filter((c) => state.selectedCounties.has(c)).length
       : Array.from(state.unlockedTowns).filter((id) => {
-          const t = ALL_TOWNS.find((x) => x.id === id);
+          const t = allItems.find((x) => x.id === id);
           return t && (typeof isTownInScope === "function" ? isTownInScope(t) : state.selectedCounties.has(t.countyName));
         }).length;
 
-  const activeSt = getActiveQuizStations();
+  const activeSt = features.supportsTransportQuiz && typeof getActiveQuizStations === "function" ? getActiveQuizStations() : [];
   const stationTotal = activeSt.length;
   const stationCurrent = activeSt.filter((s) => state.unlockedStations.has(s.key)).length;
-  const activePois = typeof getActiveQuizPois === "function" ? getActiveQuizPois() : [];
+  const activePois = features.supportsPoiQuiz && typeof getActiveQuizPois === "function" ? getActiveQuizPois() : [];
   const poiTotal = activePois.length;
   const poiCurrent = activePois.filter((p) => state.unlockedPois.has(p.id)).length;
   const macroProgress = {};
   if (regionTotal > 0) {
     macroProgress["地區"] = { cur: regionCurrent, tot: regionTotal };
   }
-  ["台鐵", "高鐵", "捷運", "輕軌", "纜車", "林鐵", "糖鐵"].forEach((k) => {
-    const mStations = activeSt.filter((s) => s.macro === k);
-    if (mStations.length > 0) {
-      macroProgress[k] = {
-        cur: mStations.filter((s) => state.unlockedStations.has(s.key)).length,
-        tot: mStations.length
-      };
-    }
-  });
-  [
-    ["airport", "機場"],
-    ["port", "港口"],
-    ["reservoir", "水庫"],
-    ["lake", "湖泊"],
-    ["settlement", "傳統聚落"]
-  ].forEach(([catKey, label]) => {
-    const catList = typeof getActiveQuizPois === "function" ? getActiveQuizPois(catKey) : activePois.filter((p) => p.category === catKey);
-    if (catList.length > 0) {
-      macroProgress[label] = {
-        cur: catList.filter((p) => state.unlockedPois.has(p.id)).length,
-        tot: catList.length
-      };
-    }
-  });
+  if (features.supportsTransportQuiz && activeSt.length > 0) {
+    ["台鐵", "高鐵", "捷運", "輕軌", "纜車", "林鐵", "糖鐵"].forEach((k) => {
+      const mStations = activeSt.filter((s) => s.macro === k);
+      if (mStations.length > 0) {
+        macroProgress[k] = {
+          cur: mStations.filter((s) => state.unlockedStations.has(s.key)).length,
+          tot: mStations.length
+        };
+      }
+    });
+  }
+  if (features.supportsPoiQuiz && activePois.length > 0) {
+    [
+      ["airport", "機場"],
+      ["port", "港口"],
+      ["reservoir", "水庫"],
+      ["lake", "湖泊"],
+      ["settlement", "傳統聚落"]
+    ].forEach(([catKey, label]) => {
+      const catList = typeof getActiveQuizPois === "function" ? getActiveQuizPois(catKey) : activePois.filter((p) => p.category === catKey);
+      if (catList.length > 0) {
+        macroProgress[label] = {
+          cur: catList.filter((p) => state.unlockedPois.has(p.id)).length,
+          tot: catList.length
+        };
+      }
+    });
+  }
 
   return {
     regionCurrent,
@@ -226,7 +285,9 @@ function getHostSyncConfig(isSettingChange = false, changeLabel = "", changeDeta
   const flayerEl = document.getElementById("p2p-forced-layer-select");
   const rruleEl = document.getElementById("p2p-rail-rule-select");
   const bruleEl = document.getElementById("p2p-border-rule-select");
+  const allItems = _p2pItems();
   return {
+    mapPackId: state.activeMapPackId || "tw_modern",
     quizTargetMode: typeof syncLegacyQuizTargetMode === "function" ? syncLegacyQuizTargetMode() : (state.quizTargetMode || "region"),
     regionQuizEnabled: Boolean(state.regionQuizEnabled),
     stationQuizEnabled: Boolean(state.stationQuizEnabled),
@@ -247,7 +308,7 @@ function getHostSyncConfig(isSettingChange = false, changeLabel = "", changeDeta
     selectedTownIds: state.regionQuizEnabled
       ? (state.selectedTownIds
           ? Array.from(state.selectedTownIds)
-          : ALL_TOWNS.filter((t) => state.selectedCounties.has(t.countyName)).map((t) => t.id))
+          : allItems.filter((t) => state.selectedCounties.has(t.countyName)).map((t) => t.id))
       : [],
     quizStationLines: state.stationQuizEnabled ? Array.from(state.quizStationLines) : [],
     difficulty: state.difficulty,
@@ -270,13 +331,27 @@ function getHostSyncConfig(isSettingChange = false, changeLabel = "", changeDeta
 // CONCISE ROOM SETTINGS SUMMARY GENERATOR (Only shows selected items!)
 // ============================================================================
 function getConciseDifficultySummaryText() {
-  const diffMap = {
-    casual: "一般模式（免輸入鄉鎮市區後綴，同名一次解鎖）",
-    county_only: "縣市模式（僅猜 22 縣市與直轄市，未解鎖隱藏）",
-    hard_suffix: "進階後綴模式（免縣市前綴，需輸入鄉鎮市區單位）",
-    hard_full: "困難全名模式（需輸入完整縣市＋鄉鎮市區單位）",
-    master_hierarchy: "困難模式（需先輸入省、直轄市，精確輸入鄉鎮市區單位）"
-  };
+  const isTw = _p2pIsTwModern();
+  const unitLabels = _p2pUnitLabels();
+  const allGroups = _p2pGroups();
+  const features = _p2pFeatures();
+  const diffMap = isTw
+    ? {
+        casual: "一般模式（免輸入鄉鎮市區後綴，同名一次解鎖）",
+        county_only: `縣市模式（僅猜 ${allGroups.length} 縣市與直轄市，未解鎖隱藏）`,
+        hard_suffix: "進階後綴模式（免縣市前綴，需輸入鄉鎮市區單位）",
+        hard_full: "困難全名模式（需輸入完整縣市＋鄉鎮市區單位）",
+        master_hierarchy: "困難模式（需先輸入省、直轄市，精確輸入鄉鎮市區單位）"
+      }
+    : {
+        casual: features.supportsSuffixDifficulty
+          ? `一般模式（免輸入${unitLabels.item}後綴，同名一次解鎖）`
+          : `一般模式（輸入${unitLabels.item}名稱即可解鎖）`,
+        county_only: `${unitLabels.group}模式（僅猜 ${allGroups.length} ${unitLabels.group}，未解鎖隱藏）`,
+        hard_suffix: `進階後綴模式（免${unitLabels.group}前綴，需輸入${unitLabels.item}單位）`,
+        hard_full: `困難全名模式（需輸入完整${unitLabels.group}＋${unitLabels.item}名稱）`,
+        master_hierarchy: `困難模式（需依階層完整輸入${unitLabels.item}名稱）`
+      };
   const satStyleMap = {
     day: "日間衛星",
     night: "夜間燈火",
@@ -298,27 +373,77 @@ function getConciseDifficultySummaryText() {
 
 function getConciseRegionSummaryText() {
   if (state.quizTargetMode === "station" || state.selectedCounties.size === 0) return "";
+  const allItems = _p2pItems();
+  const allGroups = _p2pGroups();
+  const unitLabels = _p2pUnitLabels();
+  const pack = _p2pPack();
   const townIds =
     state.selectedTownIds instanceof Set
       ? state.selectedTownIds
-      : new Set(ALL_TOWNS.filter((t) => state.selectedCounties.has(t.countyName)).map((t) => t.id));
+      : new Set(allItems.filter((t) => state.selectedCounties.has(t.countyName)).map((t) => t.id));
   if (townIds.size === 0) return "";
-  if (townIds.size === ALL_TOWNS.length) return "全臺";
+
+  if (!_p2pIsTwModern()) {
+    if (townIds.size === allItems.length && allItems.length > 0) {
+      return unitLabels.fullScopeLabel || (pack && (pack.displayName || pack.shortLabel)) || `全境（共 ${allItems.length} ${unitLabels.itemShort}）`;
+    }
+    const filters = typeof getActiveRegionFilters === "function" ? getActiveRegionFilters() : [];
+    const nonAllFilters = filters
+      .filter((f) => f && f.id !== "all")
+      .map((f) => ({
+        label: f.shortLabel || f.label || f.id,
+        ids: typeof resolveRegionFilterItemIds === "function"
+          ? resolveRegionFilterItemIds(f, allItems)
+          : (Array.isArray(f.itemIds) ? f.itemIds : [])
+      }))
+      .filter((f) => f.ids.length > 0);
+
+    for (const f of nonAllFilters) {
+      if (f.ids.length === townIds.size && f.ids.every((id) => townIds.has(id))) {
+        return f.label;
+      }
+    }
+
+    const matchedLabels = [];
+    const covered = new Set();
+    nonAllFilters.forEach((f) => {
+      if (f.ids.every((id) => townIds.has(id))) {
+        matchedLabels.push(f.label);
+        f.ids.forEach((id) => covered.add(id));
+      }
+    });
+    if (matchedLabels.length > 0 && covered.size === townIds.size) {
+      return matchedLabels.join("、");
+    }
+
+    if (_p2pIsSingleLayer()) {
+      const selGroups = allGroups.filter((g) => state.selectedCounties.has(g.name)).map((g) => g.short || g.name);
+      if (allGroups.length > 1 && selGroups.length > 0 && selGroups.length < allGroups.length) {
+        return `${selGroups.join("、")}（共 ${townIds.size} ${unitLabels.itemShort}）`;
+      }
+      return `自選 ${townIds.size} ${unitLabels.itemShort}`;
+    }
+
+    const groupNames = allGroups.filter((c) => state.selectedCounties.has(c.name)).map((c) => c.short || c.name);
+    return `${groupNames.join("、")}（共 ${townIds.size} ${unitLabels.itemShort}）`;
+  }
+
+  if (townIds.size === allItems.length) return "全臺";
 
   const checkExact = (arr) => arr.length === townIds.size && arr.every((id) => townIds.has(id));
 
-  const northIds = ALL_TOWNS.filter((t) => ["臺北市", "新北市", "基隆市", "新竹市", "桃園市", "新竹縣", "宜蘭縣"].includes(t.countyName)).map((t) => t.id);
-  const centralIds = ALL_TOWNS.filter((t) => ["苗栗縣", "臺中市", "彰化縣", "南投縣", "雲林縣"].includes(t.countyName)).map((t) => t.id);
-  const southIds = ALL_TOWNS.filter((t) => ["嘉義市", "嘉義縣", "臺南市", "高雄市", "屏東縣", "澎湖縣"].includes(t.countyName)).map((t) => t.id);
-  const eastIds = ALL_TOWNS.filter((t) => ["花蓮縣", "臺東縣"].includes(t.countyName)).map((t) => t.id);
-  const islandIds = ALL_TOWNS.filter((t) => ["澎湖縣", "金門縣", "連江縣"].includes(t.countyName)).map((t) => t.id);
-  const mountainIds = ALL_TOWNS.filter((t) => TAIWAN_MOUNTAIN_SET.has(t.fullCountyTown)).map((t) => t.id);
-  const westPlainIds = ALL_TOWNS.filter((t) => TAIWAN_WEST_PLAIN_SET.has(t.fullCountyTown)).map((t) => t.id);
-  const eastPlainIds = ALL_TOWNS.filter((t) => typeof TAIWAN_EAST_PLAIN_SET !== "undefined" && TAIWAN_EAST_PLAIN_SET.has(t.fullCountyTown)).map((t) => t.id);
-  const westCoastIds = ALL_TOWNS.filter((t) => TAIWAN_WEST_COAST_SET.has(t.fullCountyTown)).map((t) => t.id);
-  const eastCoastIds = ALL_TOWNS.filter((t) => TAIWAN_EAST_COAST_SET.has(t.fullCountyTown)).map((t) => t.id);
-  const sixIds = ALL_TOWNS.filter((t) => t.isSpecial).map((t) => t.id);
-  const westIds = ALL_TOWNS.filter((t) => TAIWAN_WEST_COUNTY_SET.has(t.countyName)).map((t) => t.id);
+  const northIds = allItems.filter((t) => ["臺北市", "新北市", "基隆市", "新竹市", "桃園市", "新竹縣", "宜蘭縣"].includes(t.countyName)).map((t) => t.id);
+  const centralIds = allItems.filter((t) => ["苗栗縣", "臺中市", "彰化縣", "南投縣", "雲林縣"].includes(t.countyName)).map((t) => t.id);
+  const southIds = allItems.filter((t) => ["嘉義市", "嘉義縣", "臺南市", "高雄市", "屏東縣", "澎湖縣"].includes(t.countyName)).map((t) => t.id);
+  const eastIds = allItems.filter((t) => ["花蓮縣", "臺東縣"].includes(t.countyName)).map((t) => t.id);
+  const islandIds = allItems.filter((t) => ["澎湖縣", "金門縣", "連江縣"].includes(t.countyName)).map((t) => t.id);
+  const mountainIds = allItems.filter((t) => TAIWAN_MOUNTAIN_SET.has(t.fullCountyTown)).map((t) => t.id);
+  const westPlainIds = allItems.filter((t) => TAIWAN_WEST_PLAIN_SET.has(t.fullCountyTown)).map((t) => t.id);
+  const eastPlainIds = allItems.filter((t) => typeof TAIWAN_EAST_PLAIN_SET !== "undefined" && TAIWAN_EAST_PLAIN_SET.has(t.fullCountyTown)).map((t) => t.id);
+  const westCoastIds = allItems.filter((t) => TAIWAN_WEST_COAST_SET.has(t.fullCountyTown)).map((t) => t.id);
+  const eastCoastIds = allItems.filter((t) => TAIWAN_EAST_COAST_SET.has(t.fullCountyTown)).map((t) => t.id);
+  const sixIds = allItems.filter((t) => t.isSpecial).map((t) => t.id);
+  const westIds = allItems.filter((t) => TAIWAN_WEST_COUNTY_SET.has(t.countyName)).map((t) => t.id);
 
   if (checkExact(northIds)) return "北部全";
   if (checkExact(centralIds)) return "中部全";
@@ -357,11 +482,12 @@ function getConciseRegionSummaryText() {
   }
 
   // Otherwise list selected county short names
-  const countyNames = TAIWAN_ADMIN_DATA.filter((c) => state.selectedCounties.has(c.name)).map((c) => c.short || c.name);
+  const countyNames = allGroups.filter((c) => state.selectedCounties.has(c.name)).map((c) => c.short || c.name);
   return `${countyNames.join("、")}（共 ${townIds.size} 區）`;
 }
 
 function getConciseStationSummaryText() {
+  if (!_p2pFeatures().supportsTransportQuiz) return "";
   if (state.quizTargetMode === "region" || !state.quizStationLines || state.quizStationLines.size === 0) return "";
   const sel = state.quizStationLines;
   const allNonHw = TAIWAN_SELECTABLE_LINES.filter((l) => !l.isHighway).map((l) => l.id);
@@ -452,7 +578,18 @@ function renderRoomConciseSettingsSummary() {
   if (!container) return;
   container.replaceChildren();
 
+  const features = _p2pFeatures();
+  const pack = _p2pPack();
+  const packId = _p2pPackId();
+  const registeredCount = typeof getRegisteredMapPacks === "function" ? getRegisteredMapPacks().length : 1;
+
   const rows = [];
+  // 0. Map Pack Line (when multiple packs registered or non-tw_modern)
+  if (registeredCount > 1 || packId !== "tw_modern") {
+    const packLabel = (pack && (pack.displayName || pack.shortLabel)) || packId;
+    rows.push({ label: "🗺️ 地圖：", text: packLabel, highlight: "text-cyan-200 font-bold" });
+  }
+
   // 1. Difficulty & Mode Line
   rows.push({ label: null, text: getConciseDifficultySummaryText(), highlight: "text-amber-200 font-bold" });
 
@@ -462,8 +599,8 @@ function renderRoomConciseSettingsSummary() {
     rows.push({ label: "區域：", text: regText, highlight: "text-sky-200" });
   }
 
-  // 3. Station Line (Only if selected!)
-  const stText = getConciseStationSummaryText();
+  // 3. Station Line (Only if supported and selected!)
+  const stText = features.supportsTransportQuiz ? getConciseStationSummaryText() : "";
   if (stText) {
     const filterSuffix = state.filterStationsByRegion && state.regionQuizEnabled && state.selectedCounties.size > 0
       ? `（📍僅限所選區域內 ${typeof getActiveQuizStations === "function" ? getActiveQuizStations().length : ""} 站）`
@@ -471,8 +608,8 @@ function renderRoomConciseSettingsSummary() {
     rows.push({ label: "車站：", text: `${stText}${filterSuffix}`, highlight: "text-pink-200" });
   }
 
-  // 3b. Airport & Port Lines (Only if selected!)
-  if (typeof getConcisePoiSummaryParts === "function") {
+  // 3b. Airport & Port Lines (Only if supported and selected!)
+  if (features.supportsPoiQuiz && typeof getConcisePoiSummaryParts === "function") {
     const poiParts = getConcisePoiSummaryParts();
     if (poiParts.length > 0) {
       const regNote = state.filterStationsByRegion && state.regionQuizEnabled && state.selectedCounties.size > 0
@@ -484,13 +621,15 @@ function renderRoomConciseSettingsSummary() {
 
   // 4. Interface Restriction Line (Only if restricted / non-default!)
   const uiLimits = [];
-  if (state.showStationTerminusHints) uiLimits.push("顯示路線頭尾端點提示");
+  if (features.supportsTransportQuiz && state.showStationTerminusHints) uiLimits.push("顯示路線頭尾端點提示");
   if (state.allowTargetHints) uiLimits.push("開放指定/隨機模式提示");
   else if (state.playMode !== "free") uiLimits.push("禁用目標提示 (Ban)");
-  if (state.p2pRailRule === "ban_roads_only") uiLimits.push("禁用公路路網");
-  else if (state.p2pRailRule === "ban_rail") uiLimits.push("禁用軌道與公路路網");
-  else if (state.p2pRailRule === "force_lines") uiLimits.push("強制開啟完整路網＋車站");
-  else if (state.p2pRailRule === "force_rail_only") uiLimits.push("強制開啟純軌道路網");
+  if (features.supportsTransportQuiz) {
+    if (state.p2pRailRule === "ban_roads_only") uiLimits.push("禁用公路路網");
+    else if (state.p2pRailRule === "ban_rail") uiLimits.push("禁用軌道與公路路網");
+    else if (state.p2pRailRule === "force_lines") uiLimits.push("強制開啟完整路網＋車站");
+    else if (state.p2pRailRule === "force_rail_only") uiLimits.push("強制開啟純軌道路網");
+  }
   if (uiLimits.length > 0) {
     rows.push({ label: "介面限制：", text: uiLimits.join("、"), highlight: "text-emerald-200" });
   }
@@ -639,12 +778,19 @@ function resumeSavedRoomSession(saved) {
   }
 
   if (saved.isHost) {
-    if (saved.config) applyRemoteSyncConfig(saved.config, true, true);
-    hostP2PRoom(saved.roomCode, saved.roomPassword || "", saved.playersSnapshot || null);
-    state.matchInProgress = Boolean(saved.matchInProgress);
-    restoreLocalSessionProgress(saved);
-    broadcastRosterFromHost();
-    setFeedback(`🔄 已恢復房主房間【${saved.roomCode}】與答題進度！`, "tier");
+    const finishHostResume = () => {
+      hostP2PRoom(saved.roomCode, saved.roomPassword || "", saved.playersSnapshot || null);
+      state.matchInProgress = Boolean(saved.matchInProgress);
+      restoreLocalSessionProgress(saved);
+      broadcastRosterFromHost();
+      setFeedback(`🔄 已恢復房主房間【${saved.roomCode}】與答題進度！`, "tier");
+    };
+    const cfgRes = saved.config ? applyRemoteSyncConfig(saved.config, true, true) : null;
+    if (cfgRes && typeof cfgRes.then === "function") {
+      cfgRes.then(finishHostResume, finishHostResume);
+    } else {
+      finishHostResume();
+    }
   } else {
     const chkSpec = document.getElementById("chk-p2p-join-spectate");
     if (chkSpec) chkSpec.checked = saved.role === "spectator";
@@ -1092,7 +1238,7 @@ function applyP2PLayerRule(rule, forcedLayer, railRule, borderRule) {
     if (switcher) switcher.classList.remove("opacity-60");
   }
 
-  if (state.p2pRailRule && state.p2pRailRule !== "free") {
+  if (_p2pFeatures().supportsTransportQuiz && state.p2pRailRule && state.p2pRailRule !== "free") {
     const hasStations = state.stationQuizEnabled && state.quizStationLines.size > 0;
     lockParts.push(
       state.p2pRailRule === "ban_rail"
@@ -1200,9 +1346,12 @@ function showRoomConfigChangeToast(message, tone = "warn", alsoShowInRoomFooter 
 }
 
 function describeConfigDiff(patch) {
+  const isTw = _p2pIsTwModern();
+  const allGroups = _p2pGroups();
+  const unitLabels = _p2pUnitLabels();
   const diffNames = {
     casual: "🟢 休閒難度",
-    county_only: "🔵 22縣市模式",
+    county_only: isTw ? `🔵 ${allGroups.length}縣市模式` : `🔵 ${allGroups.length}${unitLabels.group}模式`,
     hard_suffix: "🟡 進階後綴模式",
     hard_full: "🟠 困難全名模式",
     master_hierarchy: "🔥 三階困難模式"
@@ -1225,6 +1374,14 @@ function describeConfigDiff(patch) {
   };
 
   const lines = [];
+  const curPackId = state.activeMapPackId || "tw_modern";
+  if (patch.mapPackId && patch.mapPackId !== curPackId) {
+    const nextPack = typeof getMapPackById === "function" ? getMapPackById(patch.mapPackId) : null;
+    const nextLabel = (nextPack && nextPack.shortLabel) || patch.mapPackId;
+    const curPack = _p2pPack();
+    const curLabel = (curPack && curPack.shortLabel) || curPackId;
+    lines.push(`🗺️ 地圖：${curLabel} ➔ ${nextLabel}`);
+  }
   if (patch.difficulty && patch.difficulty !== state.difficulty) {
     lines.push(`${diffNames[state.difficulty] || state.difficulty} ➔ ${diffNames[patch.difficulty] || patch.difficulty}`);
   }
@@ -1242,8 +1399,8 @@ function describeConfigDiff(patch) {
   }
   if (patch.selectedCounties) {
     const newSet = new Set(patch.selectedCounties);
-    const townCountStr = patch.selectedTownIds ? ` (${patch.selectedTownIds.length} 區)` : "";
-    lines.push(`${newSet.size} 縣市${townCountStr}`);
+    const townCountStr = patch.selectedTownIds ? ` (${patch.selectedTownIds.length} ${unitLabels.itemShort})` : "";
+    lines.push(`${newSet.size} ${unitLabels.group}${townCountStr}`);
   }
   if (patch.quizStationLines) {
     const newLines = new Set(patch.quizStationLines);
@@ -1276,6 +1433,33 @@ function describeConfigDiff(patch) {
 
 function buildProposedConfigFromPatch(patch) {
   const base = getHostSyncConfig(true);
+  const curPackId = state.activeMapPackId || "tw_modern";
+  const isSwitchingPack = Boolean(patch.mapPackId && patch.mapPackId !== curPackId);
+  if (patch.mapPackId) base.mapPackId = patch.mapPackId;
+  if (isSwitchingPack) {
+    // Drop previous pack's scope IDs so target pack initializes its full scope cleanly unless patch supplies new IDs
+    delete base.selectedCounties;
+    delete base.selectedTownIds;
+    const targetPack = typeof getMapPackById === "function" ? getMapPackById(patch.mapPackId) : null;
+    const tf = targetPack && targetPack.features ? targetPack.features : null;
+    if (tf) {
+      if (!tf.supportsTransportQuiz) {
+        base.stationQuizEnabled = false;
+        base.quizStationLines = [];
+      }
+      if (!tf.supportsPoiQuiz) {
+        base.airportQuizEnabled = false;
+        base.portQuizEnabled = false;
+        base.reservoirQuizEnabled = false;
+        base.lakeQuizEnabled = false;
+        base.settlementQuizEnabled = false;
+      }
+      if (!tf.supportsTransportQuiz && !tf.supportsPoiQuiz) {
+        base.regionQuizEnabled = true;
+        base.quizTargetMode = "region";
+      }
+    }
+  }
   if (patch.quizTargetMode) base.quizTargetMode = patch.quizTargetMode;
   if (typeof patch.regionQuizEnabled === "boolean") base.regionQuizEnabled = patch.regionQuizEnabled;
   if (typeof patch.stationQuizEnabled === "boolean") base.stationQuizEnabled = patch.stationQuizEnabled;
@@ -1345,9 +1529,19 @@ function requestOrApplyConfigChange(patch, changeLabel = "比賽設定") {
   const proposedCfg = buildProposedConfigFromPatch(patch);
 
   // Apply immediately without voting; if Host in room, reset players' Ready & broadcast lightweight notice!
-  applyRemoteSyncConfig(proposedCfg, false, true);
+  const applyRes = applyRemoteSyncConfig(proposedCfg, false, true);
   if (state.isHost && state.roomCode) {
-    onHostSettingChange(changeLabel, diffSummary);
+    if (applyRes && typeof applyRes.then === "function") {
+      applyRes
+        .then((res) => {
+          if (!res || res.ok !== false) {
+            onHostSettingChange(changeLabel, diffSummary);
+          }
+        })
+        .catch(() => {});
+    } else if (!applyRes || applyRes.ok !== false) {
+      onHostSettingChange(changeLabel, diffSummary);
+    }
   }
   return true;
 }
@@ -1413,6 +1607,7 @@ function dispatchP2PMessage(msg, sourceConn = null) {
       hasPassword: Boolean(state.roomPassword),
       hostName: state.nickname || "房主",
       memberCount: getParticipantList().filter((p) => !p.disconnected).length,
+      mapPackId: state.activeMapPackId || "tw_modern",
       isBanned
     };
     if (sourceConn && sourceConn.open) {
@@ -1701,28 +1896,34 @@ function dispatchP2PMessage(msg, sourceConn = null) {
       state.players = msg.payload.players;
       Object.values(state.players).forEach((p) => { p._viewSets = null; });
     }
-    if (msg.payload?.config) {
-      applyRemoteSyncConfig(msg.payload.config, true, true);
-    }
-    if (msg.payload?.restoredSession) {
-      restoreLocalSessionProgress(msg.payload.restoredSession);
-    }
+    const finishWelcomeUI = () => {
+      if (msg.payload?.restoredSession) {
+        restoreLocalSessionProgress(msg.payload.restoredSession);
+      }
 
-    // Close URL Client Entry Modal and open the simplified Room Lobby Modal!
-    document.getElementById("modal-join-entry")?.classList.add("hidden");
-    document.getElementById("join-entry-error")?.classList.add("hidden");
-    if (!state.matchInProgress && typeof openRoomModal === "function") {
-      openRoomModal();
-    }
+      // Close URL Client Entry Modal and open the simplified Room Lobby Modal!
+      document.getElementById("modal-join-entry")?.classList.add("hidden");
+      document.getElementById("join-entry-error")?.classList.add("hidden");
+      if (!state.matchInProgress && typeof openRoomModal === "function") {
+        openRoomModal();
+      }
 
-    ensureLocalPlayerInRoster();
-    syncPrimaryOpponentFromRoster();
-    updateP2PPanelVisibility();
-    updateP2PLobbyUI();
-    updateOpponentUI();
-    refreshAllPolygonStyles();
-    updateRoadAndRailwayTileOverlays();
-    updateScoreAndProgressUI();
+      ensureLocalPlayerInRoster();
+      syncPrimaryOpponentFromRoster();
+      updateP2PPanelVisibility();
+      updateP2PLobbyUI();
+      updateOpponentUI();
+      refreshAllPolygonStyles();
+      updateRoadAndRailwayTileOverlays();
+      updateScoreAndProgressUI();
+    };
+
+    const welcomeSyncRes = msg.payload?.config ? applyRemoteSyncConfig(msg.payload.config, true, true) : null;
+    if (welcomeSyncRes && typeof welcomeSyncRes.then === "function") {
+      welcomeSyncRes.then(finishWelcomeUI, finishWelcomeUI);
+    } else {
+      finishWelcomeUI();
+    }
 
     const msgText = msg.payload?.isReconnected
       ? `🔄 已恢復你在房間 ${state.roomCode} 的連線與進度！`
@@ -2194,7 +2395,7 @@ function handleOpponentFinished(payload, senderIdFromMsg = null) {
     state.opponent.finished = true;
     state.opponent.finalStats = payload;
     state.opponent.score = payload.grandScore || payload.score || 0;
-    state.opponent.total = authCounts.grandTotal || payload.grandTotal || 368;
+    state.opponent.total = authCounts.grandTotal || payload.grandTotal || _p2pItems().length || 368;
   }
 
   if (state.isHost) {
@@ -2786,12 +2987,13 @@ function handleIncomingP2PData(payload, senderIdFromMsg = null) {
     const uCounties = Array.isArray(payload.unlockedCounties) ? payload.unlockedCounties : existing.unlockedCounties || [];
     const uStations = Array.isArray(payload.unlockedStations) ? payload.unlockedStations : existing.unlockedStations || [];
 
+    const allItems = _p2pItems();
     const verifiedScore =
       Array.isArray(payload.unlockedTowns) || Array.isArray(payload.unlockedCounties)
         ? state.difficulty === "county_only"
           ? uCounties.filter((c) => state.selectedCounties.has(c)).length
           : uTowns.filter((id) => {
-              const t = ALL_TOWNS.find((x) => x.id === id);
+              const t = allItems.find((x) => x.id === id);
               return t && (typeof isTownInScope === "function" ? isTownInScope(t) : state.selectedCounties.has(t.countyName));
             }).length
         : payload.score || 0;
@@ -3055,12 +3257,21 @@ function updateOpponentUI() {
   const compWrap = document.getElementById("p2p-macro-bars-container");
   const barsEl = document.getElementById("p2p-macro-bars");
   if (compWrap && barsEl) {
+    const features = _p2pFeatures();
+    const unitLabels = _p2pUnitLabels();
+    const isTw = _p2pIsTwModern();
+    const stationMacroKeys = new Set(["台鐵", "高鐵", "捷運", "輕軌", "纜車", "林鐵", "糖鐵"]);
+    const poiMacroKeys = new Set(["機場", "港口", "水庫", "湖泊", "傳統聚落"]);
     const mp = state.opponent.macroProgress || {};
-    const macroKeys = Object.keys(mp);
+    const macroKeys = Object.keys(mp).filter((k) => {
+      if (stationMacroKeys.has(k) && !features.supportsTransportQuiz) return false;
+      if (poiMacroKeys.has(k) && !features.supportsPoiQuiz) return false;
+      return true;
+    });
     if (!isThreePlus && hasBattleOpponent && macroKeys.length > 0) {
       compWrap.classList.remove("hidden");
       const macroLabels = {
-        "地區": "🗺️ 行政區",
+        "地區": isTw ? "🗺️ 行政區" : `🗺️ ${unitLabels.item}`,
         "台鐵": "🚆 台鐵",
         "高鐵": "🚄 高鐵",
         "捷運": "🚇 捷運",
@@ -3078,8 +3289,11 @@ function updateOpponentUI() {
         let myPct = 0;
         if (k === "地區") {
           myPct = leftTot > 0 ? Math.round((leftCur / Math.max(1, counts.regionTotal)) * 100) : 0;
+        } else if (poiMacroKeys.has(k)) {
+          const myPoi = counts.macroProgress && counts.macroProgress[k];
+          myPct = myPoi && myPoi.tot > 0 ? Math.round((myPoi.cur / myPoi.tot) * 100) : 0;
         } else {
-          const activeSt = getActiveQuizStations();
+          const activeSt = features.supportsTransportQuiz && typeof getActiveQuizStations === "function" ? getActiveQuizStations() : [];
           const myStations = activeSt.filter((s) => s.macro === k);
           const myUnlocked = myStations.filter((s) => vState.unlockedStations.has(s.key)).length;
           myPct = myStations.length > 0 ? Math.round((myUnlocked / myStations.length) * 100) : 0;
@@ -3150,92 +3364,135 @@ function startSynchronizedP2PCountdown(cfg, isHost) {
   document.getElementById("modal-join-entry")?.classList.add("hidden");
   hideRoomConfigChangeToast();
 
+  const beginCountdown = () => {
+    applySpectatorInputLock();
+
+    const isSpec = state.role === "spectator";
+    const isSoloShowcase = getActiveBattlePlayers().length <= 1 && !state.aiRivalActive;
+    const overlay = document.getElementById("p2p-countdown-overlay");
+    const badgeEl = document.getElementById("p2p-cd-badge");
+    const numEl = document.getElementById("p2p-cd-number");
+    const statusEl = document.getElementById("p2p-cd-status");
+
+    if (overlay) {
+      if (badgeEl) {
+        badgeEl.textContent = isSpec
+          ? "👁️ SPECTATOR MODE · 觀戰模式"
+          : isSoloShowcase
+          ? "🎬 SOLO SHOWCASE · 單人展演（觀戰同步）"
+          : "⚔️ MULTIPLAYER BATTLE · 即時連線對戰";
+      }
+      if (numEl) {
+        numEl.textContent = "3";
+        numEl.className = "text-9xl font-black text-white tracking-tighter";
+        numEl.style.textShadow = "0 0 60px rgba(56, 189, 248, 0.85)";
+        numEl.style.transform = "scale(1.0)";
+      }
+      if (statusEl) {
+        statusEl.textContent = isSpec ? "觀戰視角準備中，對戰即將開始！" : "全員已就緒，準備開局！";
+        statusEl.className = "text-sm font-semibold text-slate-300 tracking-wider";
+      }
+      overlay.classList.remove("hidden");
+    }
+
+    playCountdownBeep(440, 0.18);
+
+    let count = 3;
+    const interval = setInterval(() => {
+      count--;
+      if (count > 0) {
+        if (numEl) {
+          numEl.textContent = String(count);
+          numEl.style.transform = "scale(1.35)";
+          setTimeout(() => { if (numEl) numEl.style.transform = "scale(1.0)"; }, 180);
+        }
+        playCountdownBeep(440, 0.18);
+      } else if (count === 0) {
+        if (numEl) {
+          numEl.textContent = "GO!";
+          numEl.className = "text-9xl font-black text-emerald-400 tracking-tight";
+          numEl.style.textShadow = "0 0 70px rgba(52, 211, 153, 0.95)";
+          numEl.style.transform = "scale(1.45)";
+        }
+        if (statusEl) {
+          statusEl.textContent = isSpec ? "👁️ 對戰已開始，點擊排行可自由切換觀看任意選手地圖！" : "🔥 比賽開始！輸入第一個地名即刻進攻！";
+          statusEl.className = "text-base font-bold text-emerald-300 tracking-wider";
+        }
+        playCountdownBeep(880, 0.35, "triangle");
+      } else {
+        clearInterval(interval);
+        if (overlay) overlay.classList.add("hidden");
+        startTimer();
+        setFeedback(
+          isSpec
+            ? "👁️ 觀戰開始！正在即時同步觀看選手作答"
+            : isSoloShowcase
+            ? "🎬 單人展演開始！觀戰者正在即時觀看你的地圖與進度！"
+            : "⚔️ 對戰正式開始！全員同步計時，衝向 100% 吧！",
+          "tier"
+        );
+        if (typeof startAiRivalLoop === "function") {
+          startAiRivalLoop();
+        }
+        if (!isSpec) {
+          const inp = document.getElementById("answer-input");
+          if (inp) inp.focus({ preventScroll: true });
+        }
+        if (window.scrollY > 0) window.scrollTo(0, 0);
+      }
+    }, 1000);
+  };
+
   if (cfg) {
-    applyRemoteSyncConfig(cfg, true, true);
+    const syncRes = applyRemoteSyncConfig(cfg, true, true);
+    if (syncRes && typeof syncRes.then === "function") {
+      syncRes.then(beginCountdown, beginCountdown);
+      return;
+    }
   } else {
     resetGame();
   }
-  applySpectatorInputLock();
-
-  const isSpec = state.role === "spectator";
-  const isSoloShowcase = getActiveBattlePlayers().length <= 1 && !state.aiRivalActive;
-  const overlay = document.getElementById("p2p-countdown-overlay");
-  const badgeEl = document.getElementById("p2p-cd-badge");
-  const numEl = document.getElementById("p2p-cd-number");
-  const statusEl = document.getElementById("p2p-cd-status");
-
-  if (overlay) {
-    if (badgeEl) {
-      badgeEl.textContent = isSpec
-        ? "👁️ SPECTATOR MODE · 觀戰模式"
-        : isSoloShowcase
-        ? "🎬 SOLO SHOWCASE · 單人展演（觀戰同步）"
-        : "⚔️ MULTIPLAYER BATTLE · 即時連線對戰";
-    }
-    if (numEl) {
-      numEl.textContent = "3";
-      numEl.className = "text-9xl font-black text-white tracking-tighter";
-      numEl.style.textShadow = "0 0 60px rgba(56, 189, 248, 0.85)";
-      numEl.style.transform = "scale(1.0)";
-    }
-    if (statusEl) {
-      statusEl.textContent = isSpec ? "觀戰視角準備中，對戰即將開始！" : "全員已就緒，準備開局！";
-      statusEl.className = "text-sm font-semibold text-slate-300 tracking-wider";
-    }
-    overlay.classList.remove("hidden");
-  }
-
-  playCountdownBeep(440, 0.18);
-
-  let count = 3;
-  const interval = setInterval(() => {
-    count--;
-    if (count > 0) {
-      if (numEl) {
-        numEl.textContent = String(count);
-        numEl.style.transform = "scale(1.35)";
-        setTimeout(() => { if (numEl) numEl.style.transform = "scale(1.0)"; }, 180);
-      }
-      playCountdownBeep(440, 0.18);
-    } else if (count === 0) {
-      if (numEl) {
-        numEl.textContent = "GO!";
-        numEl.className = "text-9xl font-black text-emerald-400 tracking-tight";
-        numEl.style.textShadow = "0 0 70px rgba(52, 211, 153, 0.95)";
-        numEl.style.transform = "scale(1.45)";
-      }
-      if (statusEl) {
-        statusEl.textContent = isSpec ? "👁️ 對戰已開始，點擊排行可自由切換觀看任意選手地圖！" : "🔥 比賽開始！輸入第一個地名即刻進攻！";
-        statusEl.className = "text-base font-bold text-emerald-300 tracking-wider";
-      }
-      playCountdownBeep(880, 0.35, "triangle");
-    } else {
-      clearInterval(interval);
-      if (overlay) overlay.classList.add("hidden");
-      startTimer();
-      setFeedback(
-        isSpec
-          ? "👁️ 觀戰開始！正在即時同步觀看選手作答"
-          : isSoloShowcase
-          ? "🎬 單人展演開始！觀戰者正在即時觀看你的地圖與進度！"
-          : "⚔️ 對戰正式開始！全員同步計時，衝向 100% 吧！",
-        "tier"
-      );
-      if (typeof startAiRivalLoop === "function") {
-        startAiRivalLoop();
-      }
-      if (!isSpec) {
-        const inp = document.getElementById("answer-input");
-        if (inp) inp.focus({ preventScroll: true });
-      }
-      if (window.scrollY > 0) window.scrollTo(0, 0);
-    }
-  }, 1000);
+  beginCountdown();
 }
 
 function applyRemoteSyncConfig(cfg, fromCountdown = false, isAuthorized = false) {
-  if (!cfg) return;
-  if (!isAuthorized && !canLocalModifyGameConfig() && state.isHost) return;
+  if (!cfg) return { ok: false, reason: "empty_config" };
+  if (!isAuthorized && !canLocalModifyGameConfig() && state.isHost) {
+    return { ok: false, reason: "unauthorized" };
+  }
+
+  const curPackId = state.activeMapPackId || "tw_modern";
+  if (
+    cfg.mapPackId &&
+    cfg.mapPackId !== curPackId &&
+    typeof switchActiveMapPack === "function" &&
+    typeof getMapPackById === "function" &&
+    getMapPackById(cfg.mapPackId)
+  ) {
+    return Promise.resolve(
+      switchActiveMapPack(cfg.mapPackId, {
+        skipReset: true,
+        skipScopeReset: false,
+        flyToFullView: true
+      })
+    ).then((res) => {
+      if (!res || !res.ok) return res || { ok: false, reason: "switch_failed" };
+      return _applyRemoteSyncConfigAfterPack(cfg, fromCountdown);
+    });
+  }
+
+  return _applyRemoteSyncConfigAfterPack(cfg, fromCountdown);
+}
+
+function _applyRemoteSyncConfigAfterPack(cfg, fromCountdown = false) {
+  const allItems = _p2pItems();
+  const allGroups = _p2pGroups();
+  const validItemIdSet = new Set(allItems.map((t) => t.id));
+  const validGroupNameSet = new Set(allGroups.map((g) => g.name));
+  const features = _p2pFeatures();
+  const unitLabels = _p2pUnitLabels();
+  const isTw = _p2pIsTwModern();
+  const pack = _p2pPack();
 
   const wasReadyBeforeConfig = Boolean(
     state.isReady || state._readyJustClearedByHost || state.players?.[state.localInstanceId]?.isReady
@@ -3268,12 +3525,22 @@ function applyRemoteSyncConfig(cfg, fromCountdown = false, isAuthorized = false)
     if (typeof updateTargetBannerUI === "function") updateTargetBannerUI();
   }
   if (Array.isArray(cfg.selectedCounties)) {
-    state.selectedCounties = new Set(cfg.selectedCounties);
+    const filteredGroups = cfg.selectedCounties.filter((n) => validGroupNameSet.has(n));
+    if (filteredGroups.length > 0 || cfg.selectedCounties.length === 0) {
+      state.selectedCounties = new Set(filteredGroups);
+    } else {
+      state.selectedCounties = new Set(validGroupNameSet);
+    }
   }
   if (Array.isArray(cfg.selectedTownIds)) {
-    state.selectedTownIds = new Set(cfg.selectedTownIds);
+    const filteredItems = cfg.selectedTownIds.filter((id) => validItemIdSet.has(id));
+    if (filteredItems.length > 0 || cfg.selectedTownIds.length === 0) {
+      state.selectedTownIds = new Set(filteredItems);
+    } else {
+      state.selectedTownIds = new Set(validItemIdSet);
+    }
   } else if (Array.isArray(cfg.selectedCounties)) {
-    state.selectedTownIds = new Set(ALL_TOWNS.filter((t) => state.selectedCounties.has(t.countyName)).map((t) => t.id));
+    state.selectedTownIds = new Set(allItems.filter((t) => state.selectedCounties.has(t.countyName)).map((t) => t.id));
   }
   if (Array.isArray(cfg.quizStationLines)) {
     state.quizStationLines = new Set(cfg.quizStationLines);
@@ -3284,19 +3551,29 @@ function applyRemoteSyncConfig(cfg, fromCountdown = false, isAuthorized = false)
     state.regionQuizEnabled = cfg.quizTargetMode !== "station";
   }
   if (typeof cfg.airportQuizEnabled === "boolean") {
-    state.airportQuizEnabled = cfg.airportQuizEnabled;
+    state.airportQuizEnabled = features.supportsPoiQuiz && cfg.airportQuizEnabled;
+  } else if (!features.supportsPoiQuiz) {
+    state.airportQuizEnabled = false;
   }
   if (typeof cfg.portQuizEnabled === "boolean") {
-    state.portQuizEnabled = cfg.portQuizEnabled;
+    state.portQuizEnabled = features.supportsPoiQuiz && cfg.portQuizEnabled;
+  } else if (!features.supportsPoiQuiz) {
+    state.portQuizEnabled = false;
   }
   if (typeof cfg.reservoirQuizEnabled === "boolean") {
-    state.reservoirQuizEnabled = cfg.reservoirQuizEnabled;
+    state.reservoirQuizEnabled = features.supportsPoiQuiz && cfg.reservoirQuizEnabled;
+  } else if (!features.supportsPoiQuiz) {
+    state.reservoirQuizEnabled = false;
   }
   if (typeof cfg.lakeQuizEnabled === "boolean") {
-    state.lakeQuizEnabled = cfg.lakeQuizEnabled;
+    state.lakeQuizEnabled = features.supportsPoiQuiz && cfg.lakeQuizEnabled;
+  } else if (!features.supportsPoiQuiz) {
+    state.lakeQuizEnabled = false;
   }
   if (typeof cfg.settlementQuizEnabled === "boolean") {
-    state.settlementQuizEnabled = cfg.settlementQuizEnabled;
+    state.settlementQuizEnabled = features.supportsPoiQuiz && cfg.settlementQuizEnabled;
+  } else if (!features.supportsPoiQuiz) {
+    state.settlementQuizEnabled = false;
   }
   if (Array.isArray(cfg.airportSubTypes)) {
     state.airportSubTypes = new Set(cfg.airportSubTypes);
@@ -3314,13 +3591,34 @@ function applyRemoteSyncConfig(cfg, fromCountdown = false, isAuthorized = false)
     state.settlementSubTypes = new Set(cfg.settlementSubTypes);
   }
 
-  if (typeof cfg.stationQuizEnabled === "boolean") {
+  if (!features.supportsTransportQuiz) {
+    state.stationQuizEnabled = false;
+    state.quizStationLines.clear();
+  } else if (typeof cfg.stationQuizEnabled === "boolean") {
     state.stationQuizEnabled = cfg.stationQuizEnabled && state.quizStationLines.size > 0;
   } else {
     state.stationQuizEnabled = state.quizTargetMode !== "region" && state.quizStationLines.size > 0;
   }
   if (!state.stationQuizEnabled) {
     state.quizStationLines.clear();
+  }
+  const hasAnyActiveTopic =
+    Boolean(state.regionQuizEnabled) ||
+    Boolean(features.supportsTransportQuiz && state.stationQuizEnabled && state.quizStationLines.size > 0) ||
+    Boolean(
+      features.supportsPoiQuiz &&
+        (state.airportQuizEnabled ||
+          state.portQuizEnabled ||
+          state.reservoirQuizEnabled ||
+          state.lakeQuizEnabled ||
+          state.settlementQuizEnabled)
+    );
+  if (!hasAnyActiveTopic) {
+    state.regionQuizEnabled = true;
+    if (state.selectedTownIds.size === 0 && validItemIdSet.size > 0) {
+      state.selectedCounties = new Set(validGroupNameSet);
+      state.selectedTownIds = new Set(validItemIdSet);
+    }
   }
   if (typeof syncLegacyQuizTargetMode === "function") {
     syncLegacyQuizTargetMode();
@@ -3339,8 +3637,14 @@ function applyRemoteSyncConfig(cfg, fromCountdown = false, isAuthorized = false)
     state.transportMode = "off";
   }
 
-  if (cfg.difficulty && ["casual", "county_only", "hard_suffix", "hard_full", "master_hierarchy"].includes(cfg.difficulty)) {
+  const supportedDiffs =
+    Array.isArray(features.supportedDifficulties) && features.supportedDifficulties.length > 0
+      ? features.supportedDifficulties
+      : ["casual", "county_only", "hard_suffix", "hard_full", "master_hierarchy"];
+  if (cfg.difficulty && supportedDiffs.includes(cfg.difficulty)) {
     state.difficulty = cfg.difficulty;
+  } else if (!supportedDiffs.includes(state.difficulty)) {
+    state.difficulty = supportedDiffs[0];
   }
   const prevPlayMode = state.playMode;
   if (cfg.playMode) {
@@ -3353,9 +3657,7 @@ function applyRemoteSyncConfig(cfg, fromCountdown = false, isAuthorized = false)
     state.satelliteLockViewport = cfg.satelliteLockViewport;
   }
   if (prevPlayMode === "satellite_quiz" && state.playMode !== "satellite_quiz") {
-    if (typeof unlockMapViewportToTaiwan === "function") {
-      unlockMapViewportToTaiwan({ restoreLayers: true });
-    }
+    _p2pUnlockViewport({ restoreLayers: true });
   }
   if (cfg.timerMode) state.timerMode = cfg.timerMode;
   if (cfg.countdownTotalSec) state.countdownTotalSec = cfg.countdownTotalSec;
@@ -3368,17 +3670,20 @@ function applyRemoteSyncConfig(cfg, fromCountdown = false, isAuthorized = false)
   updateModeBadgeText();
 
   const totalTowns = getScopeTowns().length;
-  const activeSt = getActiveQuizStations();
+  const activeSt = features.supportsTransportQuiz && typeof getActiveQuizStations === "function" ? getActiveQuizStations() : [];
   let summaryLabel = "";
   if (state.selectedCounties.size === 0 && activeSt.length > 0) {
     summaryLabel = `純車站 (${activeSt.length}站)`;
   } else {
+    const fullLabel = isTw
+      ? `全台 ${allItems.length} 區`
+      : (unitLabels.fullScopeLabel || `${(pack && pack.shortLabel) || "全境"} (${allItems.length}${unitLabels.itemShort})`);
     const adminStr =
-      totalTowns === 368
-        ? "全台 368 區"
-        : state.selectedCounties.size === 1
-        ? `${Array.from(state.selectedCounties)[0]} (${totalTowns}區)`
-        : `${totalTowns} 區`;
+      totalTowns === allItems.length && allItems.length > 0
+        ? fullLabel
+        : !_p2pIsSingleLayer() && state.selectedCounties.size === 1
+        ? `${Array.from(state.selectedCounties)[0]} (${totalTowns}${unitLabels.itemShort})`
+        : `${totalTowns} ${unitLabels.itemShort}`;
     summaryLabel = activeSt.length > 0 ? `${adminStr} + ${activeSt.length}站` : adminStr;
   }
   const summaryEl = document.getElementById("scope-summary-label");
@@ -3427,6 +3732,7 @@ function applyRemoteSyncConfig(cfg, fromCountdown = false, isAuthorized = false)
   }
 
   updateP2PLobbyUI();
+  return { ok: true };
 }
 
 function broadcastP2PConfig(isSettingChange = false, changeLabel = "", changeDetail = "") {
@@ -3480,6 +3786,7 @@ function toggleAiRivalSimulation() {
   }
 
   const scopeTowns = getScopeTowns();
+  const features = _p2pFeatures();
   state.isHost = true;
   state.role = "host";
   state.aiRivalActive = true;
@@ -3490,7 +3797,7 @@ function toggleAiRivalSimulation() {
   state.opponent.score = 0;
   state.opponent.total = state.difficulty === "county_only" ? getScopeCounties().length : scopeTowns.length;
   state.opponent.stationScore = 0;
-  state.opponent.stationTotal = getActiveQuizStations().length;
+  state.opponent.stationTotal = features.supportsTransportQuiz && typeof getActiveQuizStations === "function" ? getActiveQuizStations().length : 0;
   state.opponent.macroProgress = { "地區": { cur: 0, tot: state.opponent.total } };
   state.players["ai_rival"] = {
     id: "ai_rival",
@@ -3546,7 +3853,7 @@ function startAiRivalLoop() {
       state.opponent.macroProgress["地區"] = { cur: state.opponent.score, tot: state.opponent.total };
     }
 
-    const activeSt = getActiveQuizStations();
+    const activeSt = _p2pFeatures().supportsTransportQuiz && typeof getActiveQuizStations === "function" ? getActiveQuizStations() : [];
     if (activeSt.length > 0 && state.opponent.stationScore < state.opponent.stationTotal && Math.random() > 0.4) {
       state.opponent.stationScore = (state.opponent.stationScore || 0) + 1;
       const randomSt = activeSt[Math.floor(Math.random() * activeSt.length)];

@@ -632,6 +632,9 @@ function buildStationsFromLineSet(activeSet, applyRegionFilter = false) {
 }
 
 function getActiveQuizStations() {
+  if (typeof getActivePackFeatures === "function" && !getActivePackFeatures().supportsTransportQuiz) {
+    return [];
+  }
   if (
     state.quizTargetMode === "region" ||
     !state.stationQuizEnabled ||
@@ -644,6 +647,9 @@ function getActiveQuizStations() {
 }
 
 function getVisualOverlayStations() {
+  if (typeof getActivePackFeatures === "function" && !getActivePackFeatures().supportsTransportQuiz) {
+    return [];
+  }
   if (state.transportMode === "off") return [];
   const isStationQuizActive =
     state.quizTargetMode !== "region" &&
@@ -815,6 +821,14 @@ function updateRoadAndRailwayTileOverlays() {
   // Safety fallback for legacy stations_only mode
   if (state.transportMode === "stations_only" && !state.enableLegacyStationOnlyMode && effectiveRailRule !== "ban_rail") {
     state.transportMode = "rail_only";
+  }
+
+  const supportsTransport =
+    typeof getActivePackFeatures === "function" ? Boolean(getActivePackFeatures().supportsTransportQuiz) : true;
+  if (!supportsTransport) {
+    state.transportMode = "off";
+    state.showRailOverlay = false;
+    return;
   }
 
   const mode = state.transportMode; // 'off' | 'rail_only' | 'lines_and_stations' | 'stations_only'

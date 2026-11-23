@@ -138,7 +138,17 @@ if (typeof window.L === "undefined") {
     tileLayer: () => noopLayer(),
     geoJSON: (feat) => noopLayer(extractGeoJsonBounds(feat)),
     polyline: () => noopLayer(),
-    circleMarker: () => noopLayer(),
+    circleMarker: (latlng, opts = {}) => {
+      const layer = noopLayer();
+      layer._latlng = toLatLngObj(latlng) || { lat: 0, lng: 0 };
+      layer.options = { ...opts };
+      layer.setStyle = (s) => {
+        Object.assign(layer.options, s || {});
+        return layer;
+      };
+      layer.getLatLng = () => layer._latlng;
+      return layer;
+    },
     marker: (latlng, opts = {}) => {
       let curLatLng = toLatLngObj(latlng) || { lat: 23.75, lng: 120.95 };
       let attachedMap = null;
@@ -201,11 +211,21 @@ if (typeof window.L === "undefined") {
         if (span <= 0.5) return 11;
         if (span <= 1.0) return 10;
         if (span <= 2.0) return 9;
-        return 8;
+        if (span <= 5.0) return 8;
+        if (span <= 12.0) return 6;
+        if (span <= 30.0) return 5;
+        if (span <= 80.0) return 4;
+        return 2;
       },
       getZoomScale: () => 1,
       project: () => ({ x: 480, y: 300 }),
       latLngToContainerPoint: () => ({ x: 480, y: 300 }),
+      setView(c, z) {
+        const pt = toLatLngObj(c);
+        if (pt) this._center = pt;
+        if (typeof z === "number") this._zoom = z;
+        return this;
+      },
       fitBounds(b, fitOpts = {}) {
         if (b && typeof b.isValid === "function" && b.isValid()) {
           this._center = b.getCenter();
@@ -240,10 +260,70 @@ let activeTileLayers = [];
 let railTileLayers = [];
 let geoLayerGroup = null;
 let countyBorderLayerGroup = null;
+let microstateLayerGroup = null;
 let rafMovePending = false;
 
 const TAIWAN_MAX_BOUNDS = L.latLngBounds([20.2, 116.5], [27.4, 123.8]);
 const TAIWAN_FULL_VIEW_BOUNDS = L.latLngBounds([21.82, 119.25], [25.38, 122.08]);
+
+const _packTopoDataCache = new Map();
+const _itemLayersById = new Map();
+
+function getCachedPackTopoData(packId) {
+  return _packTopoDataCache.get(packId) || null;
+}
+
+function setCachedPackTopoData(packId, data) {
+  if (packId && data) _packTopoDataCache.set(packId, data);
+}
+
+function _mapActiveItems() {
+  return typeof getActiveItems === "function" ? getActiveItems() : ALL_TOWNS;
+}
+
+function _mapActiveGroups() {
+  return typeof getActiveGroups === "function" ? getActiveGroups() : TAIWAN_ADMIN_DATA;
+}
+
+function _mapActiveGroupByName(name) {
+  return typeof getActiveGroupByName === "function"
+    ? getActiveGroupByName(name)
+    : (typeof COUNTY_BY_NAME !== "undefined" ? COUNTY_BY_NAME[name] || null : null);
+}
+
+function _mapActiveGroupColor(name) {
+  return typeof getActiveGroupColor === "function"
+    ? getActiveGroupColor(name)
+    : (typeof COUNTY_COLORS !== "undefined" && COUNTY_COLORS[name] ? COUNTY_COLORS[name] : "#38bdf8");
+}
+
+function _mapActivePackView() {
+  return typeof getActivePackMapView === "function"
+    ? getActivePackMapView()
+    : {
+        center: [23.75, 120.95],
+        defaultZoom: 8,
+        minZoom: 7,
+        maxZoom: 18,
+        maxBounds: [[20.2, 116.5], [27.4, 123.8]],
+        fullViewBounds: [[21.82, 119.25], [25.38, 122.08]],
+        targetMaxZoom: 12,
+        mainPolygonDistThresholdDeg: 0.35,
+        groupMainDistThresholdDeg: 0.45,
+        pureIslandGroups: ["澎湖縣", "金門縣", "連江縣"],
+        offshoreExclusionSet: typeof TAIWAN_MAINLAND_OFFSHORE_SET !== "undefined" ? TAIWAN_MAINLAND_OFFSHORE_SET : null,
+        worldCopyJump: false
+      };
+}
+
+function _toLeafletBounds(rawBounds) {
+  if (!rawBounds) return null;
+  if (typeof rawBounds.isValid === "function") return rawBounds;
+  if (Array.isArray(rawBounds) && rawBounds.length >= 2) {
+    return L.latLngBounds(rawBounds[0], rawBounds[1]);
+  }
+  return null;
+}
 
 const GIS_TILES = {
   terrain_relief: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}",
@@ -305,14 +385,17 @@ function applyMapZoomVisualVars(zoom) {
 function initMap() {
   // Use HTML5 Canvas Renderer instead of 368 separate SVG DOM nodes for 60FPS performance!
   canvasRenderer = L.canvas({ padding: 0.4 });
+  const mv = _mapActivePackView();
+  const initMaxBounds = _toLeafletBounds(mv.maxBounds);
 
   map = L.map("leaflet-map", {
-    center: [23.75, 120.95],
-    zoom: 8,
-    minZoom: 7,
-    maxZoom: 18,
-    maxBounds: TAIWAN_MAX_BOUNDS,
-    maxBoundsViscosity: 0.9,
+    center: Array.isArray(mv.center) ? mv.center : [23.75, 120.95],
+    zoom: Number.isFinite(mv.defaultZoom) ? mv.defaultZoom : 8,
+    minZoom: Number.isFinite(mv.minZoom) ? mv.minZoom : 7,
+    maxZoom: Number.isFinite(mv.maxZoom) ? mv.maxZoom : 18,
+    maxBounds: initMaxBounds || undefined,
+    maxBoundsViscosity: initMaxBounds ? 0.9 : 0.0,
+    worldCopyJump: Boolean(mv.worldCopyJump),
     preferCanvas: true,
     renderer: canvasRenderer,
     zoomControl: false,
@@ -322,9 +405,15 @@ function initMap() {
   applyMapZoomVisualVars(map.getZoom());
   geoLayerGroup = L.layerGroup().addTo(map);
   countyBorderLayerGroup = L.layerGroup().addTo(map);
+  microstateLayerGroup = L.layerGroup().addTo(map);
 
   updateRoadAndRailwayTileOverlays();
-  loadRealTaiwanTopoJSON();
+  const activePack = typeof getActiveMapPack === "function" ? getActiveMapPack() : null;
+  if (activePack && activePack.id !== "tw_modern" && typeof activePack.loadTopoData === "function") {
+    Promise.resolve(activePack.loadTopoData()).then((td) => rebuildMapLayers(td));
+  } else {
+    loadRealTaiwanTopoJSON();
+  }
 
   const svgEl = document.getElementById("leader-overlay-svg");
   const domEl = document.getElementById("labels-overlay-dom");
@@ -528,32 +617,129 @@ function initMap() {
   setTimeout(syncMobileKeyboardViewport, 60);
 }
 
-function resetToFullTaiwanView() {
+function applyMapPackViewport(pack, options = {}) {
   if (!map) return;
+  const mv = (pack && pack.mapView) || _mapActivePackView();
+  const minZ = Number.isFinite(mv.minZoom) ? mv.minZoom : 2;
+  const maxZ = Number.isFinite(mv.maxZoom) ? mv.maxZoom : 18;
+  const maxB = _toLeafletBounds(mv.maxBounds);
+  const fullB = _toLeafletBounds(mv.fullViewBounds);
+
+  if (typeof map.setMinZoom === "function") map.setMinZoom(minZ);
+  if (typeof map.setMaxZoom === "function") map.setMaxZoom(maxZ);
+  if (typeof map.setMaxBounds === "function") {
+    map.setMaxBounds(maxB || null);
+  }
+  if (map.options) {
+    map.options.maxBoundsViscosity = maxB ? 0.9 : 0.0;
+    map.options.worldCopyJump = Boolean(mv.worldCopyJump);
+  }
+
+  state.satelliteViewportLocked = false;
+  applyMapZoomVisualVars._lastMetricsKey = null;
+
+  if (options.fly !== false) {
+    if (fullB && fullB.isValid()) {
+      if (typeof map.flyToBounds === "function") {
+        map.flyToBounds(fullB, { padding: [20, 20], duration: 0.45 });
+      } else if (typeof map.fitBounds === "function") {
+        map.fitBounds(fullB, { padding: [20, 20] });
+      }
+    } else if (Array.isArray(mv.center)) {
+      if (typeof map.setView === "function") {
+        map.setView(mv.center, Number.isFinite(mv.defaultZoom) ? mv.defaultZoom : 8);
+      } else if (typeof map.flyTo === "function") {
+        map.flyTo(mv.center, Number.isFinite(mv.defaultZoom) ? mv.defaultZoom : 8, { duration: 0.45 });
+      }
+    }
+  }
+  if (typeof map.getZoom === "function") {
+    applyMapZoomVisualVars(map.getZoom());
+  }
+}
+
+function clearActiveMapLayers(prevPack = null) {
+  if (geoLayerGroup && typeof geoLayerGroup.clearLayers === "function") {
+    geoLayerGroup.clearLayers();
+  }
+  if (countyBorderLayerGroup && typeof countyBorderLayerGroup.clearLayers === "function") {
+    countyBorderLayerGroup.clearLayers();
+  }
+  if (microstateLayerGroup && typeof microstateLayerGroup.clearLayers === "function") {
+    microstateLayerGroup.clearLayers();
+  }
+  _itemLayersById.clear();
+  clearSatelliteTargetMarker();
+
+  const items = prevPack && typeof prevPack.getItems === "function" ? prevPack.getItems() : _mapActiveItems();
+  const groups = prevPack && typeof prevPack.getGroups === "function" ? prevPack.getGroups() : _mapActiveGroups();
+  if (Array.isArray(items)) {
+    items.forEach((t) => {
+      t.layers = [];
+    });
+  }
+  if (Array.isArray(groups)) {
+    groups.forEach((g) => {
+      g.bounds = null;
+      g.mainBounds = null;
+      g.mainPoint = null;
+    });
+  }
+  if (typeof document !== "undefined") {
+    const svgEl = document.getElementById("leader-overlay-svg");
+    const domEl = document.getElementById("labels-overlay-dom");
+    if (svgEl && typeof svgEl.replaceChildren === "function") svgEl.replaceChildren();
+    if (domEl && typeof domEl.replaceChildren === "function") domEl.replaceChildren();
+  }
+}
+
+function resetToFullPackView() {
+  if (!map) return;
+  const pack = typeof getActiveMapPack === "function" ? getActiveMapPack() : null;
   if (state.satelliteViewportLocked && state.role !== "spectator") {
     if (typeof setFeedback === "function") {
-      setFeedback("🔒 衛星視野鎖定中，無法拉遠檢視全台灣！", "warn");
+      const label = pack && pack.id !== "tw_modern" ? "全圖" : "全台灣";
+      setFeedback(`🔒 衛星視野鎖定中，無法拉遠檢視${label}！`, "warn");
     }
     return;
   }
-  map.flyToBounds(TAIWAN_FULL_VIEW_BOUNDS, { padding: [20, 20], duration: 0.55 });
+  const mv = _mapActivePackView();
+  const fullB =
+    _toLeafletBounds(mv.fullViewBounds) ||
+    (!pack || pack.id === "tw_modern" ? TAIWAN_FULL_VIEW_BOUNDS : null);
+  if (fullB && fullB.isValid()) {
+    map.flyToBounds(fullB, { padding: [20, 20], duration: 0.55 });
+  } else if (Array.isArray(mv.center)) {
+    map.flyTo(mv.center, Number.isFinite(mv.defaultZoom) ? mv.defaultZoom : 8, { duration: 0.55 });
+  }
+}
+
+function resetToFullTaiwanView() {
+  return resetToFullPackView();
 }
 
 function zoomToCountyCenter(countyName) {
-  const c = COUNTY_BY_NAME[countyName];
+  const c = _mapActiveGroupByName(countyName);
   if (!c || !map) return;
+  const mv = _mapActivePackView();
+  const maxZ = Number.isFinite(mv.targetMaxZoom) ? mv.targetMaxZoom : 12;
+  const fallbackZ = Number.isFinite(mv.groupFocusZoom) ? mv.groupFocusZoom : 11;
   const targetB = (c.mainBounds && typeof c.mainBounds.isValid === "function" && c.mainBounds.isValid())
     ? c.mainBounds
     : c.bounds;
   if (targetB && targetB.isValid()) {
-    map.flyToBounds(targetB, { padding: [45, 45], maxZoom: 12, duration: 0.55 });
-  } else {
-    map.flyTo([c.lat, c.lng], 11, { duration: 0.55 });
+    map.flyToBounds(targetB, { padding: [45, 45], maxZoom: maxZ, duration: 0.55 });
+  } else if (Number.isFinite(c.lat) && Number.isFinite(c.lng)) {
+    map.flyTo([c.lat, c.lng], fallbackZ, { duration: 0.55 });
   }
 }
 
 function computeMainPolygonBounds(geojsonFeature, options = {}) {
-  const distThresholdDeg = typeof options.distThresholdDeg === "number" ? options.distThresholdDeg : 0.35;
+  const mv = _mapActivePackView();
+  const distThresholdDeg =
+    typeof options.distThresholdDeg === "number"
+      ? options.distThresholdDeg
+      : (Number.isFinite(mv.mainPolygonDistThresholdDeg) ? mv.mainPolygonDistThresholdDeg : 0.35);
   const geom = geojsonFeature && geojsonFeature.type === "Feature" ? geojsonFeature.geometry : geojsonFeature;
   if (!geom || !geom.coordinates) return L.latLngBounds();
 
@@ -636,11 +822,16 @@ function computeMainPolygonBounds(geojsonFeature, options = {}) {
 }
 
 function computeCountyMainBounds(countyName, townList = null, options = {}) {
-  const distThresholdDeg = typeof options.distThresholdDeg === "number" ? options.distThresholdDeg : 0.45;
-  const isPureIslandCounty = countyName === "澎湖縣" || countyName === "金門縣" || countyName === "連江縣";
+  const mv = _mapActivePackView();
+  const distThresholdDeg =
+    typeof options.distThresholdDeg === "number"
+      ? options.distThresholdDeg
+      : (Number.isFinite(mv.groupMainDistThresholdDeg) ? mv.groupMainDistThresholdDeg : 0.45);
+  const pureIslands = Array.isArray(mv.pureIslandGroups) ? mv.pureIslandGroups : ["澎湖縣", "金門縣", "連江縣"];
+  const isPureIslandCounty = pureIslands.includes(countyName);
   const allCountyTowns = Array.isArray(townList)
     ? townList
-    : ALL_TOWNS.filter((t) => t.countyName === countyName);
+    : _mapActiveItems().filter((t) => t.countyName === countyName);
 
   const townsWithBounds = allCountyTowns.filter((t) => {
     const b = (t.mainBounds && typeof t.mainBounds.isValid === "function" && t.mainBounds.isValid())
@@ -651,8 +842,12 @@ function computeCountyMainBounds(countyName, townList = null, options = {}) {
   if (townsWithBounds.length === 0) return null;
 
   let candidates = townsWithBounds;
-  if (!isPureIslandCounty && typeof TAIWAN_MAINLAND_OFFSHORE_SET !== "undefined") {
-    const mainlandOnly = townsWithBounds.filter((t) => !TAIWAN_MAINLAND_OFFSHORE_SET.has(t.fullCountyTown));
+  const offshoreSet =
+    mv.offshoreExclusionSet !== undefined
+      ? mv.offshoreExclusionSet
+      : (typeof TAIWAN_MAINLAND_OFFSHORE_SET !== "undefined" ? TAIWAN_MAINLAND_OFFSHORE_SET : null);
+  if (!isPureIslandCounty && offshoreSet && typeof offshoreSet.has === "function") {
+    const mainlandOnly = townsWithBounds.filter((t) => !offshoreSet.has(t.fullCountyTown));
     if (mainlandOnly.length > 0) {
       candidates = mainlandOnly;
     }
@@ -830,10 +1025,12 @@ function computeMainPolygonPoint(geojsonFeature, _options = {}) {
 }
 
 function computeCountyMainPoint(countyName, townList = null) {
-  const isPureIslandCounty = countyName === "澎湖縣" || countyName === "金門縣" || countyName === "連江縣";
+  const mv = _mapActivePackView();
+  const pureIslands = Array.isArray(mv.pureIslandGroups) ? mv.pureIslandGroups : ["澎湖縣", "金門縣", "連江縣"];
+  const isPureIslandCounty = pureIslands.includes(countyName);
   const allCountyTowns = Array.isArray(townList)
     ? townList
-    : ALL_TOWNS.filter((t) => t.countyName === countyName);
+    : _mapActiveItems().filter((t) => t.countyName === countyName);
 
   const townsWithGeo = allCountyTowns.filter((t) => {
     if (t.mainPoint && Number.isFinite(t.mainPoint.lat) && Number.isFinite(t.mainPoint.lng)) return true;
@@ -844,7 +1041,7 @@ function computeCountyMainPoint(countyName, townList = null) {
   });
 
   if (townsWithGeo.length === 0) {
-    const cObj = typeof COUNTY_BY_NAME !== "undefined" ? COUNTY_BY_NAME[countyName] : null;
+    const cObj = _mapActiveGroupByName(countyName);
     if (cObj && Number.isFinite(cObj.lat) && Number.isFinite(cObj.lng)) {
       return { lat: cObj.lat, lng: cObj.lng };
     }
@@ -852,20 +1049,25 @@ function computeCountyMainPoint(countyName, townList = null) {
   }
 
   let candidates = townsWithGeo;
-  if (!isPureIslandCounty && typeof TAIWAN_MAINLAND_OFFSHORE_SET !== "undefined") {
-    const mainlandOnly = townsWithGeo.filter((t) => !TAIWAN_MAINLAND_OFFSHORE_SET.has(t.fullCountyTown));
+  const offshoreSet =
+    mv.offshoreExclusionSet !== undefined
+      ? mv.offshoreExclusionSet
+      : (typeof TAIWAN_MAINLAND_OFFSHORE_SET !== "undefined" ? TAIWAN_MAINLAND_OFFSHORE_SET : null);
+  if (!isPureIslandCounty && offshoreSet && typeof offshoreSet.has === "function") {
+    const mainlandOnly = townsWithGeo.filter((t) => !offshoreSet.has(t.fullCountyTown));
     if (mainlandOnly.length > 0) {
       candidates = mainlandOnly;
     }
   }
 
-  const cObj = typeof COUNTY_BY_NAME !== "undefined" ? COUNTY_BY_NAME[countyName] : null;
+  const cObj = _mapActiveGroupByName(countyName);
   const cBounds = (cObj && cObj.mainBounds && typeof cObj.mainBounds.isValid === "function" && cObj.mainBounds.isValid())
     ? cObj.mainBounds
     : computeCountyMainBounds(countyName, candidates);
+  const fallbackCenter = Array.isArray(mv.center) ? { lat: mv.center[0], lng: mv.center[1] } : { lat: 23.75, lng: 120.95 };
   const targetCenter = (cBounds && typeof cBounds.getCenter === "function")
     ? cBounds.getCenter()
-    : { lat: cObj?.lat || 23.75, lng: cObj?.lng || 120.95 };
+    : { lat: cObj?.lat || fallbackCenter.lat, lng: cObj?.lng || fallbackCenter.lng };
 
   let bestPt = null;
   let bestDist = Infinity;
@@ -982,12 +1184,16 @@ function lockMapViewportToBounds(bounds, options = {}) {
     map.setMaxBounds(padded);
   }
 
+  const mv = _mapActivePackView();
+  const packMinFloor = Number.isFinite(mv.minZoom) ? Math.max(2, mv.minZoom) : 7;
   const maxFitZoom = typeof options.maxFitZoom === "number"
     ? options.maxFitZoom
-    : (state.difficulty === "county_only" ? 10 : 12);
+    : (state.difficulty === "county_only"
+        ? Math.min(10, Number.isFinite(mv.targetMaxZoom) ? mv.targetMaxZoom : 10)
+        : (Number.isFinite(mv.targetMaxZoom) ? mv.targetMaxZoom : 12));
   let fittedZoom = typeof map.getZoom === "function" && Number.isFinite(map.getZoom())
     ? Math.floor(map.getZoom())
-    : 10;
+    : (Number.isFinite(mv.defaultZoom) ? mv.defaultZoom : 10);
   if (typeof options.maxFitZoom !== "number" && typeof map.getBoundsZoom === "function") {
     try {
       const padPt = typeof L !== "undefined" && typeof L.point === "function" ? L.point(32, 32) : [32, 32];
@@ -998,7 +1204,8 @@ function lockMapViewportToBounds(bounds, options = {}) {
     } catch (_) {}
   }
   const minCap = state.difficulty === "county_only" ? 11 : 12;
-  const computedMinZoom = Math.max(8, Math.min(minCap, fittedZoom));
+  const lockMinFloor = packMinFloor >= 7 ? 8 : packMinFloor;
+  const computedMinZoom = Math.max(lockMinFloor, Math.min(minCap, fittedZoom));
   const targetMinZoom = typeof options.minZoom === "number" ? options.minZoom : computedMinZoom;
   if (typeof map.setMinZoom === "function") {
     map.setMinZoom(targetMinZoom);
@@ -1015,17 +1222,21 @@ function lockMapViewportToBounds(bounds, options = {}) {
   return true;
 }
 
-function unlockMapViewportToTaiwan(options = {}) {
+function unlockMapViewportToPack(options = {}) {
   const restoreLayers = options.restoreLayers !== false;
+  const mv = _mapActivePackView();
+  const maxB = _toLeafletBounds(mv.maxBounds);
+  const minZ = Number.isFinite(mv.minZoom) ? mv.minZoom : 7;
+  const maxZ = Number.isFinite(mv.maxZoom) ? mv.maxZoom : 18;
   if (map) {
     if (typeof map.setMaxBounds === "function") {
-      map.setMaxBounds(TAIWAN_MAX_BOUNDS);
+      map.setMaxBounds(maxB || null);
     }
     if (typeof map.setMinZoom === "function") {
-      map.setMinZoom(7);
+      map.setMinZoom(minZ);
     }
     if (typeof map.setMaxZoom === "function") {
-      map.setMaxZoom(18);
+      map.setMaxZoom(maxZ);
     }
   }
   state.satelliteViewportLocked = false;
@@ -1058,6 +1269,10 @@ function unlockMapViewportToTaiwan(options = {}) {
     }
   }
   return true;
+}
+
+function unlockMapViewportToTaiwan(options = {}) {
+  return unlockMapViewportToPack(options);
 }
 
 // =========================================================================
@@ -1146,7 +1361,15 @@ function setMapBaseLayer(layerKey, forceBypassLock = false) {
   refreshAllPolygonStyles();
 }
 
-async function loadRealTaiwanTopoJSON() {
+async function loadRealTaiwanTopoJSON(options = {}) {
+  const skipRebuild = Boolean(options && options.skipRebuild);
+  const cached = getCachedPackTopoData("tw_modern");
+  if (cached) {
+    if (!skipRebuild && (!state.activeMapPackId || state.activeMapPackId === "tw_modern")) {
+      rebuildMapLayers(cached);
+    }
+    return cached;
+  }
   const urls = [
     "https://cdn.jsdelivr.net/npm/taiwan-atlas@2021.9.20/towns-10t.json",
     "https://cdn.jsdelivr.net/npm/taiwan-atlas/towns-10t.json",
@@ -1163,15 +1386,14 @@ async function loadRealTaiwanTopoJSON() {
         const countiesGeo = topo.objects.counties
           ? topojson.feature(topo, topo.objects.counties)
           : null;
-        rebuildMapLayers({ townsGeo, countiesGeo });
-        const badge = document.getElementById("geo-data-badge");
-        if (badge) {
-          badge.className = "text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1";
-          const spans = badge.querySelectorAll("span"); if (spans[0]) spans[0].className = "w-1.5 h-1.5 rounded-full bg-emerald-400"; if (spans[1]) spans[1].textContent = "368 鄉鎮真實邊界就緒";
+        const bundle = { townsGeo, countiesGeo };
+        setCachedPackTopoData("tw_modern", bundle);
+        if (!skipRebuild && (!state.activeMapPackId || state.activeMapPackId === "tw_modern")) {
+          rebuildMapLayers(bundle);
         }
         const loader = document.getElementById("map-loading-overlay");
         if (loader) loader.classList.add("hidden");
-        return;
+        return bundle;
       }
     } catch (err) {}
   }
@@ -1197,11 +1419,19 @@ async function loadRealTaiwanTopoJSON() {
       })
     );
     if (features.length > 0) {
-      rebuildMapLayers({ townsGeo: { type: "FeatureCollection", features }, countiesGeo: null });
+      const bundle = { townsGeo: { type: "FeatureCollection", features }, countiesGeo: null };
+      setCachedPackTopoData("tw_modern", bundle);
+      if (!skipRebuild && (!state.activeMapPackId || state.activeMapPackId === "tw_modern")) {
+        rebuildMapLayers(bundle);
+      }
+      const loader = document.getElementById("map-loading-overlay");
+      if (loader) loader.classList.add("hidden");
+      return bundle;
     }
   } catch (e) {}
   const loader = document.getElementById("map-loading-overlay");
   if (loader) loader.classList.add("hidden");
+  return null;
 }
 
 function matchFeatureToTownObj(props) {
@@ -1241,26 +1471,66 @@ function matchFeatureToTownObj(props) {
 
 let loadedTopoData = null;
 
+function _normalizePackTopoInput(rawTopoData, pack) {
+  if (!rawTopoData) return null;
+  if (rawTopoData.townsGeo || rawTopoData.regionsGeo) {
+    return {
+      townsGeo: rawTopoData.townsGeo || rawTopoData.regionsGeo,
+      countiesGeo: rawTopoData.countiesGeo || rawTopoData.groupsGeo || null
+    };
+  }
+  if (rawTopoData.type === "FeatureCollection") {
+    return { townsGeo: rawTopoData, countiesGeo: null };
+  }
+  if (rawTopoData.type === "Topology" && rawTopoData.objects && typeof topojson !== "undefined") {
+    const keys = (pack && pack.topoObjectKeys) || {};
+    const itemKey = keys.items || keys.regions || (rawTopoData.objects.towns ? "towns" : Object.keys(rawTopoData.objects)[0]);
+    const groupKey = keys.groups || (rawTopoData.objects.counties ? "counties" : null);
+    return {
+      townsGeo: itemKey && rawTopoData.objects[itemKey] ? topojson.feature(rawTopoData, rawTopoData.objects[itemKey]) : null,
+      countiesGeo: groupKey && rawTopoData.objects[groupKey] ? topojson.feature(rawTopoData, rawTopoData.objects[groupKey]) : null
+    };
+  }
+  return null;
+}
+
 function rebuildMapLayers(topoData) {
-  if (topoData) loadedTopoData = topoData;
-  geoLayerGroup.clearLayers();
-  countyBorderLayerGroup.clearLayers();
-  ALL_TOWNS.forEach((t) => {
+  const activePack = typeof getActiveMapPack === "function" ? getActiveMapPack() : null;
+  const packId = activePack ? activePack.id : "tw_modern";
+  const normalizedTopo = topoData ? _normalizePackTopoInput(topoData, activePack) : getCachedPackTopoData(packId);
+  if (normalizedTopo) {
+    setCachedPackTopoData(packId, normalizedTopo);
+    loadedTopoData = normalizedTopo;
+  } else {
+    loadedTopoData = null;
+  }
+
+  if (geoLayerGroup && typeof geoLayerGroup.clearLayers === "function") geoLayerGroup.clearLayers();
+  if (countyBorderLayerGroup && typeof countyBorderLayerGroup.clearLayers === "function") countyBorderLayerGroup.clearLayers();
+  if (microstateLayerGroup && typeof microstateLayerGroup.clearLayers === "function") microstateLayerGroup.clearLayers();
+  _itemLayersById.clear();
+
+  const activeItems = _mapActiveItems();
+  const activeGroups = _mapActiveGroups();
+  activeItems.forEach((t) => {
     t.layers = [];
     t.bounds = null;
     t.mainBounds = null;
     t.mainPoint = null;
   });
-  TAIWAN_ADMIN_DATA.forEach((c) => {
+  activeGroups.forEach((c) => {
     c.bounds = null;
     c.mainBounds = null;
     c.mainPoint = null;
   });
 
-  if (loadedTopoData && loadedTopoData.townsGeo) {
+  if (loadedTopoData && loadedTopoData.townsGeo && Array.isArray(loadedTopoData.townsGeo.features)) {
     loadedTopoData.townsGeo.features.forEach((feat) => {
       const p = feat.properties || {};
-      const townObj = matchFeatureToTownObj(p);
+      const townObj =
+        activePack && typeof activePack.matchFeatureToItem === "function"
+          ? activePack.matchFeatureToItem(p, feat)
+          : matchFeatureToTownObj(p);
       if (!townObj) return;
 
       const polyLayer = L.geoJSON(feat, {
@@ -1272,8 +1542,10 @@ function rebuildMapLayers(topoData) {
         bindPolygonEvents(subLayer, townObj);
       });
 
-      polyLayer.addTo(geoLayerGroup);
+      if (geoLayerGroup) polyLayer.addTo(geoLayerGroup);
       townObj.layers.push(polyLayer);
+      if (!_itemLayersById.has(townObj.id)) _itemLayersById.set(townObj.id, []);
+      _itemLayersById.get(townObj.id).push(polyLayer);
       try {
         const b = polyLayer.getBounds();
         const mainB = computeMainPolygonBounds(feat);
@@ -1286,7 +1558,7 @@ function rebuildMapLayers(topoData) {
           townObj.lat = center.lat;
           townObj.lng = center.lng;
 
-          const cObj = COUNTY_BY_NAME[townObj.countyName];
+          const cObj = _mapActiveGroupByName(townObj.countyName);
           if (cObj) {
             if (!cObj.bounds) {
               cObj.bounds = L.latLngBounds(b.getSouthWest(), b.getNorthEast());
@@ -1298,7 +1570,7 @@ function rebuildMapLayers(topoData) {
       } catch (e) {}
     });
 
-    TAIWAN_ADMIN_DATA.forEach((cObj) => {
+    activeGroups.forEach((cObj) => {
       const cMain = computeCountyMainBounds(cObj.name);
       if (cMain && cMain.isValid()) {
         cObj.mainBounds = cMain;
@@ -1311,7 +1583,7 @@ function rebuildMapLayers(topoData) {
       }
     });
 
-    if (loadedTopoData.countiesGeo) {
+    if (loadedTopoData.countiesGeo && countyBorderLayerGroup) {
       L.geoJSON(loadedTopoData.countiesGeo, {
         renderer: canvasRenderer,
         interactive: false,
@@ -1328,6 +1600,43 @@ function rebuildMapLayers(topoData) {
         if (!map.hasLayer(countyBorderLayerGroup)) countyBorderLayerGroup.addTo(map);
       } else if (map.hasLayer(countyBorderLayerGroup)) {
         map.removeLayer(countyBorderLayerGroup);
+      }
+    }
+  }
+
+  // Render clickable circleMarker hotspots for microstates or small territories (TRACK-C / TRACK-D ready)
+  if (microstateLayerGroup && typeof L !== "undefined" && typeof L.circleMarker === "function") {
+    activeItems.forEach((item) => {
+      const needsDot = Boolean(item.isMicrostate) || (item.layers.length === 0 && Boolean(item.useHotspotDot));
+      if (!needsDot || !Number.isFinite(item.lat) || !Number.isFinite(item.lng)) return;
+      const dot = L.circleMarker([item.lat, item.lng], {
+        renderer: canvasRenderer,
+        radius: Number.isFinite(item.hotspotRadius) ? item.hotspotRadius : 6,
+        ...computePolygonStyle(item)
+      });
+      bindPolygonEvents(dot, item);
+      dot.addTo(microstateLayerGroup);
+      item.layers.push(dot);
+      if (!_itemLayersById.has(item.id)) _itemLayersById.set(item.id, []);
+      _itemLayersById.get(item.id).push(dot);
+      if (!item.mainPoint) {
+        item.mainPoint = { lat: item.lat, lng: item.lng };
+      }
+    });
+  }
+
+  const badge = typeof document !== "undefined" ? document.getElementById("geo-data-badge") : null;
+  if (badge) {
+    const spans = badge.querySelectorAll("span");
+    const uLabels = typeof getActivePackUnitLabels === "function" ? getActivePackUnitLabels() : { item: "鄉鎮" };
+    if (loadedTopoData && loadedTopoData.townsGeo) {
+      badge.className = "text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1";
+      if (spans[0]) spans[0].className = "w-1.5 h-1.5 rounded-full bg-emerald-400";
+      if (spans[1]) {
+        spans[1].textContent =
+          packId === "tw_modern"
+            ? "368 鄉鎮真實邊界就緒"
+            : `${activeItems.length} ${uLabels.item}地圖邊界就緒`;
       }
     }
   }
@@ -1391,7 +1700,7 @@ function computePolygonStyle(townObj) {
     state.difficulty === "master_hierarchy" &&
     vState.unlockedProvinces.has(townObj.isSpecial ? townObj.countyName : townObj.province);
 
-  const baseCountyColor = COUNTY_COLORS[townObj.countyName] || "#38bdf8";
+  const baseCountyColor = _mapActiveGroupColor(townObj.countyName);
 
   if (state.playMode === "satellite_quiz" && !isUnlocked && !isMissed && !vState.isGameOver) {
     if (isTarget && state.satelliteOutlineRevealed) {
@@ -1478,8 +1787,9 @@ function computePolygonStyle(townObj) {
 }
 
 function refreshAllPolygonStyles() {
-  ALL_TOWNS.forEach((t) => {
-    t.layers.forEach((l) => l.setStyle(computePolygonStyle(t)));
+  _mapActiveItems().forEach((t) => {
+    const layers = Array.isArray(t.layers) && t.layers.length > 0 ? t.layers : (_itemLayersById.get(t.id) || []);
+    layers.forEach((l) => l.setStyle(computePolygonStyle(t)));
   });
   renderSmartLabelsAndLeaderLines();
 }

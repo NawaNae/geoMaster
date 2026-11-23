@@ -1,8 +1,71 @@
 // ============================================================================
 // 8. SPOILER-FREE PROGRESS DASHBOARD & QUICK COUNTY ZOOM CHIPS
 // ============================================================================
+function _dashPack() {
+  return typeof getActiveMapPack === "function" ? getActiveMapPack() : null;
+}
+
+function _dashPackId() {
+  const p = _dashPack();
+  return (p && p.id) || (typeof state !== "undefined" && state.activeMapPackId) || "tw_modern";
+}
+
+function _dashIsTwModern() {
+  return _dashPackId() === "tw_modern";
+}
+
+function _dashItems() {
+  if (typeof getActiveItems === "function") return getActiveItems();
+  return typeof ALL_TOWNS !== "undefined" ? ALL_TOWNS : [];
+}
+
+function _dashGroups() {
+  if (typeof getActiveGroups === "function") return getActiveGroups();
+  return typeof TAIWAN_ADMIN_DATA !== "undefined" ? TAIWAN_ADMIN_DATA : [];
+}
+
+function _dashGroupColor(name) {
+  if (typeof getActiveGroupColor === "function") return getActiveGroupColor(name);
+  return typeof COUNTY_COLORS !== "undefined" && COUNTY_COLORS[name] ? COUNTY_COLORS[name] : "#38bdf8";
+}
+
+function _dashUnitLabels() {
+  if (typeof getActivePackUnitLabels === "function") return getActivePackUnitLabels();
+  return { group: "縣市", item: "鄉鎮市區", itemShort: "區", fullScopeLabel: "全台 368 區" };
+}
+
+function _dashFeatures() {
+  if (typeof getActivePackFeatures === "function") return getActivePackFeatures();
+  return {
+    supportsTransportQuiz: true,
+    supportsPoiQuiz: true,
+    supportsMasterHierarchy: true,
+    supportsSuffixDifficulty: true,
+    quickSuffixes: ["區", "鄉", "鎮", "市"],
+    supportedDifficulties: ["casual", "county_only", "hard_suffix", "hard_full", "master_hierarchy"]
+  };
+}
+
+function _dashIsSingleLayer() {
+  if (typeof isActivePackSingleLayer === "function") return isActivePackSingleLayer();
+  return false;
+}
+
+function _dashUnlockViewport(opts) {
+  if (typeof unlockMapViewportToPack === "function") {
+    unlockMapViewportToPack(opts);
+  } else if (typeof unlockMapViewportToTaiwan === "function") {
+    unlockMapViewportToTaiwan(opts);
+  }
+}
+
 function updateScoreAndProgressUI() {
   const vState = typeof getActiveViewState === "function" ? getActiveViewState() : state;
+  const allItems = _dashItems();
+  const features = _dashFeatures();
+  const unitLabels = _dashUnitLabels();
+  const singleLayer = _dashIsSingleLayer();
+  const isTw = _dashIsTwModern();
   const scopeCounties = getScopeCounties();
   const scopeTowns = getScopeTowns();
   const hasRegionScope = scopeTowns.length > 0 || (state.difficulty === "county_only" && scopeCounties.length > 0);
@@ -20,7 +83,7 @@ function updateScoreAndProgressUI() {
     if (state.difficulty === "county_only" || state.difficulty === "master_hierarchy") {
       return vState.unlockedCounties.has(c.name);
     }
-    const uTowns = ALL_TOWNS.filter((t) => t.countyName === c.name && vState.unlockedTowns.has(t.id)).length;
+    const uTowns = allItems.filter((t) => t.countyName === c.name && vState.unlockedTowns.has(t.id)).length;
     return vState.unlockedCounties.has(c.name) || uTowns > 0;
   }).length;
 
@@ -35,9 +98,9 @@ function updateScoreAndProgressUI() {
       ? ((unlockedTownCount / scopeTowns.length) * 100).toFixed(1)
       : "0.0";
 
-  const activeSt = getActiveQuizStations();
+  const activeSt = features.supportsTransportQuiz && typeof getActiveQuizStations === "function" ? getActiveQuizStations() : [];
   const unlockedStCount = activeSt.filter((s) => vState.unlockedStations.has(s.key)).length;
-  const activePois = typeof getActiveQuizPois === "function" ? getActiveQuizPois() : [];
+  const activePois = features.supportsPoiQuiz && typeof getActiveQuizPois === "function" ? getActiveQuizPois() : [];
   const vUnlockedPois = vState.unlockedPois || state.unlockedPois || new Set();
   const unlockedPoiCount = activePois.filter((p) => vUnlockedPois.has(p.id)).length;
   const stAndPoiCurrent = unlockedStCount + unlockedPoiCount;
@@ -59,7 +122,7 @@ function updateScoreAndProgressUI() {
   const cLabelEl = document.getElementById("stat-county-label");
   if (regionTotal > 0 && stAndPoiTotal > 0) {
     if (cLabelEl) cLabelEl.textContent = "🗺️ 地區完成度";
-    document.getElementById("stat-county-count").textContent = `${regionCurrent} / ${regionTotal} ${state.difficulty === "county_only" ? "縣市" : "區"}`;
+    document.getElementById("stat-county-count").textContent = `${regionCurrent} / ${regionTotal} ${state.difficulty === "county_only" ? unitLabels.group : unitLabels.itemShort}`;
     document.getElementById("stat-county-pct").textContent = `${regionPct}%`;
     document.getElementById("stat-county-bar").style.width = `${Math.min(100, parseFloat(regionPct))}%`;
 
@@ -123,15 +186,31 @@ function updateScoreAndProgressUI() {
     document.getElementById("stat-town-count").textContent = `${unlockedStCount} / ${activeSt.length} 站`;
     document.getElementById("stat-town-pct").textContent = `${stPct}%`;
     document.getElementById("stat-town-bar").style.width = `${Math.min(100, parseFloat(stPct))}%`;
+  } else if (singleLayer) {
+    // Single-Layer Map Pack (avoid redundant county-level unlock bar)
+    if (cLabelEl) cLabelEl.textContent = `🗺️ ${unitLabels.item}進度`;
+    document.getElementById("stat-county-count").textContent = `${unlockedTownCount} / ${scopeTowns.length} ${unitLabels.itemShort}`;
+    document.getElementById("stat-county-pct").textContent = `${townPct}%`;
+    document.getElementById("stat-county-bar").style.width = `${Math.min(100, parseFloat(townPct))}%`;
+
+    const remainCount = Math.max(0, scopeTowns.length - unlockedTownCount);
+    document.getElementById("stat-town-label").textContent = "🎯 剩餘待猜";
+    document.getElementById("stat-town-count").textContent = `${remainCount} ${unitLabels.itemShort}`;
+    document.getElementById("stat-town-pct").textContent = `${townPct}%`;
+    document.getElementById("stat-town-bar").style.width = `${Math.min(100, parseFloat(townPct))}%`;
   } else {
-    // Pure Region Mode
-    if (cLabelEl) cLabelEl.textContent = "縣市級直轄市進度";
-    document.getElementById("stat-county-count").textContent = `${unlockedCountyCount} / ${scopeCounties.length} 縣市`;
+    // Pure Region Mode (2-Layer Pack)
+    if (cLabelEl) cLabelEl.textContent = isTw ? "縣市級直轄市進度" : `${unitLabels.group}進度`;
+    document.getElementById("stat-county-count").textContent = `${unlockedCountyCount} / ${scopeCounties.length} ${unitLabels.group}`;
     document.getElementById("stat-county-pct").textContent = `${countyPct}%`;
     document.getElementById("stat-county-bar").style.width = `${Math.min(100, parseFloat(countyPct))}%`;
 
-    document.getElementById("stat-town-label").textContent = state.difficulty === "county_only" ? "對應鄉鎮範圍" : "鄉鎮市區進度";
-    document.getElementById("stat-town-count").textContent = state.difficulty === "county_only" ? `縣市模式 (${scopeCounties.length}縣市)` : `${unlockedTownCount} / ${scopeTowns.length} 區`;
+    document.getElementById("stat-town-label").textContent = isTw
+      ? (state.difficulty === "county_only" ? "對應鄉鎮範圍" : "鄉鎮市區進度")
+      : (state.difficulty === "county_only" ? `對應${unitLabels.item}範圍` : `${unitLabels.item}進度`);
+    document.getElementById("stat-town-count").textContent = state.difficulty === "county_only"
+      ? `${unitLabels.group}模式 (${scopeCounties.length}${unitLabels.group})`
+      : `${unlockedTownCount} / ${scopeTowns.length} ${unitLabels.itemShort}`;
     document.getElementById("stat-town-pct").textContent = `${regionPct}%`;
     document.getElementById("stat-town-bar").style.width = `${Math.min(100, parseFloat(regionPct))}%`;
   }
@@ -143,10 +222,12 @@ function updateScoreAndProgressUI() {
     document.getElementById("top-percent-display").textContent = `${stPct}%`;
   } else if (regionTotal > 0 && activeSt.length > 0) {
     document.getElementById("top-metric-label").textContent = "總進度 (地區+站)";
-    document.getElementById("top-score-display").textContent = `區${regionCurrent}/${regionTotal} (${regionPct}%) · 站${unlockedStCount}/${activeSt.length} (${stPct}%)`;
+    document.getElementById("top-score-display").textContent = `${unitLabels.itemShort}${regionCurrent}/${regionTotal} (${regionPct}%) · 站${unlockedStCount}/${activeSt.length} (${stPct}%)`;
     document.getElementById("top-percent-display").textContent = `總 ${grandPct}%`;
   } else {
-    document.getElementById("top-metric-label").textContent = state.difficulty === "county_only" ? "縣市完成度" : "鄉鎮完成度";
+    document.getElementById("top-metric-label").textContent = isTw
+      ? (state.difficulty === "county_only" ? "縣市完成度" : "鄉鎮完成度")
+      : (state.difficulty === "county_only" ? `${unitLabels.group}完成度` : `${unitLabels.item}完成度`);
     document.getElementById("top-score-display").textContent = `${regionCurrent} / ${regionTotal}`;
     document.getElementById("top-percent-display").textContent = `${regionPct}%`;
   }
@@ -160,7 +241,7 @@ function updateScoreAndProgressUI() {
     topMainBar.style.width = `${Math.min(100, parseFloat(grandPct))}%`;
   }
 
-  // Render Dynamic Multi-Category Progress Bars (總進度 / 地區 / 台鐵 / 高鐵 / 捷運 / 輕軌 / 纜車 / 林鐵 / 糖鐵 - 有開才顯示!)
+  // Render Dynamic Multi-Category Progress Bars (總進度 / 地區 / 軌道各系統 - 有開才顯示!)
   const multiBarsEl = document.getElementById("multi-category-progress-bars");
   if (multiBarsEl) {
     const bars = [];
@@ -175,36 +256,38 @@ function updateScoreAndProgressUI() {
     // 2. 地區 (有開才顯示)
     if (regionTotal > 0) {
       bars.push({
-        label: "🗺️ 地區 (行政區)",
+        label: isTw ? "🗺️ 地區 (行政區)" : `🗺️ ${unitLabels.item}`,
         cur: regionCurrent,
         tot: regionTotal,
-        unit: state.difficulty === "county_only" ? "縣市" : "區",
+        unit: state.difficulty === "county_only" ? unitLabels.group : unitLabels.itemShort,
         color: "#38bdf8"
       });
     }
-    // 3. 軌道各系統 (台鐵 / 高鐵 / 捷運 / 輕軌 / 纜車 / 林鐵 / 糖鐵 - 有開才顯示!)
-    const macroOrder = [
-      { key: "台鐵", label: "🚆 台鐵", color: "#0ea5e9" },
-      { key: "高鐵", label: "🚄 高鐵", color: "#fb923c" },
-      { key: "捷運", label: "🚇 捷運", color: "#f43f5e" },
-      { key: "輕軌", label: "🚋 輕軌", color: "#2dd4bf" },
-      { key: "纜車", label: "🚡 纜車", color: "#a855f7" },
-      { key: "林鐵", label: "🌲 林鐵", color: "#10b981" },
-      { key: "糖鐵", label: "🍬 糖鐵", color: "#f59e0b" }
-    ];
-    macroOrder.forEach((m) => {
-      const mStations = activeSt.filter((s) => s.macro === m.key);
-      if (mStations.length > 0) {
-        const mUnlocked = mStations.filter((s) => vState.unlockedStations.has(s.key)).length;
-        bars.push({
-          label: m.label,
-          cur: mUnlocked,
-          tot: mStations.length,
-          unit: "站",
-          color: m.color
-        });
-      }
-    });
+    // 3. 軌道各系統 (僅在支援軌道測驗的地圖包且有開啟時顯示)
+    if (features.supportsTransportQuiz && activeSt.length > 0) {
+      const macroOrder = [
+        { key: "台鐵", label: "🚆 台鐵", color: "#0ea5e9" },
+        { key: "高鐵", label: "🚄 高鐵", color: "#fb923c" },
+        { key: "捷運", label: "🚇 捷運", color: "#f43f5e" },
+        { key: "輕軌", label: "🚋 輕軌", color: "#2dd4bf" },
+        { key: "纜車", label: "🚡 纜車", color: "#a855f7" },
+        { key: "林鐵", label: "🌲 林鐵", color: "#10b981" },
+        { key: "糖鐵", label: "🍬 糖鐵", color: "#f59e0b" }
+      ];
+      macroOrder.forEach((m) => {
+        const mStations = activeSt.filter((s) => s.macro === m.key);
+        if (mStations.length > 0) {
+          const mUnlocked = mStations.filter((s) => vState.unlockedStations.has(s.key)).length;
+          bars.push({
+            label: m.label,
+            cur: mUnlocked,
+            tot: mStations.length,
+            unit: "站",
+            color: m.color
+          });
+        }
+      });
+    }
 
     multiBarsEl.replaceChildren();
     const tpl = document.getElementById("tpl-progress-bar-row");
@@ -258,7 +341,7 @@ function selectAndZoomToCounty(c, autoCloseJumpMenu = false) {
 }
 
 function createCountyChipElement(c, compact = false) {
-  const color = COUNTY_COLORS[c.name] || "#38bdf8";
+  const color = _dashGroupColor(c.name);
   const tpl = document.getElementById("tpl-county-jump-chip");
   let btn;
   if (tpl && tpl.content) {
@@ -275,7 +358,7 @@ function createCountyChipElement(c, compact = false) {
   if (compact) {
     btn.className = "px-1.5 py-1 rounded-lg bg-slate-900/90 hover:bg-slate-700 text-[11px] font-semibold text-slate-200 border border-slate-800 transition flex items-center gap-1 truncate";
   }
-  btn.title = `跳轉至「${c.name}」並套用前綴`;
+  btn.title = _dashIsSingleLayer() ? `跳轉至「${c.name}」` : `跳轉至「${c.name}」並套用前綴`;
   btn.addEventListener("click", () => selectAndZoomToCounty(c, compact));
   return btn;
 }
@@ -287,18 +370,22 @@ function renderQuickZoomCountyChips() {
   if (mapJumpBar) mapJumpBar.replaceChildren();
 
   const visibleCounties = getScopeCounties().filter((c) => isCountyRevealed(c.name));
+  const unitLabels = _dashUnitLabels();
+  const isTw = _dashIsTwModern();
 
   if (visibleCounties.length === 0) {
     if (bar) {
       const sp = document.createElement("span");
       sp.className = "text-[11px] text-slate-500 italic";
-      sp.textContent = "目前為純車站模式或尚未解鎖縣市 (可點下方各路線卡片快速放大至該路線！)";
+      sp.textContent = isTw
+        ? "目前為純車站模式或尚未解鎖縣市 (可點下方各路線卡片快速放大至該路線！)"
+        : `尚未解鎖任何${unitLabels.group}`;
       bar.appendChild(sp);
     }
     if (mapJumpBar) {
       const sp2 = document.createElement("span");
       sp2.className = "col-span-3 text-[10px] text-slate-500 italic px-1";
-      sp2.textContent = "目前為純車站模式或尚未解鎖縣市";
+      sp2.textContent = isTw ? "目前為純車站模式或尚未解鎖縣市" : `尚未解鎖${unitLabels.group}`;
       mapJumpBar.appendChild(sp2);
     }
     return;
@@ -360,8 +447,13 @@ function renderCountyProgressSidebar() {
   if (!container) return;
   container.replaceChildren();
 
-  const activeSt = getActiveQuizStations();
-  const activePois = typeof getActiveQuizPois === "function" ? getActiveQuizPois() : [];
+  const allItems = _dashItems();
+  const features = _dashFeatures();
+  const unitLabels = _dashUnitLabels();
+  const isTw = _dashIsTwModern();
+  const singleLayer = _dashIsSingleLayer();
+  const activeSt = features.supportsTransportQuiz && typeof getActiveQuizStations === "function" ? getActiveQuizStations() : [];
+  const activePois = features.supportsPoiQuiz && typeof getActiveQuizPois === "function" ? getActiveQuizPois() : [];
   const vUnlockedPois = vState.unlockedPois || state.unlockedPois || new Set();
   const scopeCounties = getScopeCounties();
 
@@ -369,11 +461,11 @@ function renderCountyProgressSidebar() {
     const parts = [];
     if (activePois.length > 0) parts.push("地標");
     if (activeSt.length > 0) parts.push("車站路線");
-    if (scopeCounties.length > 0) parts.push("各縣市");
+    if (scopeCounties.length > 0) parts.push(isTw ? "各縣市" : `各${unitLabels.group}`);
     titleEl.textContent = parts.length > 0 ? `${parts.join("與")}完成度明細` : "挑戰進度明細";
   }
 
-  if (activePois.length > 0) {
+  if (features.supportsPoiQuiz && activePois.length > 0) {
     const poiHeader = document.createElement("div");
     poiHeader.className = "text-[11px] font-extrabold text-sky-300 uppercase tracking-wider px-1 pt-0.5";
     poiHeader.textContent = "📍 地標完成度（自動去重統計）";
@@ -410,7 +502,7 @@ function renderCountyProgressSidebar() {
     });
   }
 
-  if (activeSt.length > 0) {
+  if (features.supportsTransportQuiz && activeSt.length > 0) {
     const activeLinesSet = state.stationQuizEnabled && state.quizStationLines.size > 0
       ? state.quizStationLines
       : state.selectedTransportLines;
@@ -500,7 +592,7 @@ function renderCountyProgressSidebar() {
   if (scopeCounties.length > 0 && activeSt.length > 0) {
     const regHeader = document.createElement("div");
     regHeader.className = "text-[11px] font-extrabold text-sky-300 uppercase tracking-wider px-1 pt-2";
-    regHeader.textContent = "🗺️ 各縣市行政區完成度";
+    regHeader.textContent = isTw ? "🗺️ 各縣市行政區完成度" : `🗺️ 各${unitLabels.group}${unitLabels.item}完成度`;
     container.appendChild(regHeader);
   }
 
@@ -511,25 +603,26 @@ function renderCountyProgressSidebar() {
       return;
     }
 
-    const totalInCounty = c.towns.length;
-    const unlockedInCounty = ALL_TOWNS.filter(
-      (t) => t.countyName === c.name && vState.unlockedTowns.has(t.id)
-    ).length;
+    const countyItems = allItems.filter((t) => t.countyName === c.name);
+    const totalInCounty = (Array.isArray(c.towns) && c.towns.length > 0) ? c.towns.length : countyItems.length;
+    const unlockedInCounty = countyItems.filter((t) => vState.unlockedTowns.has(t.id)).length;
     const isCountyDone =
       state.difficulty === "county_only"
         ? vState.unlockedCounties.has(c.name)
-        : unlockedInCounty === totalInCounty;
+        : totalInCounty > 0 && unlockedInCounty === totalInCounty;
     const pct =
       state.difficulty === "county_only"
         ? isCountyDone ? 100 : 0
-        : Math.round((unlockedInCounty / totalInCounty) * 100);
+        : totalInCounty > 0
+        ? Math.round((unlockedInCounty / totalInCounty) * 100)
+        : 0;
 
-    const color = COUNTY_COLORS[c.name] || "#38bdf8";
+    const color = _dashGroupColor(c.name);
 
     container.appendChild(
       createSidebarProgressCard({
         title: c.name,
-        subTitle: `(${c.province})`,
+        subTitle: c.province ? `(${c.province})` : "",
         badgeText: "📍點擊放大",
         badgeClass: "card-badge text-[10px] px-1.5 py-0.2 rounded bg-sky-500/15 text-sky-300 shrink-0",
         statText: state.difficulty === "county_only" ? (isCountyDone ? "✓ 已解鎖 · 100%" : "0%") : `${unlockedInCounty} / ${totalInCounty} · ${pct}%`,
@@ -539,11 +632,11 @@ function renderCountyProgressSidebar() {
         borderClass: "p-2.5 rounded-xl bg-slate-900/75 hover:bg-slate-800/80 border border-slate-800 cursor-pointer transition flex flex-col gap-1",
         onClick: () => {
           zoomToCountyCenter(c.name);
-          if (state.difficulty !== "county_only" && state.difficulty !== "casual" && state.role !== "spectator") {
+          if (!singleLayer && state.difficulty !== "county_only" && state.difficulty !== "casual" && state.role !== "spectator") {
             const prefixSelect = document.getElementById("prefix-select");
             const targetVal =
               state.difficulty === "master_hierarchy"
-                ? c.isSpecial ? c.name : `${c.province}${c.name}`
+                ? c.isSpecial ? c.name : `${c.province || ""}${c.name}`
                 : c.name;
             if (prefixSelect) {
               prefixSelect.value = targetVal;
@@ -557,25 +650,28 @@ function renderCountyProgressSidebar() {
   });
 
   if (hiddenCount > 0) {
-    spoilerBadge.classList.remove("hidden");
+    if (spoilerBadge) spoilerBadge.classList.remove("hidden");
     const tplLock = document.getElementById("tpl-spoiler-locked-card");
     if (tplLock && tplLock.content) {
       const frag = tplLock.content.cloneNode(true);
       const tEl = frag.querySelector(".locked-title");
       const dEl = frag.querySelector(".locked-desc");
-      const modeName = state.difficulty === "county_only" ? "縣市挑戰" : state.difficulty === "master_hierarchy" ? "最難三階解鎖" : "困難全名";
-      if (tEl) tEl.textContent = `🔒 尚有 ${hiddenCount} 個未解鎖縣市已隱藏名稱 (防止劇透)`;
-      if (dEl) dEl.textContent = `在「${modeName}」模式下，未解鎖的縣市不會提前顯示於列表；當猜出該縣市後，即會自動顯示進度並開放點擊放大定位！`;
+      const groupUnit = isTw ? "縣市" : unitLabels.group;
+      const modeName = state.difficulty === "county_only" ? `${groupUnit}挑戰` : state.difficulty === "master_hierarchy" ? "最難三階解鎖" : "困難全名";
+      if (tEl) tEl.textContent = `🔒 尚有 ${hiddenCount} 個未解鎖${groupUnit}已隱藏名稱 (防止劇透)`;
+      if (dEl) dEl.textContent = `在「${modeName}」模式下，未解鎖的${groupUnit}不會提前顯示於列表；當猜出該${groupUnit}後，即會自動顯示進度並開放點擊放大定位！`;
       container.appendChild(frag);
     }
-  } else {
+  } else if (spoilerBadge) {
     spoilerBadge.classList.add("hidden");
   }
 }
 
 function checkVictoryCondition() {
   if (state.isGameOver || state.finished || state.role === "spectator") return;
-  const activeSt = getActiveQuizStations();
+  const allItems = _dashItems();
+  const features = _dashFeatures();
+  const activeSt = features.supportsTransportQuiz && typeof getActiveQuizStations === "function" ? getActiveQuizStations() : [];
   const unlockedStCount = activeSt.filter((s) => state.unlockedStations.has(s.key)).length;
   const adminTotal =
     state.difficulty === "county_only"
@@ -585,11 +681,11 @@ function checkVictoryCondition() {
     state.difficulty === "county_only"
       ? Array.from(state.unlockedCounties).filter((c) => state.selectedCounties.has(c)).length
       : Array.from(state.unlockedTowns).filter((id) => {
-          const t = ALL_TOWNS.find((x) => x.id === id);
+          const t = allItems.find((x) => x.id === id);
           return t && (typeof isTownInScope === "function" ? isTownInScope(t) : state.selectedCounties.has(t.countyName));
         }).length;
 
-  const activePois = typeof getActiveQuizPois === "function" ? getActiveQuizPois() : [];
+  const activePois = features.supportsPoiQuiz && typeof getActiveQuizPois === "function" ? getActiveQuizPois() : [];
   const unlockedPoiCount = activePois.filter((p) => state.unlockedPois.has(p.id)).length;
   const total = adminTotal + activeSt.length + activePois.length;
   const current = adminCurrent + unlockedStCount + unlockedPoiCount;
@@ -611,15 +707,16 @@ function finishGame(reason = "victory") {
   if (typeof clearSatelliteTargetMarker === "function") {
     clearSatelliteTargetMarker();
   }
-  if (typeof unlockMapViewportToTaiwan === "function") {
-    unlockMapViewportToTaiwan({ restoreLayers: false, clearMarker: true });
-  }
+  _dashUnlockViewport({ restoreLayers: false, clearMarker: true });
+
+  const allItems = _dashItems();
+  const features = _dashFeatures();
 
   if (reason !== "victory") {
     if (state.difficulty === "county_only") {
       getScopeCounties().forEach((c) => {
         if (!state.unlockedCounties.has(c.name)) {
-          ALL_TOWNS.filter((t) => t.countyName === c.name).forEach((t) => state.missedTowns.add(t.id));
+          allItems.filter((t) => t.countyName === c.name).forEach((t) => state.missedTowns.add(t.id));
         }
       });
     } else {
@@ -629,7 +726,7 @@ function finishGame(reason = "victory") {
         }
       });
     }
-    if (typeof getActiveQuizPois === "function") {
+    if (features.supportsPoiQuiz && typeof getActiveQuizPois === "function") {
       getActiveQuizPois().forEach((p) => {
         if (!state.unlockedPois.has(p.id)) {
           state.missedPois.add(p.id);
@@ -643,9 +740,9 @@ function finishGame(reason = "victory") {
   if (typeof refreshPoiMapLayer === "function") refreshPoiMapLayer();
   updateScoreAndProgressUI();
 
-  const activeSt = getActiveQuizStations();
+  const activeSt = features.supportsTransportQuiz && typeof getActiveQuizStations === "function" ? getActiveQuizStations() : [];
   const unlockedStCount = activeSt.filter((s) => state.unlockedStations.has(s.key)).length;
-  const activePois = typeof getActiveQuizPois === "function" ? getActiveQuizPois() : [];
+  const activePois = features.supportsPoiQuiz && typeof getActiveQuizPois === "function" ? getActiveQuizPois() : [];
   const unlockedPoiCount = activePois.filter((p) => state.unlockedPois.has(p.id)).length;
   const scopeCounties = getScopeCounties();
   const scopeTowns = getScopeTowns();
@@ -653,7 +750,7 @@ function finishGame(reason = "victory") {
   const adminCurrent = state.difficulty === "county_only"
     ? Array.from(state.unlockedCounties).filter((c) => state.selectedCounties.has(c)).length
     : Array.from(state.unlockedTowns).filter((id) => {
-        const t = ALL_TOWNS.find((x) => x.id === id);
+        const t = allItems.find((x) => x.id === id);
         return t && (typeof isTownInScope === "function" ? isTownInScope(t) : state.selectedCounties.has(t.countyName));
       }).length;
 
@@ -666,7 +763,7 @@ function finishGame(reason = "victory") {
   const maxStreak = (state.stats && state.stats.maxStreak) || 0;
   const poiBreakdown = {};
   ["airport", "port", "reservoir", "lake", "settlement"].forEach((cat) => {
-    if (typeof isPoiCategoryActive === "function" && isPoiCategoryActive(cat) && typeof getActiveQuizPois === "function") {
+    if (features.supportsPoiQuiz && typeof isPoiCategoryActive === "function" && isPoiCategoryActive(cat) && typeof getActiveQuizPois === "function") {
       const list = getActiveQuizPois(cat);
       const unlocked = list.filter((p) => state.unlockedPois.has(p.id)).length;
       poiBreakdown[cat] = { current: unlocked, total: list.length };
@@ -723,9 +820,14 @@ function finishGame(reason = "victory") {
 }
 
 function computeClearedBlocksStats(scopeCountiesArg, scopeTownsArg, activeStArg) {
+  const features = _dashFeatures();
+  const unitLabels = _dashUnitLabels();
+  const isTw = _dashIsTwModern();
   const scopeCounties = scopeCountiesArg || getScopeCounties();
   const scopeTowns = scopeTownsArg || getScopeTowns();
-  const activeSt = activeStArg || getActiveQuizStations();
+  const activeSt = features.supportsTransportQuiz
+    ? (activeStArg || (typeof getActiveQuizStations === "function" ? getActiveQuizStations() : []))
+    : [];
   const hasRegionScope = Boolean(state.regionQuizEnabled) && state.quizTargetMode !== "station" && (scopeTowns.length > 0 || scopeCounties.length > 0);
 
   let completedCounties = 0;
@@ -751,7 +853,7 @@ function computeClearedBlocksStats(scopeCountiesArg, scopeTownsArg, activeStArg)
 
   let completedLines = 0;
   let totalScopeLines = 0;
-  if (activeSt.length > 0 && state.quizStationLines instanceof Set && state.quizStationLines.size > 0) {
+  if (features.supportsTransportQuiz && activeSt.length > 0 && state.quizStationLines instanceof Set && state.quizStationLines.size > 0) {
     TAIWAN_SELECTABLE_LINES.forEach((line) => {
       if (line.isHighway || !state.quizStationLines.has(line.id)) return;
       const lineSt = activeSt.filter((s) => s.lineIds && s.lineIds.includes(line.id));
@@ -768,7 +870,7 @@ function computeClearedBlocksStats(scopeCountiesArg, scopeTownsArg, activeStArg)
   let totalScopePoiCats = 0;
   const clearedPoiLabels = [];
   const poiCatNames = { airport: "機場", port: "港口", reservoir: "水庫", lake: "湖泊", settlement: "傳統聚落" };
-  if (typeof isPoiCategoryActive === "function" && typeof getActiveQuizPois === "function") {
+  if (features.supportsPoiQuiz && typeof isPoiCategoryActive === "function" && typeof getActiveQuizPois === "function") {
     ["airport", "port", "reservoir", "lake", "settlement"].forEach((cat) => {
       if (!isPoiCategoryActive(cat)) return;
       const list = getActiveQuizPois(cat);
@@ -785,7 +887,7 @@ function computeClearedBlocksStats(scopeCountiesArg, scopeTownsArg, activeStArg)
   const completedBlocks = completedCounties + completedLines + completedPoiCats;
   const totalBlocks = totalScopeCounties + totalScopeLines + totalScopePoiCats;
   const parts = [];
-  if (totalScopeCounties > 0) parts.push(`破關 ${completedCounties}/${totalScopeCounties} 縣市`);
+  if (totalScopeCounties > 0) parts.push(`破關 ${completedCounties}/${totalScopeCounties} ${isTw ? "縣市" : unitLabels.group}`);
   if (totalScopeLines > 0) parts.push(`${completedLines}/${totalScopeLines} 路線`);
   if (totalScopePoiCats > 0) {
     parts.push(
@@ -850,23 +952,93 @@ function makeTierTitles(scopeLabel, sssTitle, ssTitle, spTitle, sTitle, aTitle, 
 }
 
 function detectRegionThemeProfile() {
+  const allItems = _dashItems();
+  const allGroups = _dashGroups();
+  const pack = _dashPack();
+  const unitLabels = _dashUnitLabels();
   const townIds = state.selectedTownIds instanceof Set
     ? state.selectedTownIds
-    : new Set(ALL_TOWNS.filter((t) => state.selectedCounties.has(t.countyName)).map((t) => t.id));
+    : new Set(allItems.filter((t) => state.selectedCounties.has(t.countyName)).map((t) => t.id));
   if (!state.regionQuizEnabled || state.quizTargetMode === "station" || townIds.size === 0) return null;
 
-  if (state.difficulty === "county_only" && state.selectedCounties.size === 22) {
+  // Non-tw_modern Map Packs: clean generic pack-based theme profile
+  if (!_dashIsTwModern()) {
+    const packName = (pack && (pack.displayName || pack.shortLabel)) || unitLabels.fullScopeLabel || "地圖全境";
+    if (
+      (state.difficulty === "county_only" && state.selectedCounties.size === allGroups.length && allGroups.length > 0) ||
+      (townIds.size === allItems.length && allItems.length > 0)
+    ) {
+      return makeTierTitles(
+        packName,
+        `👑 ${packName}制霸地理神`,
+        `⚡ ${packName}極速宗師`,
+        `🏆 ${packName}通關大師`,
+        `🗺️ ${packName}地理專家`,
+        `🧭 ${packName}探索達人`
+      );
+    }
+
+    if (typeof getActiveRegionFilters === "function") {
+      const filters = getActiveRegionFilters();
+      for (const f of filters) {
+        if (!f || f.id === "all") continue;
+        const fIds = typeof resolveRegionFilterItemIds === "function"
+          ? resolveRegionFilterItemIds(f, allItems)
+          : (Array.isArray(f.itemIds) ? f.itemIds : []);
+        if (fIds.length > 0 && fIds.length === townIds.size && fIds.every((id) => townIds.has(id))) {
+          const fLabel = f.label || f.shortLabel || f.id;
+          return makeTierTitles(
+            fLabel,
+            `👑 ${fLabel}制霸王者`,
+            `⚡ ${fLabel}極速宗師`,
+            `🏆 ${fLabel}通關大師`,
+            `🗺️ ${fLabel}地理專家`,
+            `🧭 ${fLabel}探索達人`
+          );
+        }
+      }
+    }
+
+    const activeGroups = allGroups.filter((g) =>
+      allItems.some((it) => it.countyName === g.name && townIds.has(it.id))
+    );
+    if (activeGroups.length === 1) {
+      const gLabel = activeGroups[0].name;
+      return makeTierTitles(
+        gLabel,
+        `👑 ${gLabel}制霸王者`,
+        `⚡ ${gLabel}極速宗師`,
+        `🏆 ${gLabel}通關大師`,
+        `🗺️ ${gLabel}地理專家`,
+        `🧭 ${gLabel}探索達人`
+      );
+    }
+    const shortNames = activeGroups.slice(0, 3).map((g) => g.short || g.name).join("・");
+    const label = activeGroups.length > 3
+      ? `${shortNames}等${activeGroups.length}${unitLabels.group}`
+      : (shortNames || packName);
     return makeTierTitles(
-      "台灣22縣市",
-      "👑 台灣22縣市總督 · 全島霸主",
-      "🗺️ 22縣市極速制霸宗師",
+      label,
+      `👑 ${label}制霸王者`,
+      `⚡ ${label}極速宗師`,
+      `🏆 ${label}通關大師`,
+      `🗺️ ${label}地理專家`,
+      `🧭 ${label}探索達人`
+    );
+  }
+
+  if (state.difficulty === "county_only" && state.selectedCounties.size === allGroups.length && allGroups.length > 0) {
+    return makeTierTitles(
+      `台灣${allGroups.length}縣市`,
+      `👑 台灣${allGroups.length}縣市總督 · 全島霸主`,
+      `🗺️ ${allGroups.length}縣市極速制霸宗師`,
       "🗺️ 台灣縣市通關大師",
       "🗺️ 台灣縣市地理專家",
       "🧭 台灣行政區達人"
     );
   }
 
-  if (townIds.size === ALL_TOWNS.length) {
+  if (townIds.size === allItems.length) {
     return makeTierTitles(
       "台灣全島",
       "👑 台灣全島制霸地理神",
@@ -881,20 +1053,20 @@ function detectRegionThemeProfile() {
 
   const checkExact = (arr) => arr.length === townIds.size && arr.every((id) => townIds.has(id));
 
-  const westCoastIds = ALL_TOWNS.filter((t) => TAIWAN_WEST_COAST_SET.has(t.fullCountyTown)).map((t) => t.id);
-  const eastCoastIds = ALL_TOWNS.filter((t) => TAIWAN_EAST_COAST_SET.has(t.fullCountyTown)).map((t) => t.id);
+  const westCoastIds = allItems.filter((t) => TAIWAN_WEST_COAST_SET.has(t.fullCountyTown)).map((t) => t.id);
+  const eastCoastIds = allItems.filter((t) => TAIWAN_EAST_COAST_SET.has(t.fullCountyTown)).map((t) => t.id);
   const bothCoastIds = Array.from(new Set([...westCoastIds, ...eastCoastIds]));
-  const mountainIds = ALL_TOWNS.filter((t) => TAIWAN_MOUNTAIN_SET.has(t.fullCountyTown)).map((t) => t.id);
-  const westPlainIds = ALL_TOWNS.filter((t) => TAIWAN_WEST_PLAIN_SET.has(t.fullCountyTown)).map((t) => t.id);
-  const eastPlainIds = ALL_TOWNS.filter((t) => typeof TAIWAN_EAST_PLAIN_SET !== "undefined" && TAIWAN_EAST_PLAIN_SET.has(t.fullCountyTown)).map((t) => t.id);
+  const mountainIds = allItems.filter((t) => TAIWAN_MOUNTAIN_SET.has(t.fullCountyTown)).map((t) => t.id);
+  const westPlainIds = allItems.filter((t) => TAIWAN_WEST_PLAIN_SET.has(t.fullCountyTown)).map((t) => t.id);
+  const eastPlainIds = allItems.filter((t) => typeof TAIWAN_EAST_PLAIN_SET !== "undefined" && TAIWAN_EAST_PLAIN_SET.has(t.fullCountyTown)).map((t) => t.id);
   const bothPlainIds = Array.from(new Set([...westPlainIds, ...eastPlainIds]));
-  const northIds = ALL_TOWNS.filter((t) => ["臺北市", "新北市", "基隆市", "新竹市", "桃園市", "新竹縣", "宜蘭縣"].includes(t.countyName)).map((t) => t.id);
-  const centralIds = ALL_TOWNS.filter((t) => ["苗栗縣", "臺中市", "彰化縣", "南投縣", "雲林縣"].includes(t.countyName)).map((t) => t.id);
-  const southIds = ALL_TOWNS.filter((t) => ["嘉義市", "嘉義縣", "臺南市", "高雄市", "屏東縣", "澎湖縣"].includes(t.countyName)).map((t) => t.id);
-  const eastIds = ALL_TOWNS.filter((t) => ["花蓮縣", "臺東縣"].includes(t.countyName)).map((t) => t.id);
-  const islandIds = ALL_TOWNS.filter((t) => ["澎湖縣", "金門縣", "連江縣"].includes(t.countyName)).map((t) => t.id);
-  const sixIds = ALL_TOWNS.filter((t) => t.isSpecial).map((t) => t.id);
-  const westIds = ALL_TOWNS.filter((t) => TAIWAN_WEST_COUNTY_SET.has(t.countyName)).map((t) => t.id);
+  const northIds = allItems.filter((t) => ["臺北市", "新北市", "基隆市", "新竹市", "桃園市", "新竹縣", "宜蘭縣"].includes(t.countyName)).map((t) => t.id);
+  const centralIds = allItems.filter((t) => ["苗栗縣", "臺中市", "彰化縣", "南投縣", "雲林縣"].includes(t.countyName)).map((t) => t.id);
+  const southIds = allItems.filter((t) => ["嘉義市", "嘉義縣", "臺南市", "高雄市", "屏東縣", "澎湖縣"].includes(t.countyName)).map((t) => t.id);
+  const eastIds = allItems.filter((t) => ["花蓮縣", "臺東縣"].includes(t.countyName)).map((t) => t.id);
+  const islandIds = allItems.filter((t) => ["澎湖縣", "金門縣", "連江縣"].includes(t.countyName)).map((t) => t.id);
+  const sixIds = allItems.filter((t) => t.isSpecial).map((t) => t.id);
+  const westIds = allItems.filter((t) => TAIWAN_WEST_COUNTY_SET.has(t.countyName)).map((t) => t.id);
 
   if (checkExact(westCoastIds)) {
     return makeTierTitles(
@@ -1044,12 +1216,12 @@ function detectRegionThemeProfile() {
   }
 
   // Single County Selected (e.g. 台北市長、新北市長、桃園市長、苗栗縣長...)
-  const activeCounties = TAIWAN_ADMIN_DATA.filter((c) =>
-    ALL_TOWNS.some((t) => t.countyName === c.name && townIds.has(t.id))
+  const activeCounties = allGroups.filter((c) =>
+    allItems.some((t) => t.countyName === c.name && townIds.has(t.id))
   );
   if (activeCounties.length === 1) {
     const c = activeCounties[0];
-    const allCountyTowns = ALL_TOWNS.filter((t) => t.countyName === c.name);
+    const allCountyTowns = allItems.filter((t) => t.countyName === c.name);
     const isFullCounty = allCountyTowns.every((t) => townIds.has(t.id));
     const m = COUNTY_MAYOR_TITLES[c.name] || {
       mayor: `${c.short || c.name}首長`,
@@ -1105,14 +1277,14 @@ function detectRegionThemeProfile() {
 
   // Check if user selected a subset of a terrain (e.g. 東部山區, 北部濱海, etc.)
   const allInMountain = Array.from(townIds).every((id) => {
-    const t = ALL_TOWNS.find((x) => x.id === id);
+    const t = allItems.find((x) => x.id === id);
     return t && TAIWAN_MOUNTAIN_SET.has(t.fullCountyTown);
   });
   if (allInMountain) {
     return makeTierTitles("山區部落", "⛰️ 山岳領域護國山神", "🦅 高山縱走制霸宗師", "🌲 山區通關大師", "⛰️ 山區地理專家", "🥾 山林探索達人");
   }
   const allInCoast = Array.from(townIds).every((id) => {
-    const t = ALL_TOWNS.find((x) => x.id === id);
+    const t = allItems.find((x) => x.id === id);
     return t && (TAIWAN_WEST_COAST_SET.has(t.fullCountyTown) || TAIWAN_EAST_COAST_SET.has(t.fullCountyTown));
   });
   if (allInCoast) {
@@ -1132,6 +1304,7 @@ function detectRegionThemeProfile() {
 }
 
 function detectStationThemeProfile() {
+  if (!_dashFeatures().supportsTransportQuiz) return null;
   if (state.quizTargetMode === "region" || !state.stationQuizEnabled || !(state.quizStationLines instanceof Set) || state.quizStationLines.size === 0) {
     return null;
   }
@@ -1216,10 +1389,14 @@ function detectStationThemeProfile() {
 }
 
 function formatBreakdownSummary(stats, verbose = false) {
-  if (!stats) return "0區";
+  const unitLabels = _dashUnitLabels();
+  const isTw = _dashIsTwModern();
+  const adminLabel = isTw ? "行政區" : unitLabels.item;
+  const adminShort = isTw ? "區" : unitLabels.itemShort;
+  if (!stats) return `0${adminShort}`;
   const parts = [];
   if ((stats.adminTotal || 0) > 0 || (stats.adminCurrent || 0) > 0) {
-    parts.push(verbose ? `行政區 ${stats.adminCurrent || 0}/${stats.adminTotal || 0}` : `${stats.adminCurrent || 0}區`);
+    parts.push(verbose ? `${adminLabel} ${stats.adminCurrent || 0}/${stats.adminTotal || 0}` : `${stats.adminCurrent || 0}${adminShort}`);
   }
   if ((stats.stationTotal || 0) > 0 || (stats.unlockedStCount || 0) > 0) {
     parts.push(verbose ? `車站 ${stats.unlockedStCount || 0}/${stats.stationTotal || 0}` : `${stats.unlockedStCount || 0}站`);
@@ -1238,11 +1415,12 @@ function formatBreakdownSummary(stats, verbose = false) {
       parts.push(verbose ? `${fullLbl} ${item.current}/${item.total}` : `${item.current}${shortLbl}`);
     }
   });
-  if (parts.length === 0) return verbose ? "行政區 0/0" : "0區";
+  if (parts.length === 0) return verbose ? `${adminLabel} 0/0` : `0${adminShort}`;
   return parts.join(verbose ? "  ·  " : " · ");
 }
 
 function detectPoiThemeProfile() {
+  if (!_dashFeatures().supportsPoiQuiz) return null;
   if (typeof isPoiCategoryActive !== "function") return null;
   const activeCats = ["airport", "port", "reservoir", "lake", "settlement"].filter((c) => isPoiCategoryActive(c));
   if (activeCats.length === 0) return null;
@@ -1390,7 +1568,9 @@ function getGradeFromStats(stats) {
   const stripEmoji = (s) => String(s || "").replace(/^[👑🌊⛰️🌾🏙️⬆️☀️🏝️🔱🚄🚆🚇🚋🌲🏮🌸✈️🎫🏆⚡🧭🌱🚶🎖️⚓🚢🐟💧🏞️]+\s*/, "");
 
   let title = "";
-  let scopeLabel = "台灣地理";
+  const isTw = _dashIsTwModern();
+  const pack = _dashPack();
+  let scopeLabel = isTw ? "台灣地理" : ((pack && (pack.displayName || pack.shortLabel)) || "地理挑戰");
   if (activeThemes.length === 1) {
     title = activeThemes[0].titles[grade] || activeThemes[0].titles.S;
     scopeLabel = activeThemes[0].scopeLabel;
@@ -1412,7 +1592,7 @@ function getGradeFromStats(stats) {
     title = multiAll.titles[grade] || multiAll.titles.S;
     scopeLabel = multiAll.scopeLabel + (regTheme && state.filterStationsByRegion ? " (區域內)" : "");
   } else {
-    title = "台灣地理探索旅人";
+    title = isTw ? "台灣地理探索旅人" : `${scopeLabel}探索旅人`;
   }
 
   const qPerSecStr = qPerSec.toFixed(2);
@@ -1580,21 +1760,46 @@ function showSettlementModal() {
     returnLobbyBtn.classList.toggle("hidden", !isInRoomSession);
   }
 
+  const allGroups = _dashGroups();
+  const allItems = _dashItems();
+  const pack = _dashPack();
+  const unitLabels = _dashUnitLabels();
+  const features = _dashFeatures();
+  const isTw = _dashIsTwModern();
+  const singleLayer = _dashIsSingleLayer();
+  const defaultScopeName = isTw ? "台灣地理" : ((pack && (pack.displayName || pack.shortLabel)) || "地理挑戰");
+
   const diffNames = {
     casual: "休閒提示",
-    county_only: "縣市挑戰",
+    county_only: isTw ? "縣市挑戰" : `${unitLabels.group}挑戰`,
+    hard_suffix: "進階後綴",
     hard_full: "困難全名",
     master_hierarchy: "三階宗師"
   };
   const diffLabel = diffNames[state.difficulty] || state.difficulty;
   const scopeTownCount = getScopeTowns().length;
-  const activeSt = getActiveQuizStations();
+  const activeSt = features.supportsTransportQuiz && typeof getActiveQuizStations === "function" ? getActiveQuizStations() : [];
   const scopeParts = [];
   if (state.regionQuizEnabled && scopeTownCount > 0) {
-    scopeParts.push(state.selectedCounties.size === 22 ? "全台 368 區" : `${state.selectedCounties.size} 縣市 (${scopeTownCount}區)`);
+    if (isTw) {
+      scopeParts.push(
+        state.selectedCounties.size === allGroups.length && scopeTownCount === allItems.length
+          ? `全台 ${allItems.length} 區`
+          : `${state.selectedCounties.size} 縣市 (${scopeTownCount}區)`
+      );
+    } else {
+      const fullLbl = unitLabels.fullScopeLabel || `${(pack && pack.shortLabel) || "全境"} (${allItems.length}${unitLabels.itemShort})`;
+      scopeParts.push(
+        scopeTownCount === allItems.length && allItems.length > 0
+          ? fullLbl
+          : singleLayer
+          ? `${scopeTownCount} ${unitLabels.itemShort}`
+          : `${state.selectedCounties.size} ${unitLabels.group} (${scopeTownCount}${unitLabels.itemShort})`
+      );
+    }
   }
   if (activeSt.length > 0) scopeParts.push(`${activeSt.length}站`);
-  if (typeof isPoiCategoryActive === "function" && typeof getActiveQuizPois === "function") {
+  if (features.supportsPoiQuiz && typeof isPoiCategoryActive === "function" && typeof getActiveQuizPois === "function") {
     [["airport", "機場"], ["port", "港"], ["reservoir", "水庫"], ["lake", "湖"], ["settlement", "聚落"]].forEach(([cat, lbl]) => {
       if (isPoiCategoryActive(cat)) {
         const cnt = getActiveQuizPois(cat).length;
@@ -1602,7 +1807,7 @@ function showSettlementModal() {
       }
     });
   }
-  const scopeSummary = scopeParts.length > 0 ? scopeParts.join(" + ") : "台灣地理";
+  const scopeSummary = scopeParts.length > 0 ? scopeParts.join(" + ") : defaultScopeName;
 
   if (modeBadge) modeBadge.textContent = `${diffLabel} · ${scopeSummary}`;
   if (rematchBtnText) rematchBtnText.textContent = isMultiplayer ? "發起重開對戰" : "再玩一局";
@@ -1627,7 +1832,7 @@ function showSettlementModal() {
     if (gradeDescEl) gradeDescEl.textContent = gradeInfo.desc;
 
     if (titleEl) {
-      titleEl.textContent = gradeInfo.victoryHeadline || (pctNum >= 100 ? "🎉 恭喜通關！台灣全島制霸" : "挑戰結算完成！");
+      titleEl.textContent = gradeInfo.victoryHeadline || (pctNum >= 100 ? (isTw ? "🎉 恭喜通關！台灣全島制霸" : `🎉 恭喜通關！${defaultScopeName}制霸`) : "挑戰結算完成！");
     }
     if (iconBox) iconBox.textContent = pctNum >= 100 ? "👑" : "🏆";
   } else {
@@ -1891,14 +2096,21 @@ function downloadSettlementCard() {
   ctx.lineWidth = 2;
   drawRoundedRect(ctx, 24, 24, 1152, 627, 24, null, "rgba(148, 163, 184, 0.25)");
 
+  const isTw = _dashIsTwModern();
+  const pack = _dashPack();
+  const allGroups = _dashGroups();
+  const allItems = _dashItems();
+  const unitLabels = _dashUnitLabels();
+  const packDisplayName = (pack && (pack.displayName || pack.shortLabel)) || "台灣地理";
+
   // 2. Header
   ctx.fillStyle = "#38bdf8";
   ctx.font = "bold 16px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-  ctx.fillText("TAIWAN GEOMASTER TW · 挑戰成績單", 64, 76);
+  ctx.fillText(isTw ? "TAIWAN GEOMASTER TW · 挑戰成績單" : "GEOMASTER PRO · 挑戰成績單", 64, 76);
 
   ctx.fillStyle = "#ffffff";
   ctx.font = "bold 32px 'Noto Sans TC', -apple-system, sans-serif";
-  ctx.fillText("台灣行政區記憶大挑戰", 64, 118);
+  ctx.fillText(isTw ? "台灣行政區記憶大挑戰" : `${packDisplayName}記憶大挑戰`, 64, 118);
 
   ctx.textAlign = "right";
   ctx.fillStyle = "#94a3b8";
@@ -2015,18 +2227,30 @@ function downloadSettlementCard() {
   drawRoundedRect(ctx, 96, 486, fillW, 10, 5, "#38bdf8", null);
 
   // 5. 2x2 Metric Cards
-  const diffNames = { casual: "休閒提示", county_only: "縣市挑戰", hard_suffix: "進階後綴", hard_full: "困難全名", master_hierarchy: "三階宗師" };
+  const diffNames = {
+    casual: "休閒提示",
+    county_only: isTw ? "縣市挑戰" : `${unitLabels.group}挑戰`,
+    hard_suffix: "進階後綴",
+    hard_full: "困難全名",
+    master_hierarchy: "三階宗師"
+  };
   const diffLabel = diffNames[state.difficulty] || state.difficulty;
   const avgSec = stats.grandScore > 0 ? (stats.elapsedSec / stats.grandScore).toFixed(1) : "0.0";
   const qPerSecVal = stats.elapsedSec > 0 ? (stats.grandScore / stats.elapsedSec).toFixed(2) : "0.00";
   const gInfoForCard = getGradeFromStats(stats);
   const clearedTextForCard = stats.clearedSummaryText || gInfoForCard.clearedText || "";
+  const fullScopeFallback = isTw
+    ? `全台 ${allItems.length} 行政區`
+    : (unitLabels.fullScopeLabel || `${packDisplayName} (${allItems.length}${unitLabels.itemShort})`);
+  const customScopeFallback = isTw
+    ? `自選 ${state.selectedCounties.size} 縣市`
+    : (_dashIsSingleLayer() ? `自選 ${getScopeTowns().length} ${unitLabels.itemShort}` : `自選 ${state.selectedCounties.size} ${unitLabels.group}`);
 
   const cards = [
     { title: "⏱️ 總耗時與速率", val: formatTime(stats.elapsedSec), sub: `${qPerSecVal} 題/秒 (每題 ${avgSec} 秒)`, x: 568, y: 248, color: "#ffffff" },
     { title: "🎯 答題正確率", val: `${stats.accuracy}%`, sub: `答對 ${stats.grandScore} · 答錯 ${stats.wrongAttempts} 次`, x: 864, y: 248, color: "#34d399" },
     { title: "🔥 最高連對", val: `${stats.maxStreak} 題`, sub: clearedTextForCard || "無間斷連續答對紀錄", x: 568, y: 396, color: "#f59e0b" },
-    { title: "🗺️ 挑戰範圍與難度", val: diffLabel, sub: gInfoForCard.scopeLabel || (state.selectedCounties.size === 22 ? "全台 368 行政區" : `自選 ${state.selectedCounties.size} 縣市`), x: 864, y: 396, color: "#38bdf8" }
+    { title: "🗺️ 挑戰範圍與難度", val: diffLabel, sub: gInfoForCard.scopeLabel || (state.selectedCounties.size === allGroups.length ? fullScopeFallback : customScopeFallback), x: 864, y: 396, color: "#38bdf8" }
   ];
 
   cards.forEach((c) => {
@@ -2054,7 +2278,7 @@ function downloadSettlementCard() {
 
   ctx.fillStyle = "#64748b";
   ctx.font = "14px 'Noto Sans TC', sans-serif";
-  ctx.fillText("TAIWAN GEOMASTER TW · 探索台灣每一寸土地", 64, 588);
+  ctx.fillText(isTw ? "TAIWAN GEOMASTER TW · 探索台灣每一寸土地" : `GEOMASTER PRO · ${packDisplayName}`, 64, 588);
 
   ctx.textAlign = "right";
   ctx.fillStyle = "#475569";
@@ -2064,16 +2288,21 @@ function downloadSettlementCard() {
 
   // Trigger Download
   const link = document.createElement("a");
-  link.download = `Taiwan-GeoMaster-Scorecard-${Date.now()}.png`;
+  link.download = isTw ? `Taiwan-GeoMaster-Scorecard-${Date.now()}.png` : `GeoMaster-${_dashPackId()}-Scorecard-${Date.now()}.png`;
   link.href = cvs.toDataURL("image/png");
   link.click();
   setFeedback("📥 已成功生成並下載高解析度挑戰成績單圖片！", "success");
 }
 
 function formatSettlementShareText(stats, isMultiplayer, oppStats) {
+  const isTw = _dashIsTwModern();
+  const pack = _dashPack();
+  const unitLabels = _dashUnitLabels();
+  const packDisplayName = (pack && (pack.displayName || pack.shortLabel)) || "地理";
   const diffNames = {
     casual: "休閒提示",
-    county_only: "縣市挑戰",
+    county_only: isTw ? "縣市挑戰" : `${unitLabels.group}挑戰`,
+    hard_suffix: "進階後綴",
     hard_full: "困難全名",
     master_hierarchy: "三階宗師"
   };
@@ -2111,7 +2340,7 @@ function formatSettlementShareText(stats, isMultiplayer, oppStats) {
   const clearedText = stats.clearedSummaryText || computeClearedBlocksStats().clearedSummaryText;
 
   return [
-    `🗺️ 【Taiwan GeoMaster Pro · 台灣地理挑戰成績單】`,
+    isTw ? `🗺️ 【Taiwan GeoMaster Pro · 台灣地理挑戰成績單】` : `🗺️ 【GeoMaster Pro · ${packDisplayName}挑戰成績單】`,
     `👤 挑戰者：${stats.name}`,
     resultLine,
     `📊 總完成度：${pctStr} (${stats.grandScore} / ${stats.grandTotal} 題 · ${formatBreakdownSummary(stats, false)})`,
@@ -2121,7 +2350,9 @@ function formatSettlementShareText(stats, isMultiplayer, oppStats) {
     `🔥 最高連擊：${stats.maxStreak} 連對`,
     `🎮 難度模式：${diffLabel}`,
     `--------------------------`,
-    `挑戰你的台灣地理極限：${window.location.origin}${window.location.pathname}`
+    isTw
+      ? `挑戰你的台灣地理極限：${window.location.origin}${window.location.pathname}`
+      : `挑戰你的地理極限：${window.location.origin}${window.location.pathname}`
   ].join("\n");
 }
 
@@ -2129,6 +2360,8 @@ function shareSettlementCard() {
   const stats = state.finalStats;
   if (!stats) return;
 
+  const isTw = _dashIsTwModern();
+  const pack = _dashPack();
   const activeBattleForShare = typeof getActiveBattlePlayers === "function" ? getActiveBattlePlayers() : [];
   const isMultiplayer = Boolean(activeBattleForShare.length >= 2 || state.aiRivalActive || state.aiRivalTimer);
   const oppStats = state.opponent.finalStats;
@@ -2136,7 +2369,7 @@ function shareSettlementCard() {
 
   if (navigator.share) {
     navigator.share({
-      title: "Taiwan GeoMaster Pro · 台灣地理挑戰成績單",
+      title: isTw ? "Taiwan GeoMaster Pro · 台灣地理挑戰成績單" : `GeoMaster Pro · ${(pack && (pack.displayName || pack.shortLabel)) || "地理"}挑戰成績單`,
       text: text,
       url: window.location.href
     }).catch(() => {
@@ -2229,13 +2462,17 @@ function resetGame() {
   if (state.playMode === "target_random" || state.playMode === "satellite_quiz") {
     pickNextTargetRegion();
   } else {
-    if (typeof unlockMapViewportToTaiwan === "function") {
-      unlockMapViewportToTaiwan({ restoreLayers: true });
-    }
+    _dashUnlockViewport({ restoreLayers: true });
     updateTargetBannerUI();
     refreshAllPolygonStyles();
   }
-  setFeedback("新的一局已準備就緒，輸入第一個行政區即開始計時！", "info");
+  const unitLabels = _dashUnitLabels();
+  setFeedback(
+    _dashIsTwModern()
+      ? "新的一局已準備就緒，輸入第一個行政區即開始計時！"
+      : `新的一局已準備就緒，輸入第一個${unitLabels.item}即開始計時！`,
+    "info"
+  );
   if (state.roomCode || state.aiRivalActive) broadcastP2PState("重新開局");
 }
 

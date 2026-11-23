@@ -9,7 +9,7 @@
   1. 可直接雙擊 `index.html`（透過 `file://` 協定）在瀏覽器本地執行，不會觸發 CORS 阻擋；`css/styles.css` 亦內建離線 RWD 佈局與漸層按鈕樣式備援。
   2. 亦可透過 VS Code Live Server、`python3 -m http.server 8000` 或直接部署至 GitHub Pages 執行。
 - **腳本載入順序**（定義於 `index.html` 底部，請勿任意調換順序）：
-  1. `data/admin-data.js` ➔ 2. `data/railisland-shapes.js` ➔ 3. `data/transport-data.js` ➔ 4. `data/poi-data.js` ➔ 5. `js/state.js` ➔ 6. `js/map-engine.js` ➔ 7. `js/transport-engine.js` ➔ 8. `js/poi-engine.js` ➔ 9. `js/label-engine.js` ➔ 10. `js/game-logic.js` ➔ 11. `js/dashboard-ui.js` ➔ 12. `js/p2p-engine.js` ➔ 13. `js/ui-controls.js`
+  1. `data/admin-data.js` ➔ 2. `data/railisland-shapes.js` ➔ 3. `data/transport-data.js` ➔ 4. `data/poi-data.js` ➔ 4.5. `js/map-pack-registry.js` ➔ 5. `js/state.js` ➔ 6. `js/map-engine.js` ➔ 7. `js/transport-engine.js` ➔ 8. `js/poi-engine.js` ➔ 9. `js/label-engine.js` ➔ 10. `js/game-logic.js` ➔ 11. `js/dashboard-ui.js` ➔ 12. `js/p2p-engine.js` ➔ 13. `js/ui-controls.js`
 
 ## 2. 目錄結構與檔案職責總覽
 
@@ -23,7 +23,8 @@
 | `data/poi-data.js` | ~560 | 台灣機場（24座）、港口（233座；官方第一類漁港9座＋完整第二類漁港212座［精選24＋其餘188］）、水庫（41座：主要21/其他本島14/離島6）與湖泊（34座：觀光平地22/高山秘境12，6座雙屬性湖庫跨類別去重）精準經緯度資料集 | `POI_CATEGORY_META`, `AIRPORT_SUBTYPES`, `PORT_SUBTYPES`, `RESERVOIR_SUBTYPES`, `LAKE_SUBTYPES`, `SETTLEMENT_SUBTYPES`, `TAIWAN_POI_DATA`, `resolvePoiTownId()` |
 | `js/poi-engine.js` | ~300 | 機場與港口核心引擎：多標籤自動去重計數、區域篩選、答題別名比對與專屬地圖標記圖層 (`poiMarkerPane`) | `getActiveQuizPois()`, `countPoisBySubType()`, `countUniquePoisForSubTypes()`, `tryMatchAndUnlockPoi()`, `initPoiMapEngine()`, `refreshPoiMapLayer()` |
 | `TODO.md` | ~60 | 第二階段待實作題庫（水庫、湖泊、島嶼）調查與實作注意事項 | 待辦規劃文件 |
-| `js/state.js` | ~290 | 全域狀態物件 (`state`，含 `settingsTab`、`bannedDevices`、`roomHasPassword`)、穩定裝置識別碼 (`getOrCreateStableDeviceId()`)、觀戰視角代理 (`getActiveViewState()`)、防作弊權限守衛 (`canLocalModifyGameConfig()`) | `state`, `getActiveViewState()`, `canLocalModifyGameConfig()`, `playTone()` |
+| `js/map-pack-registry.js` | ~700 | 多地圖包抽象層 (`TRACK-M0`)：`GEOMASTER_PACKS` 註冊表、`tw_modern` 預設轉接層、支援 `file://` 的動態 `<script>` 載入與 `switchActiveMapPack()` 生命週期 | `GEOMASTER_PACKS`, `registerMapPack()`, `getActiveMapPack()`, `getActiveGroups()`, `getActiveItems()`, `switchActiveMapPack()` |
+| `js/state.js` | ~290 | 全域狀態物件 (`state`，含 `activeMapPackId`、`settingsTab`、`bannedDevices`、`roomHasPassword`)、穩定裝置識別碼 (`getOrCreateStableDeviceId()`)、觀戰視角代理 (`getActiveViewState()`)、防作弊權限守衛 (`canLocalModifyGameConfig()`) | `state`, `getActiveViewState()`, `canLocalModifyGameConfig()`, `playTone()` |
 | `js/map-engine.js` | ~550 | Leaflet Canvas 地圖初始化、GPU 縮放矩陣同步 (`zoomanim`)、Esri 底圖切換、TopoJSON 載入與多邊形渲染 | `map`, `canvasRenderer`, `initMap()`, `setMapBaseLayer()`, `refreshAllPolygonStyles()` |
 | `js/transport-engine.js` | ~1,020 | 鐵道與車站核心引擎：真實軌道向量與車站圓點渲染、車站猜題比對 | `initPrecisionRailAndStationEngine()`, `shouldFilterStationsByRegion()`, `getActiveQuizStations()`, `tryMatchAndUnlockStation()` |
 | `js/label-engine.js` | ~180 | 視窗裁切 (Viewport Culling) 與智慧防重疊外拉引線 (Leader Lines) 標籤渲染引擎 | `renderSmartLabelsAndLeaderLines()` |

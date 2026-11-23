@@ -33,9 +33,15 @@ function renderSmartLabelsAndLeaderLines() {
 
   const itemsToLabel = [];
   const vState = typeof getActiveViewState === "function" ? getActiveViewState() : state;
+  const activePack = typeof getActiveMapPack === "function" ? getActiveMapPack() : null;
+  const activeGroups = typeof getActiveGroups === "function" ? getActiveGroups() : TAIWAN_ADMIN_DATA;
+  const activeItems = typeof getActiveItems === "function" ? getActiveItems() : ALL_TOWNS;
+  const mv = typeof getActivePackMapView === "function" ? getActivePackMapView() : { defaultZoom: 8, targetFocusZoom: 11, center: [23.75, 120.95] };
+  const baseZoom = Number.isFinite(mv.defaultZoom) ? mv.defaultZoom : 8;
+  const isSingleLayer = typeof isActivePackSingleLayer === "function" ? isActivePackSingleLayer() : false;
 
   if (state.difficulty === "county_only") {
-    TAIWAN_ADMIN_DATA.forEach((c) => {
+    activeGroups.forEach((c) => {
       if (!state.selectedCounties.has(c.name)) return;
       if (!vState.unlockedCounties.has(c.name) && !vState.isGameOver) return;
       const pt = map.latLngToContainerPoint([c.lat, c.lng]);
@@ -44,17 +50,17 @@ function renderSmartLabelsAndLeaderLines() {
       itemsToLabel.push({
         id: c.name,
         label: c.name,
-        fullTitle: `${c.province} · ${c.name}`,
+        fullTitle: c.province ? `${c.province} · ${c.name}` : c.name,
         pt,
-        pxWidth: zoom >= 8 ? 68 : 38,
-        pxHeight: zoom >= 8 ? 30 : 18,
+        pxWidth: zoom >= baseZoom ? 68 : 38,
+        pxHeight: zoom >= baseZoom ? 30 : 18,
         isMissed: !vState.unlockedCounties.has(c.name),
         lat: c.lat,
         lng: c.lng
       });
     });
   } else {
-    ALL_TOWNS.forEach((t) => {
+    activeItems.forEach((t) => {
       if (!isTownInScope(t)) return;
       const unlocked = vState.unlockedTowns.has(t.id);
       const missed = vState.missedTowns.has(t.id);
@@ -73,16 +79,24 @@ function renderSmartLabelsAndLeaderLines() {
         pxHeight = Math.abs(se.y - nw.y);
       }
 
-      // When zoomed out (zoom <= 9), hide regions whose pixel width is smaller than threshold!
-      const minPx = zoom <= 7 ? state.minPolygonPixelSize + 8 : zoom === 8 ? state.minPolygonPixelSize : zoom === 9 ? Math.max(12, state.minPolygonPixelSize - 6) : 0;
-      if (zoom <= 9 && pxWidth < minPx && pxHeight < minPx && state.leaderLineMode !== "all_callout") {
+      // When zoomed out relative to pack default zoom, hide tiny polygons below threshold
+      const minPx = zoom <= baseZoom - 1 ? state.minPolygonPixelSize + 8 : zoom <= baseZoom ? state.minPolygonPixelSize : zoom <= baseZoom + 1 ? Math.max(12, state.minPolygonPixelSize - 6) : 0;
+      if (zoom <= baseZoom + 1 && pxWidth < minPx && pxHeight < minPx && state.leaderLineMode !== "all_callout") {
         return;
       }
 
+      const displayLabel = isSingleLayer
+        ? t.townName
+        : (zoom >= baseZoom + 4 && t.countyShort
+            ? `${t.countyShort}·${t.townName}`
+            : zoom <= baseZoom
+            ? (t.baseName || t.townName)
+            : t.townName);
+
       itemsToLabel.push({
         id: t.id,
-        label: zoom >= 12 ? `${t.countyShort}·${t.townName}` : zoom <= 8 ? t.baseName : t.townName,
-        fullTitle: t.fullHierarchyName,
+        label: displayLabel,
+        fullTitle: t.fullHierarchyName || t.fullCountyTown || t.townName,
         pt,
         pxWidth,
         pxHeight,
@@ -123,14 +137,17 @@ function renderSmartLabelsAndLeaderLines() {
   });
 
   // Respect user's Max Visible Callouts setting for smooth performance
-  const maxCallouts = Math.min(state.maxVisibleCallouts, zoom <= 7 ? 12 : zoom <= 8 ? 24 : state.maxVisibleCallouts);
+  const maxCallouts = Math.min(state.maxVisibleCallouts, zoom <= baseZoom - 1 ? 12 : zoom <= baseZoom ? 24 : state.maxVisibleCallouts);
   const placedBoxes = [];
 
   // Sort callouts by polygon size descending so larger/more prominent ones get labeled first
   calloutQueue.sort((a, b) => b.pxWidth - a.pxWidth);
 
+  const calloutFocusZoom = Number.isFinite(mv.targetFocusZoom) ? mv.targetFocusZoom : 11;
   calloutQueue.slice(0, maxCallouts).forEach((item, idx) => {
-    const isEastSide = item.lng >= 121.15;
+    const isEastSide = !activePack || activePack.id === "tw_modern"
+      ? item.lng >= 121.15
+      : item.pt.x >= mapSize.x / 2;
     const dirX = isEastSide ? 1 : -1;
     const baseOffsetX = dirX * (34 + (idx % 3) * 22);
     let targetX = Math.max(46, Math.min(mapSize.x - 46, Math.round(item.pt.x + baseOffsetX)));
@@ -170,7 +187,7 @@ function renderSmartLabelsAndLeaderLines() {
     pill.textContent = item.label;
     pill.title = `${item.fullTitle} (點擊放大定位)`;
     pill.addEventListener("click", () => {
-      map.flyTo([item.lat, item.lng], Math.max(map.getZoom(), 11), { duration: 0.5 });
+      map.flyTo([item.lat, item.lng], Math.max(map.getZoom(), calloutFocusZoom), { duration: 0.5 });
     });
     docFrag.appendChild(pill);
   });

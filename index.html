@@ -160,7 +160,7 @@
           </span>
 
           <div class="flex flex-wrap items-center gap-1 pointer-events-auto">
-            <div class="apple-glass-pill rounded-xl p-0.5 flex items-center gap-0.5 border border-slate-700/80">
+            <div id="map-rail-control-pill" class="apple-glass-pill rounded-xl p-0.5 flex items-center gap-0.5 border border-slate-700/80">
               <button id="btn-toggle-rail" type="button" class="px-2 py-1 rounded-lg text-[11px] sm:text-xs font-medium text-slate-300 hover:bg-slate-800 transition flex items-center gap-1 whitespace-nowrap" data-tip="切換：關閉 ➔ 純軌道路網 ➔ 完整路網">
                 <i data-lucide="train-front" class="w-3.5 h-3.5 text-amber-400"></i>
                 <span>路網疊圖: 關</span>
@@ -195,7 +195,7 @@
             <!-- Expandable Regional & County Quick-Jump Drawer -->
             <div id="quick-jump-list" class="hidden flex-col gap-1.5 pt-1.5 mt-0.5 border-t border-slate-700/80">
               <div class="text-[10px] font-bold text-slate-400 px-1">快速視角跳轉</div>
-              <div class="grid grid-cols-2 gap-1">
+              <div id="map-quick-jump-tw-group" class="grid grid-cols-2 gap-1">
                 <button id="btn-view-north" type="button" class="px-2 py-1 rounded-lg text-[11px] font-medium bg-slate-900/80 hover:bg-slate-700/80 text-slate-200 border border-slate-800 transition text-left">
                   🏙️ 北北基桃
                 </button>
@@ -480,7 +480,7 @@
         <!-- Quick-Jump Unlocked County Chips -->
         <div class="pt-2 border-t border-slate-800/80">
           <div class="flex items-center justify-between text-[11px] text-slate-400 mb-1.5">
-            <span>📍 點選已解鎖縣市定位：</span>
+            <span id="quick-zoom-group-label">📍 點選已解鎖縣市定位：</span>
             <button id="btn-reset-view-side" type="button" class="text-sky-400 hover:text-sky-300 font-semibold">
               🔄 全台灣
             </button>
@@ -754,7 +754,7 @@
                   <option value="satellite">無字衛星影像</option>
                 </select>
               </div>
-              <div>
+              <div id="p2p-rail-rule-wrap">
                 <label class="text-[10px] text-slate-400 font-semibold block mb-1">🚆 路網與車站限制</label>
                 <select id="p2p-rail-rule-select" class="w-full bg-slate-950 text-amber-200 text-[11px] font-semibold rounded-xl px-2.5 py-1.5 border border-slate-700">
                   <option value="free">🔓 自由開關路網</option>
@@ -842,8 +842,16 @@
         <div id="unified-settings-panel" class="space-y-3.5">
           <fieldset id="unified-settings-fieldset" class="space-y-3.5">
 
+            <!-- MapPack Switcher (Hidden whenever <= 1 pack is registered) -->
+            <div id="mappack-selector-section" class="hidden p-3 rounded-2xl bg-slate-900/90 border border-indigo-500/35">
+              <div class="flex flex-wrap items-center justify-between gap-1 mb-2">
+                <label class="text-xs font-extrabold text-indigo-300">🗺️ 地圖包切換</label>
+              </div>
+              <div id="mappack-selector-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-2"></div>
+            </div>
+
             <!-- Shared Step 0: Unified Dual-Action Quiz Topics (點左側單選快切 / 點右側開關複選連集) -->
-            <div class="p-3 rounded-2xl bg-slate-900/90 border border-sky-500/30">
+            <div id="topic-selector-card" class="p-3 rounded-2xl bg-slate-900/90 border border-sky-500/30">
               <div class="flex flex-wrap items-center justify-between gap-1 mb-2">
                 <label class="text-xs font-extrabold text-sky-300">挑戰題庫（統一快選＋連集）</label>
                 <span class="text-[11px] text-slate-400">點左側名稱「單選快切」 · 點右側開關「複選連集」</span>
@@ -852,7 +860,7 @@
                 <div data-topic="region" data-accent="sky" data-state="on" class="topic-chip-btn geo-select-card" data-tip="猜台灣縣市與鄉鎮市區">
                   <button type="button" class="geo-solo-btn" aria-label="單選🗺️ 行政區">
                     <span class="text-xs sm:text-sm font-extrabold text-sky-200">🗺️ 行政區</span>
-                    <span class="text-[10px] text-slate-400 mt-0.5">22 縣市 / 368 區</span>
+                    <span id="topic-region-meta" class="text-[10px] text-slate-400 mt-0.5">22 縣市 / 368 區</span>
                   </button>
                   <button type="button" class="geo-union-btn" role="checkbox" aria-checked="true" aria-label="複選切換🗺️ 行政區">
                     <span class="geo-union-pill topic-check">✓</span>
@@ -1008,7 +1016,7 @@
                     <button type="button" data-scope-action="select-all" data-scope-target="region" class="scope-bulk-btn px-2 py-0.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 text-[11px] font-bold transition">全選</button><button type="button" data-scope-action="clear" data-scope-target="region" class="scope-bulk-btn px-2 py-0.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-[11px] font-bold transition">清除</button>
                   </div>
                 </div>
-                <div class="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                <div id="simple-region-tw-grid" class="grid grid-cols-3 sm:grid-cols-5 gap-2">
                   <div data-simple-region="all" data-accent="sky" data-state="off" class="simple-region-btn geo-select-card" data-tip="全臺灣 22 縣市共 368 鄉鎮市區">
                     <button type="button" class="geo-solo-btn"><span class="text-xs font-bold ">🇹🇼 全臺</span></button>
                     <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
@@ -1054,6 +1062,7 @@
                     <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
                   </div>
                 </div>
+                <div id="simple-region-dynamic-grid" class="hidden grid grid-cols-2 sm:grid-cols-4 gap-2"></div>
               </div>
 
               <!-- Simple Station Selection: 北捷 / 高捷 / 中捷 / 台鐵西部主線（山海） / 台鐵東部主線 / 高鐵 / 全（不含休閒設施 纜車台車） -->
@@ -1281,7 +1290,7 @@
                     </button>
                   </div>
                 </div>
-                <div class="flex flex-wrap items-center gap-1.5">
+                <div id="advanced-region-tw-presets" class="flex flex-wrap items-center gap-1.5">
                   <div id="btn-scope-all" data-accent="sky" data-state="off" class="scope-preset-btn geo-select-card geo-compact"><button type="button" class="geo-solo-btn"><span>全臺</span></button><button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button></div>
                   <div id="btn-scope-west" data-accent="sky" data-state="off" class="scope-preset-btn geo-select-card geo-compact"><button type="button" class="geo-solo-btn"><span>西部16縣市</span></button><button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button></div>
                   <div id="btn-scope-six" data-accent="sky" data-state="off" class="scope-preset-btn geo-select-card geo-compact"><button type="button" class="geo-solo-btn"><span>六都</span></button><button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button></div>
@@ -1296,6 +1305,7 @@
                   <div id="btn-scope-east-coast" data-accent="sky" data-state="off" class="scope-preset-btn geo-select-card geo-compact"><button type="button" class="geo-solo-btn"><span>東部濱海</span></button><button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button></div>
                   <div id="btn-scope-islands" data-accent="sky" data-state="off" class="scope-preset-btn geo-select-card geo-compact"><button type="button" class="geo-solo-btn"><span>外島澎金馬</span></button><button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button></div>
                 </div>
+                <div id="advanced-region-dynamic-presets" class="hidden flex flex-wrap items-center gap-1.5"></div>
 
                 <div id="scope-counties-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-1.5 pt-1"></div>
               </div>
@@ -2104,6 +2114,9 @@
   <script src="data/railisland-shapes.js"></script>
   <script src="data/transport-data.js"></script>
   <script src="data/poi-data.js"></script>
+
+  <!-- 1.5 MapPack Core Registry & Lifecycle (TRACK-M0) -->
+  <script src="js/map-pack-registry.js"></script>
 
   <!-- 2. Core Application State & Audio Engine -->
   <script src="js/state.js"></script>

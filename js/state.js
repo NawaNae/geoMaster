@@ -88,6 +88,7 @@ function getOrCreateTabInstanceId(baseDeviceId) {
 const TAB_INSTANCE_ID = getOrCreateTabInstanceId(STABLE_DEVICE_ID);
 
 const state = {
+  activeMapPackId: typeof DEFAULT_MAP_PACK_ID !== "undefined" ? DEFAULT_MAP_PACK_ID : "tw_modern",
   difficulty: "casual",       // 'casual' | 'county_only' | 'hard_suffix' | 'hard_full' | 'master_hierarchy'
   playMode: "free",           // 'free' | 'target_random' | 'target_click' | 'satellite_quiz'
   satelliteStyle: "day",      // 'day' | 'night' | 'hybrid'
@@ -116,8 +117,8 @@ const state = {
   minPolygonPixelSize: 22,    // Hide labels for polygons smaller than this when zoomed out
   perfLiteMode: true,         // Disable heavy CSS blurs by default for 60FPS
   isImeComposing: false,      // Tracks Windows Bopomofo / IME dotted-underline state!
-  selectedCounties: new Set(TAIWAN_ADMIN_DATA.map((c) => c.name)),
-  selectedTownIds: new Set(ALL_TOWNS.map((t) => t.id)),
+  selectedCounties: new Set((typeof getActiveGroups === "function" ? getActiveGroups() : TAIWAN_ADMIN_DATA).map((c) => c.name)),
+  selectedTownIds: new Set((typeof getActiveItems === "function" ? getActiveItems() : ALL_TOWNS).map((t) => t.id)),
   unlockedTowns: new Set(),
   unlockedCounties: new Set(),
   unlockedProvinces: new Set(),

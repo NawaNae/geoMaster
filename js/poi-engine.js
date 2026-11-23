@@ -134,6 +134,9 @@ function countUniquePoisForSubTypes(category, subTypeSet, applyRegionFilter = fa
 
 // Returns deduplicated array of active quiz POIs (optionally filtered to one category)
 function getActiveQuizPois(categoryFilter = null) {
+  if (typeof getActivePackFeatures === "function" && !getActivePackFeatures().supportsPoiQuiz) {
+    return [];
+  }
   const result = [];
   const seen = new Set();
   const useRegion = shouldFilterPoisByRegion();
