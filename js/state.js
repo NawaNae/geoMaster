@@ -91,7 +91,10 @@ const state = {
   activeMapPackId: typeof DEFAULT_MAP_PACK_ID !== "undefined" ? DEFAULT_MAP_PACK_ID : "tw_modern",
   packOptions: {
     worldIncludeMicrostates: true,
-    cnAllowSingleCharAlias: false
+    cnAllowSingleCharAlias: false,
+    rocTerritoryVariant: "begonia_full",
+    includeMunicipalities: true,
+    showDisputedBorders: true
   },
   difficulty: "casual",       // 'casual' | 'county_only' | 'hard_suffix' | 'hard_full' | 'master_hierarchy'
   playMode: "free",           // 'free' | 'target_random' | 'target_click' | 'satellite_quiz'

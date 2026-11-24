@@ -186,7 +186,10 @@ function syncScopeWithPackOptions(includeNewlyEnabledMicrostates = false) {
   }
   if (includeNewlyEnabledMicrostates && state.selectedCounties.size > 0) {
     eligibleItems.forEach((it) => {
-      if (it.isMicrostate && state.selectedCounties.has(it.countyName)) {
+      if (
+        (it.isMicrostate || it.isMongolia || it.isMunicipality) &&
+        state.selectedCounties.has(it.countyName)
+      ) {
         state.selectedTownIds.add(it.id);
       }
     });

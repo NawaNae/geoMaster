@@ -265,6 +265,8 @@ let railTileLayers = [];
 let geoLayerGroup = null;
 let countyBorderLayerGroup = null;
 let microstateLayerGroup = null;
+let disputedBorderLayerGroup = null;
+let _packAttributionText = "";
 let rafMovePending = false;
 
 const TAIWAN_MAX_BOUNDS = L.latLngBounds([20.2, 116.5], [27.4, 123.8]);
@@ -410,6 +412,7 @@ function initMap() {
   geoLayerGroup = L.layerGroup().addTo(map);
   countyBorderLayerGroup = L.layerGroup().addTo(map);
   microstateLayerGroup = L.layerGroup().addTo(map);
+  disputedBorderLayerGroup = L.layerGroup().addTo(map);
 
   updateRoadAndRailwayTileOverlays();
   const activePack = typeof getActiveMapPack === "function" ? getActiveMapPack() : null;
@@ -677,6 +680,9 @@ function clearActiveMapLayers(prevPack = null) {
   }
   if (microstateLayerGroup && typeof microstateLayerGroup.clearLayers === "function") {
     microstateLayerGroup.clearLayers();
+  }
+  if (disputedBorderLayerGroup && typeof disputedBorderLayerGroup.clearLayers === "function") {
+    disputedBorderLayerGroup.clearLayers();
   }
   _itemLayersById.clear();
   clearSatelliteTargetMarker();
@@ -1386,6 +1392,18 @@ function setMapBaseLayer(layerKey, forceBypassLock = false) {
     }).addTo(map);
     activeTileLayers.push(sat);
     mapEl.classList.add("basemap-no-spoiler");
+  } else if (layerKey === "historical") {
+    const activePack = typeof getActiveMapPack === "function" ? getActiveMapPack() : null;
+    const histCfg = activePack && activePack.historicalBasemap;
+    if (histCfg && histCfg.url) {
+      const histTile = L.tileLayer(histCfg.url, {
+        maxZoom: 10,
+        opacity: 0.88,
+        attribution: histCfg.attribution || "中央研究院人社中心 CCTS WMTS"
+      }).addTo(map);
+      activeTileLayers.push(histTile);
+      mapEl.classList.add("basemap-no-spoiler");
+    }
   }
 
   updateRoadAndRailwayTileOverlays();
@@ -1605,6 +1623,7 @@ function rebuildMapLayers(topoData) {
   if (geoLayerGroup && typeof geoLayerGroup.clearLayers === "function") geoLayerGroup.clearLayers();
   if (countyBorderLayerGroup && typeof countyBorderLayerGroup.clearLayers === "function") countyBorderLayerGroup.clearLayers();
   if (microstateLayerGroup && typeof microstateLayerGroup.clearLayers === "function") microstateLayerGroup.clearLayers();
+  if (disputedBorderLayerGroup && typeof disputedBorderLayerGroup.clearLayers === "function") disputedBorderLayerGroup.clearLayers();
   _itemLayersById.clear();
 
   const activeItems = _mapActiveItems();
@@ -1768,7 +1787,7 @@ function rebuildMapLayers(topoData) {
   // Render clickable circleMarker hotspots for microstates or small territories (TRACK-C / TRACK-D)
   if (microstateLayerGroup && typeof L !== "undefined" && typeof L.circleMarker === "function") {
     activeItems.forEach((item) => {
-      const needsDot = Boolean(item.isMicrostate) || (item.layers.length === 0 && Boolean(item.useHotspotDot));
+      const needsDot = Boolean(item.isMicrostate) || Boolean(item.isMunicipalityHotspot) || (item.layers.length === 0 && Boolean(item.useHotspotDot));
       if (!needsDot || !Number.isFinite(item.lat) || !Number.isFinite(item.lng)) return;
       const hotspotStyle = computeHotspotStyle(item);
       const dot = L.circleMarker([item.lat, item.lng], {
@@ -1802,6 +1821,9 @@ function rebuildMapLayers(topoData) {
       }
     });
   }
+
+  renderDisputedBordersLayer(activePack);
+  syncMapPackAttribution(activePack);
 
   const badge = typeof document !== "undefined" ? document.getElementById("geo-data-badge") : null;
   if (badge) {
@@ -2005,6 +2027,47 @@ function computePolygonStyle(townObj) {
     fillColor: isTileLayer ? "#0f172a" : "#162238",
     fillOpacity: isTileLayer ? 0.14 : (state.showDistrictBorders ? 0.72 : 0.18)
   };
+}
+
+function renderDisputedBordersLayer(pack = null) {
+  if (!disputedBorderLayerGroup || typeof disputedBorderLayerGroup.clearLayers !== "function") return;
+  disputedBorderLayerGroup.clearLayers();
+  const activePack = pack || (typeof getActiveMapPack === "function" ? getActiveMapPack() : null);
+  if (!activePack || !activePack.disputedBordersGeo) return;
+  const opts = (typeof state !== "undefined" && state && state.packOptions) || {};
+  if (opts.showDisputedBorders === false) return;
+  const excludeMongolia = opts.rocTerritoryVariant === "no_mongolia";
+  const features = Array.isArray(activePack.disputedBordersGeo.features)
+    ? activePack.disputedBordersGeo.features.filter((f) => !(excludeMongolia && f && f.properties && f.properties.id === "tannu_uriankhai"))
+    : [];
+  if (features.length === 0 || typeof L === "undefined" || typeof L.geoJSON !== "function") return;
+  const layer = L.geoJSON(
+    { type: "FeatureCollection", features },
+    {
+      renderer: canvasRenderer,
+      interactive: false,
+      style: () => ({
+        color: "#f59e0b",
+        weight: 1.8,
+        opacity: 0.78,
+        dashArray: "6 5",
+        fill: false
+      })
+    }
+  );
+  layer.addTo(disputedBorderLayerGroup);
+}
+
+function syncMapPackAttribution(pack = null) {
+  if (!map || !map.attributionControl) return;
+  const activePack = pack || (typeof getActiveMapPack === "function" ? getActiveMapPack() : null);
+  if (_packAttributionText && typeof map.attributionControl.removeAttribution === "function") {
+    map.attributionControl.removeAttribution(_packAttributionText);
+  }
+  _packAttributionText = (activePack && activePack.attribution) || "";
+  if (_packAttributionText && typeof map.attributionControl.addAttribution === "function") {
+    map.attributionControl.addAttribution(_packAttributionText);
+  }
 }
 
 function computeHotspotStyle(item) {

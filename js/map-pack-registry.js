@@ -627,6 +627,47 @@ const BUILT_IN_LAZY_MAP_PACK_STUBS = [
     }
   },
   {
+    id: "roc_1949",
+    _isLazyStub: true,
+    scriptUrl: "data/packs/roc-1949-pack.js",
+    displayName: "中華民國 1949（秋海棠 50 區）",
+    shortLabel: "🍂 秋海棠",
+    badgeText: "50區",
+    attribution: "歷史公告疆域學習測驗用途 · 圖資改作自 Wikimedia Commons (Lilauid, CC BY-SA 4.0)",
+    dataNote: "依 1949 年遷臺前公告疆域收錄 35 省 + 1 特別行政區 + 2 地方 + 12 院轄市（共 50 區；遷臺後升格之臺北、高雄直轄市併於臺灣省）。圖資改作自 Wikimedia Commons（Lilauid, CC BY-SA 4.0），僅供歷史公告疆域學習測驗用途。",
+    version: "1.0",
+    hierarchyDepth: 1,
+    unitLabels: {
+      group: "地理大區",
+      item: "省／市／地方／特區",
+      itemShort: "區",
+      fullScopeLabel: "秋海棠全境 50 區"
+    },
+    mapView: {
+      center: [36.5, 104.0],
+      defaultZoom: 4,
+      minZoom: 3,
+      maxZoom: 10,
+      maxBounds: [[2.0, 65.0], [60.0, 145.0]],
+      fullViewBounds: [[18.0, 71.0], [54.2, 135.5]],
+      pinDropScaleKm: 150,
+      targetFocusZoom: 6,
+      groupFocusZoom: 5,
+      targetMaxZoom: 9,
+      mainPolygonDistThresholdDeg: 1.5,
+      worldCopyJump: false
+    },
+    features: {
+      supportsTransportQuiz: false,
+      supportsPoiQuiz: false,
+      supportsMasterHierarchy: false,
+      supportsSuffixDifficulty: true,
+      supportsHistoricalBasemap: true,
+      quickSuffixes: ["省", "市", "地方", "特別行政區"],
+      supportedDifficulties: ["casual", "hard_suffix"]
+    }
+  },
+  {
     id: "world_countries",
     _isLazyStub: true,
     scriptUrl: "data/packs/world-countries-pack.js",
@@ -783,6 +824,9 @@ async function switchActiveMapPack(packId, options = {}) {
         : ["casual"];
     if (!supportedDiffs.includes(state.difficulty)) {
       state.difficulty = supportedDiffs[0];
+    }
+    if (state.mapLayer === "historical" && !features.supportsHistoricalBasemap && typeof setMapLayer === "function") {
+      setMapLayer("vector", true);
     }
 
     // 6. Re-initialize scope to the new pack's eligible groups & items (respects isItemEnabledByOptions)

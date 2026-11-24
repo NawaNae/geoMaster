@@ -169,12 +169,24 @@ function syncPackOptionsUI() {
   const bar = document.getElementById("pack-options-bar");
   const worldWrap = document.getElementById("pack-opt-world-micro-wrap");
   const cnWrap = document.getElementById("pack-opt-cn-singlechar-wrap");
+  const rocMngWrap = document.getElementById("pack-opt-roc-mongolia-wrap");
+  const rocMuniWrap = document.getElementById("pack-opt-roc-municipalities-wrap");
+  const rocDispWrap = document.getElementById("pack-opt-roc-disputed-wrap");
+  const histLayerBtn = document.getElementById("btn-layer-historical");
   const isWorld = packId === "world_countries";
   const isCn = packId === "cn_prov";
+  const isRoc = packId === "roc_1949";
 
-  if (bar) bar.classList.toggle("hidden", !isWorld && !isCn);
+  if (bar) bar.classList.toggle("hidden", !isWorld && !isCn && !isRoc);
   if (worldWrap) worldWrap.classList.toggle("hidden", !isWorld);
   if (cnWrap) cnWrap.classList.toggle("hidden", !isCn);
+  if (rocMngWrap) rocMngWrap.classList.toggle("hidden", !isRoc);
+  if (rocMuniWrap) rocMuniWrap.classList.toggle("hidden", !isRoc);
+  if (rocDispWrap) rocDispWrap.classList.toggle("hidden", !isRoc);
+  if (histLayerBtn) {
+    const hasHist = Boolean(pack && pack.features && pack.features.supportsHistoricalBasemap);
+    histLayerBtn.classList.toggle("hidden", !hasHist);
+  }
 
   const chkWorld = document.getElementById("chk-pack-world-microstates");
   const lblWorld = document.getElementById("lbl-pack-world-microstates");
@@ -189,6 +201,29 @@ function syncPackOptionsUI() {
 
   const chkCn = document.getElementById("chk-pack-cn-singlechar");
   if (chkCn) chkCn.checked = Boolean(state.packOptions && state.packOptions.cnAllowSingleCharAlias);
+
+  const chkRocMng = document.getElementById("chk-pack-roc-mongolia");
+  const lblRocMng = document.getElementById("lbl-pack-roc-mongolia");
+  const chkRocMuni = document.getElementById("chk-pack-roc-municipalities");
+  const lblRocMuni = document.getElementById("lbl-pack-roc-municipalities");
+  const chkRocDisp = document.getElementById("chk-pack-roc-disputed");
+  const includeMongolia = !state.packOptions || state.packOptions.rocTerritoryVariant !== "no_mongolia";
+  const includeMuni = !state.packOptions || state.packOptions.includeMunicipalities !== false;
+  const showDisp = !state.packOptions || state.packOptions.showDisputedBorders !== false;
+  if (chkRocMng) chkRocMng.checked = includeMongolia;
+  if (chkRocMuni) chkRocMuni.checked = includeMuni;
+  if (chkRocDisp) chkRocDisp.checked = showDisp;
+  if (isRoc) {
+    const eligCount = _getActivePackEligibleItems().length;
+    if (lblRocMng) {
+      lblRocMng.textContent = includeMongolia
+        ? `🍂 含蒙古地方（目前 ${eligCount || 50} 區）`
+        : `🍂 不含蒙古地方（目前 ${eligCount || 49} 區）`;
+    }
+    if (lblRocMuni) {
+      lblRocMuni.textContent = includeMuni ? "🏙️ 含 12 院轄市" : "🏙️ 僅 38 省／地方／特區";
+    }
+  }
 }
 
 function syncScopeDrawerSummaryUI() {
@@ -206,6 +241,15 @@ function syncScopeDrawerSummaryUI() {
   } else if (count === eligibleItems.length && eligibleItems.length > 0) {
     if (pack && pack.id === "world_countries" && state.packOptions && state.packOptions.worldIncludeMicrostates === false) {
       summary = `標準版 ${count} ${unitLabels.itemShort}`;
+    } else if (pack && pack.id === "roc_1949") {
+      const noMng = state.packOptions && state.packOptions.rocTerritoryVariant === "no_mongolia";
+      const noMuni = state.packOptions && state.packOptions.includeMunicipalities === false;
+      if (!noMng && !noMuni) {
+        summary = `秋海棠全境 ${count} ${unitLabels.itemShort}`;
+      } else {
+        const tag = `${noMng ? "不含蒙古" : "含蒙古"}${noMuni ? " · 不含院轄市" : ""}`;
+        summary = `${tag}（${count} ${unitLabels.itemShort}）`;
+      }
     } else {
       summary = unitLabels.fullScopeLabel || `全部 ${count} ${unitLabels.itemShort}`;
     }
@@ -218,33 +262,58 @@ function syncScopeDrawerSummaryUI() {
   textEl.textContent = `📍 範圍：${summary}`;
 }
 
-function applyPackOptionToggle(optionKey, checked) {
+function applyPackOptionToggle(optionKey, value) {
   if (!canLocalModifyGameConfig()) {
     setFeedback("🔒 僅房主可調整地圖包選項！", "warn");
     if (typeof playTone === "function") playTone("error");
     syncPackOptionsUI();
     return;
   }
-  const nextVal = Boolean(checked);
+  const nextVal = optionKey === "rocTerritoryVariant"
+    ? (value === "no_mongolia" || value === false ? "no_mongolia" : "begonia_full")
+    : Boolean(value);
+  const cur = state.packOptions || {};
   const nextOpts = {
-    worldIncludeMicrostates: state.packOptions ? state.packOptions.worldIncludeMicrostates !== false : true,
-    cnAllowSingleCharAlias: Boolean(state.packOptions && state.packOptions.cnAllowSingleCharAlias),
+    worldIncludeMicrostates: cur.worldIncludeMicrostates !== false,
+    cnAllowSingleCharAlias: Boolean(cur.cnAllowSingleCharAlias),
+    rocTerritoryVariant: cur.rocTerritoryVariant === "no_mongolia" ? "no_mongolia" : "begonia_full",
+    includeMunicipalities: cur.includeMunicipalities !== false,
+    showDisputedBorders: cur.showDisputedBorders !== false,
     [optionKey]: nextVal
   };
-  const label = optionKey === "worldIncludeMicrostates" ? "世界微型國開關" : "中國一字簡稱";
+  const labelMap = {
+    worldIncludeMicrostates: "世界微型國開關",
+    cnAllowSingleCharAlias: "中國一字簡稱",
+    rocTerritoryVariant: "秋海棠疆域版本",
+    includeMunicipalities: "12 院轄市開關",
+    showDisputedBorders: "爭議邊界線顯示"
+  };
+  const label = labelMap[optionKey] || "地圖包選項";
 
   if (state.isHost && state.roomCode && typeof requestOrApplyConfigChange === "function") {
     requestOrApplyConfigChange({ packOptions: nextOpts }, label);
     return;
   }
 
-  const prevWorldMicro = state.packOptions ? state.packOptions.worldIncludeMicrostates !== false : true;
+  const prevWorldMicro = cur.worldIncludeMicrostates !== false;
+  const prevRocMng = cur.rocTerritoryVariant !== "no_mongolia";
+  const prevRocMuni = cur.includeMunicipalities !== false;
   state.packOptions = nextOpts;
-  if (optionKey === "worldIncludeMicrostates" && typeof syncScopeWithPackOptions === "function") {
-    syncScopeWithPackOptions(!prevWorldMicro && nextVal);
+
+  if (typeof syncScopeWithPackOptions === "function") {
+    if (optionKey === "worldIncludeMicrostates") {
+      syncScopeWithPackOptions(!prevWorldMicro && nextVal);
+    } else if (optionKey === "rocTerritoryVariant") {
+      syncScopeWithPackOptions(!prevRocMng && nextVal === "begonia_full");
+    } else if (optionKey === "includeMunicipalities") {
+      syncScopeWithPackOptions(!prevRocMuni && nextVal);
+    }
   }
   if (typeof rebuildActivePackLookupSets === "function") {
     rebuildActivePackLookupSets();
+  }
+  if (typeof renderDisputedBordersLayer === "function") {
+    renderDisputedBordersLayer();
   }
   if (typeof refreshAllPolygonStyles === "function") {
     refreshAllPolygonStyles();
@@ -2748,6 +2817,15 @@ function bindAllUIEvents() {
   });
   document.getElementById("chk-pack-cn-singlechar")?.addEventListener("change", (e) => {
     applyPackOptionToggle("cnAllowSingleCharAlias", e.target.checked);
+  });
+  document.getElementById("chk-pack-roc-mongolia")?.addEventListener("change", (e) => {
+    applyPackOptionToggle("rocTerritoryVariant", e.target.checked ? "begonia_full" : "no_mongolia");
+  });
+  document.getElementById("chk-pack-roc-municipalities")?.addEventListener("change", (e) => {
+    applyPackOptionToggle("includeMunicipalities", e.target.checked);
+  });
+  document.getElementById("chk-pack-roc-disputed")?.addEventListener("change", (e) => {
+    applyPackOptionToggle("showDisputedBorders", e.target.checked);
   });
   document.getElementById("btn-timer-mode-countdown")?.addEventListener("click", () => {
     if (!canLocalModifyGameConfig()) return;

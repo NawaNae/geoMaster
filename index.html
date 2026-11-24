@@ -153,6 +153,9 @@
             <button type="button" data-layer="satellite" class="layer-btn px-2 sm:px-2.5 py-1 rounded-xl text-[11px] sm:text-xs font-semibold transition text-slate-300 hover:text-white whitespace-nowrap">
               衛星影像
             </button>
+            <button id="btn-layer-historical" type="button" data-layer="historical" class="layer-btn hidden px-2 sm:px-2.5 py-1 rounded-xl text-[11px] sm:text-xs font-semibold transition text-amber-200 hover:text-white whitespace-nowrap" data-tip="中研院人社中心 CCTS 1947 中華民國新地圖歷史掛圖底圖">
+              📜 歷史掛圖
+            </button>
           </div>
 
           <span id="layer-lock-badge" class="hidden apple-glass-pill px-2.5 py-1 rounded-xl text-[11px] font-bold text-rose-300 border border-rose-500/40 pointer-events-auto">
@@ -1129,6 +1132,18 @@
                 <label id="pack-opt-cn-singlechar-wrap" class="hidden inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-950/90 border border-amber-500/40 text-xs font-bold text-amber-200 cursor-pointer select-none hover:bg-slate-800/90 transition" data-tip="預設關閉。開啟後可用「京、滬、粵、川、港、澳」等一字省級簡稱直接作答">
                   <input id="chk-pack-cn-singlechar" type="checkbox" class="w-3.5 h-3.5 rounded bg-slate-950 border-amber-400 text-amber-500 accent-amber-400 cursor-pointer" />
                   <span>🔤 允許一字簡稱（京/滬/粵）</span>
+                </label>
+                <label id="pack-opt-roc-mongolia-wrap" class="hidden inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-950/90 border border-amber-500/40 text-xs font-bold text-amber-200 cursor-pointer select-none hover:bg-slate-800/90 transition" data-tip="預設開啟（秋海棠公告全境含蒙古地方）；關閉切換為 1946–1953 不含蒙古地方版本">
+                  <input id="chk-pack-roc-mongolia" type="checkbox" checked class="w-3.5 h-3.5 rounded bg-slate-950 border-amber-400 text-amber-500 accent-amber-400 cursor-pointer" />
+                  <span id="lbl-pack-roc-mongolia">🍂 含蒙古地方（秋海棠全境 50 區）</span>
+                </label>
+                <label id="pack-opt-roc-municipalities-wrap" class="hidden inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-950/90 border border-cyan-500/40 text-xs font-bold text-cyan-200 cursor-pointer select-none hover:bg-slate-800/90 transition" data-tip="預設開啟（含南京、上海、北平等 12 院轄市）；關閉後僅出題 35 省 + 2 地方 + 1 特區">
+                  <input id="chk-pack-roc-municipalities" type="checkbox" checked class="w-3.5 h-3.5 rounded bg-slate-950 border-cyan-400 text-cyan-500 accent-cyan-400 cursor-pointer" />
+                  <span id="lbl-pack-roc-municipalities">🏙️ 含 12 院轄市</span>
+                </label>
+                <label id="pack-opt-roc-disputed-wrap" class="hidden inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-950/90 border border-rose-500/40 text-xs font-bold text-rose-200 cursor-pointer select-none hover:bg-slate-800/90 transition" data-tip="預設開啟：以不可點擊虛線顯示帕米爾、藏南、阿克賽欽、江心坡、唐努烏梁海、黑瞎子島等歷史爭議邊界">
+                  <input id="chk-pack-roc-disputed" type="checkbox" checked class="w-3.5 h-3.5 rounded bg-slate-950 border-rose-400 text-rose-500 accent-rose-400 cursor-pointer" />
+                  <span>〰️ 顯示爭議邊界線</span>
                 </label>
               </div>
 
