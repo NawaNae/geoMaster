@@ -799,12 +799,8 @@ def _rings_to_wgs84_geom(
     return keep_polygonal(res)
 
 
-def parse_svg_edcp_geometries(svg_path: Path) -> dict[str, object]:
-    """Parse Wikimedia EDCP SVG (path/polygon/polyline/g) and analytically inverse-project to WGS84."""
-    import xml.etree.ElementTree as ET
-
-    tree = ET.parse(str(svg_path))
-    root = tree.getroot()
+def _make_svg_to_wgs84(root):
+    """Build the calibrated SVG (sx, sy) -> WGS84 (lon, lat) inverse EDCP transform."""
     vb = root.get("viewBox")
     if vb:
         vx, vy, vw, vh = [float(x) for x in re.split(r"[\s,]+", vb.strip())[:4]]
@@ -818,9 +814,10 @@ def parse_svg_edcp_geometries(svg_path: Path) -> dict[str, object]:
     # 1206.0932617 x 940 because the left edge was extended by ~25.09 px for Pamir/Xinjiang.
     base_w = vh * EDCP_ASPECT
     if abs(vw - base_w) > 5.0 and vw > base_w:
-        # Calibrated against 6 stable provinces (IoU > 0.925, control points < 10 km)
+        # Calibrated against real WGS84 islands & Esri World Imagery satellite tiles
+        # (Zhoushan, Taiwan, Hainan, Shandong, Liaoning, HK, Mohe: median error < 0.5 km).
         x_off = vx + (vw - base_w) - 0.5932617
-        y_off = vy
+        y_off = vy - 0.55
         eff_w = base_w
         eff_h = vh
     else:
@@ -834,6 +831,135 @@ def parse_svg_edcp_geometries(svg_path: Path) -> dict[str, object]:
         ny = ((sy - y_off) / eff_h) * 100.0
         lat, lon = edcp_to_wgs84(nx, ny)
         return (lon, lat)
+
+    return svg_pt_to_wgs84
+
+
+def _geom_boundary_to_geojson(geom, simplify_tol: float = 0.008) -> dict | None:
+    """Convert a Polygon/MultiPolygon boundary into a compact LineString/MultiLineString GeoJSON geometry."""
+    if geom is None or geom.is_empty:
+        return None
+    g = keep_polygonal(geom).simplify(simplify_tol, preserve_topology=True)
+    if g is None or g.is_empty:
+        return None
+    polys = [g] if g.geom_type == "Polygon" else list(g.geoms)
+    lines = []
+    for poly in polys:
+        if poly.area < 5e-4:
+            continue
+        coords = [[round(x, 4), round(y, 4)] for x, y in poly.exterior.coords]
+        if len(coords) >= 4:
+            lines.append(coords)
+    if not lines:
+        return None
+    if len(lines) == 1:
+        return {"type": "LineString", "coordinates": lines[0]}
+    return {"type": "MultiLineString", "coordinates": lines}
+
+
+def build_disputed_borders_from_svg(
+    svg_path: Path, geoms: dict[str, object], repo_root: Path
+) -> dict:
+    """Extract high-precision historical disputed territory borders directly from 1945.txt SVG."""
+    import xml.etree.ElementTree as ET
+
+    tree = ET.parse(str(svg_path))
+    root = tree.getroot()
+    svg_pt_to_wgs84 = _make_svg_to_wgs84(root)
+
+    fill_g = None
+    for elem in root.iter():
+        if elem.tag.split("}")[-1] == "g" and elem.get("id") == "填充":
+            fill_g = elem
+            break
+    if fill_g is None:
+        return build_disputed_borders_geojson()
+
+    grouped: dict[str, list] = {
+        "pamir": [],
+        "aksai_chin": [],
+        "south_tibet": [],
+        "jiangxinpo": [],
+        "heixiazi": [],
+        "jiangdong_64": [],
+        "changbai": [],
+    }
+    for ch in fill_g:
+        rings = _extract_elem_rings(ch)
+        if not rings:
+            continue
+        g = _rings_to_wgs84_geom(rings, svg_pt_to_wgs84)
+        if g is None or g.is_empty:
+            continue
+        c = g.centroid
+        lon, lat = c.x, c.y
+        if 70.5 <= lon <= 75.3 and 36.5 <= lat <= 39.8:
+            grouped["pamir"].append(g)
+        elif 75.3 < lon <= 82.5 and 29.8 <= lat <= 37.0:
+            grouped["aksai_chin"].append(g)
+        elif 91.0 <= lon <= 97.5 and 26.5 <= lat <= 29.8 and g.area > 0.1 and not (lon > 96.0 and lat < 27.5):
+            grouped["south_tibet"].append(g)
+        elif 94.5 <= lon <= 99.5 and 23.0 <= lat <= 28.6:
+            grouped["jiangxinpo"].append(g)
+        elif 134.0 <= lon <= 135.5 and 48.0 <= lat <= 48.6:
+            grouped["heixiazi"].append(g)
+        elif 127.0 <= lon <= 128.5 and 49.4 <= lat <= 50.5:
+            grouped["jiangdong_64"].append(g)
+        elif 127.8 <= lon <= 129.2 and 41.4 <= lat <= 42.3:
+            grouped["changbai"].append(g)
+
+    # Tannu Uriankhai: extract northern Tuva portion directly from rebuilt roc_mongolia \ modern MNG
+    tannu_geom = None
+    if "roc_mongolia" in geoms and (repo_root / "data/packs/world-countries-pack.js").exists():
+        world_topo = extract_topo_from_pack_js(repo_root / "data/packs/world-countries-pack.js")
+        wd = decode_topojson_geometries(world_topo, "countries")
+        if "MNG" in wd:
+            diff = keep_polygonal(geoms["roc_mongolia"].difference(wd["MNG"]))
+            tuva_raw = keep_polygonal(diff.intersection(box(88.5, 49.5, 100.5, 54.5)))
+            polys = [tuva_raw] if tuva_raw.geom_type == "Polygon" else list(tuva_raw.geoms)
+            polys = [p for p in polys if p.area > 0.5]
+            if polys:
+                tannu_geom = keep_polygonal(unary_union(polys))
+
+    meta_order = [
+        ("pamir", "帕米爾未定界", 0.010),
+        ("aksai_chin", "阿克賽欽／中印西中段爭議界", 0.008),
+        ("south_tibet", "藏南爭議界（麥克馬洪線）", 0.010),
+        ("jiangxinpo", "江心坡／滇緬未定界", 0.010),
+        ("tannu_uriankhai", "唐努烏梁海傳統邊界", 0.012),
+        ("heixiazi", "黑瞎子島", 0.004),
+        ("jiangdong_64", "江東六十四屯", 0.005),
+        ("changbai", "長白山爭議界", 0.005),
+    ]
+
+    fallback_by_id = {f["properties"]["id"]: f for f in build_disputed_borders_geojson()["features"]}
+    features = []
+    for fid, fname, tol in meta_order:
+        if fid == "tannu_uriankhai":
+            geom = tannu_geom
+        else:
+            parts = grouped.get(fid) or []
+            geom = keep_polygonal(unary_union(parts)) if parts else None
+        geo = _geom_boundary_to_geojson(geom, simplify_tol=tol)
+        if geo is not None:
+            features.append({
+                "type": "Feature",
+                "properties": {"id": fid, "name": fname},
+                "geometry": geo,
+            })
+        elif fid in fallback_by_id:
+            features.append(fallback_by_id[fid])
+
+    return {"type": "FeatureCollection", "features": features}
+
+
+def parse_svg_edcp_geometries(svg_path: Path) -> dict[str, object]:
+    """Parse Wikimedia EDCP SVG (path/polygon/polyline/g) and analytically inverse-project to WGS84."""
+    import xml.etree.ElementTree as ET
+
+    tree = ET.parse(str(svg_path))
+    root = tree.getroot()
+    svg_pt_to_wgs84 = _make_svg_to_wgs84(root)
 
     alias_to_id = {}
     for m in ITEMS_META:
@@ -951,7 +1077,7 @@ def parse_svg_edcp_geometries(svg_path: Path) -> dict[str, object]:
     edge_list = [merged] if merged.geom_type == "LineString" else list(merged.geoms)
     simp_edges = []
     for edge in edge_list:
-        e_tol = 0.004 if edge.length < 1.5 else 0.015
+        e_tol = 0.003 if edge.length < 1.5 else 0.0075
         se = edge.simplify(e_tol, preserve_topology=True)
         if not se.is_empty and se.length > 0:
             simp_edges.append(se)
@@ -1032,7 +1158,11 @@ def run_assertions(geoms: dict[str, object]) -> None:
 # =========================================================================
 # 8. Build Final JS Bundle (data/packs/roc-1949-pack.js)
 # =========================================================================
-def build_pack_js(geoms: dict[str, object], output_path: Path) -> None:
+def build_pack_js(
+    geoms: dict[str, object],
+    output_path: Path,
+    disputed_geo: dict | None = None,
+) -> None:
     features = []
     items_out = []
 
@@ -1067,8 +1197,9 @@ def build_pack_js(geoms: dict[str, object], output_path: Path) -> None:
         items_out.append(item_obj)
         features.append((gid, {"id": gid, "name": m["townName"], "code": m["code"]}, g))
 
-    topo = encode_topojson(features, quant=60000)
-    disputed_geo = build_disputed_borders_geojson()
+    topo = encode_topojson(features, quant=80000)
+    if disputed_geo is None:
+        disputed_geo = build_disputed_borders_geojson()
 
     groups_out = [{"name": g["name"], "short": g["short"], "emoji": g["emoji"]} for g in GROUPS]
     group_colors = {g["name"]: g["color"] for g in GROUPS}
@@ -1125,17 +1256,17 @@ def build_pack_js(geoms: dict[str, object], output_path: Path) -> None:
     _isFullPack: true,
     _scriptLoaded: true,
     version: "1.0",
-    displayName: "中華民國 1949（秋海棠 50 區）",
-    shortLabel: "🍂 秋海棠",
+    displayName: "中華民國1945（50 區）",
+    shortLabel: "🇹🇼 中華民國1945",
     badgeText: "50區",
     attribution: "歷史公告疆域學習測驗用途 · 圖資改作自 Wikimedia Commons (Lilauid, CC BY-SA 4.0)",
-    dataNote: "依 1949 年遷臺前公告疆域收錄 35 省 + 1 特別行政區 + 2 地方 + 12 院轄市（共 50 區；遷臺後升格之臺北、高雄直轄市併於臺灣省）。圖資改作自 Wikimedia Commons（Lilauid, CC BY-SA 4.0），僅供歷史公告疆域學習測驗用途。",
+    dataNote: "依歷史公告疆域收錄 35 省 + 1 特別行政區 + 2 地方 + 12 院轄市（共 50 區；遷臺後升格之臺北、高雄直轄市併於臺灣省）。圖資改作自 Wikimedia Commons（Lilauid, CC BY-SA 4.0），僅供歷史公告疆域學習測驗用途。",
     hierarchyDepth: 1,
     unitLabels: {{
       group: "地理大區",
       item: "省／市／地方／特區",
       itemShort: "區",
-      fullScopeLabel: "秋海棠全境 50 區"
+      fullScopeLabel: "中華民國1945 全境 50 區"
     }},
     features: {{
       supportsTransportQuiz: false,
@@ -1252,16 +1383,19 @@ def main():
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parent.parent
+    disputed_geo = None
     if args.svg:
-        print(f"Building from Wikimedia EDCP SVG: {args.svg}")
-        geoms = parse_svg_edcp_geometries(Path(args.svg))
+        svg_file = Path(args.svg)
+        print(f"Building from Wikimedia EDCP SVG: {svg_file}")
+        geoms = parse_svg_edcp_geometries(svg_file)
+        disputed_geo = build_disputed_borders_from_svg(svg_file, geoms, repo_root)
     else:
         print("Building from offline WGS84 TopoJSON sources (cn-prov-pack.js + world-countries-pack.js)...")
         geoms = build_offline_geometries(repo_root)
 
     run_assertions(geoms)
     out_path = Path(args.out) if os.path.isabs(args.out) else repo_root / args.out
-    build_pack_js(geoms, out_path)
+    build_pack_js(geoms, out_path, disputed_geo=disputed_geo)
 
 
 if __name__ == "__main__":

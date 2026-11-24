@@ -258,9 +258,9 @@ check("TopoJSON contains all 50 geometries and matches every item", () => {
   }
 });
 
-check("Disputed borders decorative GeoJSON contains all 6 historical border lines", () => {
+check("Disputed borders decorative GeoJSON contains all core historical border lines", () => {
   const feats = pack.disputedBordersGeo && pack.disputedBordersGeo.features;
-  assert(Array.isArray(feats) && feats.length === 6);
+  assert(Array.isArray(feats) && feats.length >= 6);
   const ids = new Set(feats.map((f) => f.properties.id));
   for (const req of ["pamir", "aksai_chin", "south_tibet", "jiangxinpo", "tannu_uriankhai", "heixiazi"]) {
     assert(ids.has(req), `Missing disputed border ${req}`);

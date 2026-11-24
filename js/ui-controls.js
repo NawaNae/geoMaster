@@ -217,8 +217,8 @@ function syncPackOptionsUI() {
     const eligCount = _getActivePackEligibleItems().length;
     if (lblRocMng) {
       lblRocMng.textContent = includeMongolia
-        ? `🍂 含蒙古地方（目前 ${eligCount || 50} 區）`
-        : `🍂 不含蒙古地方（目前 ${eligCount || 49} 區）`;
+        ? `🇹🇼 含蒙古地方（目前 ${eligCount || 50} 區）`
+        : `🇹🇼 不含蒙古地方（目前 ${eligCount || 49} 區）`;
     }
     if (lblRocMuni) {
       lblRocMuni.textContent = includeMuni ? "🏙️ 含 12 院轄市" : "🏙️ 僅 38 省／地方／特區";
@@ -245,7 +245,7 @@ function syncScopeDrawerSummaryUI() {
       const noMng = state.packOptions && state.packOptions.rocTerritoryVariant === "no_mongolia";
       const noMuni = state.packOptions && state.packOptions.includeMunicipalities === false;
       if (!noMng && !noMuni) {
-        summary = `秋海棠全境 ${count} ${unitLabels.itemShort}`;
+        summary = `中華民國1945 全境 ${count} ${unitLabels.itemShort}`;
       } else {
         const tag = `${noMng ? "不含蒙古" : "含蒙古"}${noMuni ? " · 不含院轄市" : ""}`;
         summary = `${tag}（${count} ${unitLabels.itemShort}）`;
@@ -284,7 +284,7 @@ function applyPackOptionToggle(optionKey, value) {
   const labelMap = {
     worldIncludeMicrostates: "世界微型國開關",
     cnAllowSingleCharAlias: "中國一字簡稱",
-    rocTerritoryVariant: "秋海棠疆域版本",
+    rocTerritoryVariant: "中華民國1945 疆域版本",
     includeMunicipalities: "12 院轄市開關",
     showDisputedBorders: "爭議邊界線顯示"
   };

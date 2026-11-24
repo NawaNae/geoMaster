@@ -630,18 +630,18 @@ const BUILT_IN_LAZY_MAP_PACK_STUBS = [
     id: "roc_1949",
     _isLazyStub: true,
     scriptUrl: "data/packs/roc-1949-pack.js",
-    displayName: "中華民國 1949（秋海棠 50 區）",
-    shortLabel: "🍂 秋海棠",
+    displayName: "中華民國1945（50 區）",
+    shortLabel: "🇹🇼 中華民國1945",
     badgeText: "50區",
     attribution: "歷史公告疆域學習測驗用途 · 圖資改作自 Wikimedia Commons (Lilauid, CC BY-SA 4.0)",
-    dataNote: "依 1949 年遷臺前公告疆域收錄 35 省 + 1 特別行政區 + 2 地方 + 12 院轄市（共 50 區；遷臺後升格之臺北、高雄直轄市併於臺灣省）。圖資改作自 Wikimedia Commons（Lilauid, CC BY-SA 4.0），僅供歷史公告疆域學習測驗用途。",
+    dataNote: "依歷史公告疆域收錄 35 省 + 1 特別行政區 + 2 地方 + 12 院轄市（共 50 區；遷臺後升格之臺北、高雄直轄市併於臺灣省）。圖資改作自 Wikimedia Commons（Lilauid, CC BY-SA 4.0），僅供歷史公告疆域學習測驗用途。",
     version: "1.0",
     hierarchyDepth: 1,
     unitLabels: {
       group: "地理大區",
       item: "省／市／地方／特區",
       itemShort: "區",
-      fullScopeLabel: "秋海棠全境 50 區"
+      fullScopeLabel: "中華民國1945 全境 50 區"
     },
     mapView: {
       center: [36.5, 104.0],

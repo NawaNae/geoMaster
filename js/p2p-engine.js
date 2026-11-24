@@ -1453,8 +1453,8 @@ function describeConfigDiff(patch) {
     ) {
       lines.push(
         patch.packOptions.rocTerritoryVariant === "no_mongolia"
-          ? "🍂 切換為不含蒙古地方"
-          : "🍂 切換為秋海棠全境（含蒙古地方）"
+          ? "🇹🇼 切換為不含蒙古地方"
+          : "🇹🇼 切換為中華民國1945 全境（含蒙古地方）"
       );
     }
     if (
