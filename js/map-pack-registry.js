@@ -17,6 +17,29 @@ const DEFAULT_PACK_COLORS = [
 
 const _loadedPackScripts = new Map();
 let _mapPackSwitchSeq = 0;
+let _pendingMapPackId = null;
+
+function getLoadingMapPackId() {
+  return _pendingMapPackId;
+}
+
+function _yieldToBrowserPaint(options) {
+  if (options && options.skipPaintYield) return Promise.resolve();
+  if (typeof window === "undefined" || typeof requestAnimationFrame !== "function") {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    requestAnimationFrame(() => requestAnimationFrame(done));
+    // Fallback ensures background tabs (or headless test mocks with no-op rAF) never stall
+    setTimeout(done, 48);
+  });
+}
 
 function loadMapPackScript(src) {
   if (!src) return Promise.resolve();
@@ -662,14 +685,37 @@ async function switchActiveMapPack(packId, options = {}) {
 
   const seq = ++_mapPackSwitchSeq;
   const prevPack = getActiveMapPack();
+  let switchFailed = false;
 
-  // 1. Lazy-load script / assets if required
-  if (typeof initialPack.ensureLoaded === "function") {
-    await initialPack.ensureLoaded();
+  _pendingMapPackId = packId;
+  if (typeof setMapPackLoadingUI === "function") {
+    setMapPackLoadingUI(packId, initialPack);
   }
-  if (seq !== _mapPackSwitchSeq) {
-    return { ok: false, reason: "superseded", packId };
+  if (typeof renderMapPackSwitcherUI === "function") {
+    renderMapPackSwitcherUI();
   }
+
+  try {
+    // 1. Lazy-load script / assets immediately while yielding 1 paint frame in browsers so the spinner renders before heavy work
+    const loadPromise =
+      typeof initialPack.ensureLoaded === "function"
+        ? Promise.resolve(initialPack.ensureLoaded())
+        : null;
+    const needsPaintYield =
+      !(options && options.skipPaintYield) &&
+      typeof window !== "undefined" &&
+      typeof requestAnimationFrame === "function";
+
+    if (loadPromise && needsPaintYield) {
+      await Promise.all([loadPromise, _yieldToBrowserPaint(options)]);
+    } else if (loadPromise) {
+      await loadPromise;
+    } else if (needsPaintYield) {
+      await _yieldToBrowserPaint(options);
+    }
+    if (seq !== _mapPackSwitchSeq) {
+      return { ok: false, reason: "superseded", packId };
+    }
 
   // Re-fetch in case ensureLoaded() registered the full pack over a stub
   const nextPack = getMapPackById(packId) || initialPack;
@@ -875,27 +921,47 @@ async function switchActiveMapPack(packId, options = {}) {
   if (typeof renderSmartLabelsAndLeaderLines === "function") {
     renderSmartLabelsAndLeaderLines();
   }
-  if (typeof renderMapPackSwitcherUI === "function") {
-    renderMapPackSwitcherUI();
-  }
-
-  // 12. Pick target or restart Pin-Drop if currently in an active guided/pin-drop mode
-  if (!options.skipReset && typeof state !== "undefined" && state) {
-    if (state.playMode === "pin_drop") {
-      if (typeof clearPinDropLayers === "function") clearPinDropLayers();
-      if (typeof startPinDropGame === "function") startPinDropGame();
-    } else if (state.playMode === "target_random" || state.playMode === "satellite_quiz") {
-      if (typeof pickNextTargetRegion === "function") {
-        pickNextTargetRegion();
+    if (seq === _mapPackSwitchSeq) {
+      _pendingMapPackId = null;
+      if (typeof setMapPackLoadingUI === "function") {
+        setMapPackLoadingUI(null, null);
       }
-    } else if (typeof updateTargetBannerUI === "function") {
-      updateTargetBannerUI();
+    }
+    if (typeof renderMapPackSwitcherUI === "function") {
+      renderMapPackSwitcherUI();
+    }
+
+    // 12. Pick target or restart Pin-Drop if currently in an active guided/pin-drop mode
+    if (!options.skipReset && typeof state !== "undefined" && state) {
+      if (state.playMode === "pin_drop") {
+        if (typeof clearPinDropLayers === "function") clearPinDropLayers();
+        if (typeof startPinDropGame === "function") startPinDropGame();
+      } else if (state.playMode === "target_random" || state.playMode === "satellite_quiz") {
+        if (typeof pickNextTargetRegion === "function") {
+          pickNextTargetRegion();
+        }
+      } else if (typeof updateTargetBannerUI === "function") {
+        updateTargetBannerUI();
+      }
+    }
+
+    return {
+      ok: true,
+      pack: nextPack,
+      prevPackId: prevPack ? prevPack.id : null
+    };
+  } catch (err) {
+    switchFailed = true;
+    throw err;
+  } finally {
+    if (seq === _mapPackSwitchSeq && _pendingMapPackId !== null) {
+      _pendingMapPackId = null;
+      if (typeof setMapPackLoadingUI === "function") {
+        setMapPackLoadingUI(null, null);
+      }
+      if (switchFailed && typeof renderMapPackSwitcherUI === "function") {
+        renderMapPackSwitcherUI();
+      }
     }
   }
-
-  return {
-    ok: true,
-    pack: nextPack,
-    prevPackId: prevPack ? prevPack.id : null
-  };
 }

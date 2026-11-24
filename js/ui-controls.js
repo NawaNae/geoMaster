@@ -69,6 +69,43 @@ function _unlockMapViewportToPack(opts) {
   }
 }
 
+let _mapOverlayShownByPackSwitch = false;
+
+function setMapPackLoadingUI(packId, pack = null) {
+  const statusEl = document.getElementById("mappack-loading-status");
+  const statusTextEl = document.getElementById("mappack-loading-text");
+  const panelEl = document.getElementById("unified-settings-panel");
+  const overlayEl = document.getElementById("map-loading-overlay");
+  const overlayTextEl = document.getElementById("map-loading-text");
+  const isLoading = Boolean(packId);
+
+  if (isLoading) {
+    const resolvedPack = pack || (typeof getMapPackById === "function" ? getMapPackById(packId) : null);
+    const label = (resolvedPack && (resolvedPack.shortLabel || resolvedPack.displayName)) || packId;
+    if (statusTextEl) statusTextEl.textContent = `載入「${label}」中…`;
+    if (statusEl) statusEl.classList.remove("hidden");
+    if (panelEl) {
+      panelEl.classList.add("is-switching-pack");
+      panelEl.setAttribute("aria-busy", "true");
+    }
+    if (overlayTextEl) overlayTextEl.textContent = `正在切換至「${label}」地圖…`;
+    if (overlayEl) {
+      overlayEl.classList.remove("hidden");
+      _mapOverlayShownByPackSwitch = true;
+    }
+  } else {
+    if (statusEl) statusEl.classList.add("hidden");
+    if (panelEl) {
+      panelEl.classList.remove("is-switching-pack");
+      if (typeof panelEl.removeAttribute === "function") panelEl.removeAttribute("aria-busy"); else if (typeof panelEl.setAttribute === "function") panelEl.setAttribute("aria-busy", "false");
+    }
+    if (_mapOverlayShownByPackSwitch && overlayEl) {
+      overlayEl.classList.add("hidden");
+      _mapOverlayShownByPackSwitch = false;
+    }
+  }
+}
+
 function handleMapPackSelection(packId) {
   if (!packId) return;
   if (typeof canLocalModifyGameConfig === "function" && !canLocalModifyGameConfig()) {
@@ -77,8 +114,10 @@ function handleMapPackSelection(packId) {
     renderMapPackSwitcherUI();
     return;
   }
+  const loadingId = typeof getLoadingMapPackId === "function" ? getLoadingMapPackId() : null;
+  if (loadingId && packId === loadingId) return;
   const activeId = state.activeMapPackId || ((_getActivePack() || {}).id) || "tw_modern";
-  if (packId === activeId) return;
+  if (!loadingId && packId === activeId) return;
   if (state.isHost && state.roomCode && typeof requestOrApplyConfigChange === "function") {
     requestOrApplyConfigChange({ mapPackId: packId }, "地圖包");
     return;
@@ -256,36 +295,53 @@ function renderMapPackSwitcherUI() {
 
   section.classList.remove("hidden");
   const activeId = state.activeMapPackId || ((_getActivePack() || {}).id) || "tw_modern";
+  const loadingId = typeof getLoadingMapPackId === "function" ? getLoadingMapPackId() : null;
   const nodes = packs.map((pack) => {
-    const isActive = pack.id === activeId;
+    const isLoading = Boolean(loadingId && pack.id === loadingId);
+    const isActive = !loadingId && pack.id === activeId;
     const btn = document.createElement("button");
     btn.type = "button";
     btn.setAttribute("data-mappack-id", pack.id);
+    if (isLoading) btn.setAttribute("aria-busy", "true");
     if (pack.displayName) btn.setAttribute("data-tip", pack.displayName);
-    btn.className = isActive
+    btn.className = isLoading
+      ? "px-2.5 py-2 rounded-xl border border-sky-400 bg-sky-500/20 text-white text-left transition shadow flex items-center justify-between gap-1.5 mappack-card-loading"
+      : isActive
       ? "px-2.5 py-2 rounded-xl border border-indigo-400 bg-indigo-500/25 text-white text-left transition shadow flex items-center justify-between gap-1.5"
       : "px-2.5 py-2 rounded-xl border border-slate-700/80 bg-slate-950/70 hover:bg-slate-800 text-slate-300 text-left transition flex items-center justify-between gap-1.5";
 
     const titleEl = document.createElement("span");
-    titleEl.className = isActive
+    titleEl.className = isLoading || isActive
       ? "text-xs font-extrabold text-white truncate"
       : "text-xs font-extrabold text-slate-200 truncate";
     titleEl.textContent = pack.shortLabel || pack.displayName || pack.id;
 
-    const badgeEl = document.createElement("span");
-    badgeEl.className = isActive
-      ? "text-[10px] font-mono-num font-bold px-1.5 py-0.5 rounded-md bg-indigo-400/25 text-indigo-100 shrink-0"
-      : "text-[10px] font-mono-num font-bold px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-400 shrink-0";
-    let badgeStr = pack.badgeText || "";
-    if (!badgeStr) {
-      const pItems = typeof pack.getItems === "function" ? pack.getItems() : [];
-      const uShort = (pack.unitLabels && pack.unitLabels.itemShort) || "區";
-      badgeStr = pItems.length > 0 ? `${pItems.length}${uShort}` : "";
-    }
-    badgeEl.textContent = badgeStr;
-
     btn.appendChild(titleEl);
-    if (badgeStr) btn.appendChild(badgeEl);
+    if (isLoading) {
+      const loadingBadge = document.createElement("span");
+      loadingBadge.className = "inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-sky-400/25 text-sky-100 shrink-0";
+      const spinner = document.createElement("span");
+      spinner.className = "mappack-spinner";
+      spinner.setAttribute("aria-hidden", "true");
+      const txt = document.createElement("span");
+      txt.textContent = "載入中";
+      loadingBadge.appendChild(spinner);
+      loadingBadge.appendChild(txt);
+      btn.appendChild(loadingBadge);
+    } else {
+      const badgeEl = document.createElement("span");
+      badgeEl.className = isActive
+        ? "text-[10px] font-mono-num font-bold px-1.5 py-0.5 rounded-md bg-indigo-400/25 text-indigo-100 shrink-0"
+        : "text-[10px] font-mono-num font-bold px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-400 shrink-0";
+      let badgeStr = pack.badgeText || "";
+      if (!badgeStr) {
+        const pItems = typeof pack.getItems === "function" ? pack.getItems() : [];
+        const uShort = (pack.unitLabels && pack.unitLabels.itemShort) || "區";
+        badgeStr = pItems.length > 0 ? `${pItems.length}${uShort}` : "";
+      }
+      badgeEl.textContent = badgeStr;
+      if (badgeStr) btn.appendChild(badgeEl);
+    }
     btn.addEventListener("click", () => handleMapPackSelection(pack.id));
     return btn;
   });

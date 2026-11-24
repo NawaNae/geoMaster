@@ -130,7 +130,7 @@
         <!-- Loading Overlay -->
         <div id="map-loading-overlay" class="absolute inset-0 z-[440] bg-slate-950/65 flex flex-col items-center justify-center gap-3 transition-opacity duration-200 pointer-events-none">
           <div class="w-8 h-8 rounded-full border-2 border-sky-400 border-t-transparent animate-spin"></div>
-          <div class="text-xs sm:text-sm font-bold text-slate-200 tracking-wide px-4 py-1.5 rounded-full bg-slate-900/95 border border-slate-700">
+          <div id="map-loading-text" class="text-xs sm:text-sm font-bold text-slate-200 tracking-wide px-4 py-1.5 rounded-full bg-slate-900/95 border border-slate-700">
             正在載入內政部 1:10,000 全台 368 鄉鎮市區真實邊界...
           </div>
         </div>
@@ -887,6 +887,10 @@
             <div id="mappack-selector-section" class="hidden p-2.5 sm:p-3 rounded-2xl bg-slate-900/90 border border-indigo-500/30">
               <div class="flex items-center justify-between gap-2 mb-2">
                 <label class="text-xs font-extrabold text-indigo-300">🗺️ 地圖</label>
+                <div id="mappack-loading-status" role="status" aria-live="polite" class="hidden inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-sky-500/15 border border-sky-400/40 text-[11px] font-bold text-sky-200">
+                  <span class="mappack-spinner" aria-hidden="true"></span>
+                  <span id="mappack-loading-text">切換地圖中…</span>
+                </div>
               </div>
               <div id="mappack-selector-grid" class="grid grid-cols-2 sm:grid-cols-4 gap-2"></div>
             </div>
