@@ -701,12 +701,12 @@ async function main() {
       "Previous tw_modern item.layers detached cleanly (zero leak)"
     );
 
-    // Microstate circleMarker & Polygon layers
+    // Microstate circleMarker & Polygon layers (worldCopyJump: true creates canonical 0 + wrapped -360/+360 copies = 3 layers each)
     const mockLayersCounts = vm.runInContext(`getActiveItems().map(i => ({ id: i.id, n: i.layers.length }))`, sandbox);
     check(
-      mockLayersCounts.every((x) => x.n === 1),
+      mockLayersCounts.every((x) => x.n === 3),
       "3.SwitchToMock",
-      `All 3 mock items (2 polygons + 1 microstate circleMarker) must have 1 layer: ${JSON.stringify(mockLayersCounts)}`
+      `All 3 mock items (2 polygons + 1 microstate circleMarker) must have 3 layers (canonical + -360/+360 wrap): ${JSON.stringify(mockLayersCounts)}`
     );
 
     // Difficulty fallback & gating

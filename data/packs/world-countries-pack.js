@@ -125,7 +125,7 @@
       defaultZoom: 2,
       minZoom: 2,
       maxZoom: 18,
-      maxBounds: [[-85, -195], [85, 195]],
+      maxBounds: [[-85, -3600], [85, 3600]],
       fullViewBounds: [[-55, -165], [72, 175]],
       pinDropScaleKm: 1500,
       targetFocusZoom: 5,

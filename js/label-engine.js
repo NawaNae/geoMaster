@@ -42,25 +42,29 @@ function renderSmartLabelsAndLeaderLines() {
   const mv = typeof getActivePackMapView === "function" ? getActivePackMapView() : { defaultZoom: 8, targetFocusZoom: 11, center: [23.75, 120.95] };
   const baseZoom = Number.isFinite(mv.defaultZoom) ? mv.defaultZoom : 8;
   const isSingleLayer = typeof isActivePackSingleLayer === "function" ? isActivePackSingleLayer() : false;
+  const lngOffsets = mv && mv.worldCopyJump ? [-360, 0, 360] : [0];
 
   if (state.difficulty === "county_only") {
     activeGroups.forEach((c) => {
       if (!state.selectedCounties.has(c.name)) return;
       if (!vState.unlockedCounties.has(c.name) && !vState.isGameOver) return;
-      const pt = map.latLngToContainerPoint([c.lat, c.lng]);
-      // Strict Viewport Culling (地圖外不顯示)
-      if (pt.x < padX || pt.y < padY || pt.x > mapSize.x - padX || pt.y > mapSize.y - padY) return;
-      itemsToLabel.push({
-        id: c.name,
-        label: c.name,
-        fullTitle: c.province ? `${c.province} · ${c.name}` : c.name,
-        pt,
-        pxWidth: zoom >= baseZoom ? 68 : 38,
-        pxHeight: zoom >= baseZoom ? 30 : 18,
-        isMissed: !vState.unlockedCounties.has(c.name),
-        lat: c.lat,
-        lng: c.lng
-      });
+      for (let oi = 0; oi < lngOffsets.length; oi++) {
+        const lngWithOffset = c.lng + lngOffsets[oi];
+        const pt = map.latLngToContainerPoint([c.lat, lngWithOffset]);
+        // Strict Viewport Culling (地圖外不顯示)
+        if (pt.x < padX || pt.y < padY || pt.x > mapSize.x - padX || pt.y > mapSize.y - padY) continue;
+        itemsToLabel.push({
+          id: c.name,
+          label: c.name,
+          fullTitle: c.province ? `${c.province} · ${c.name}` : c.name,
+          pt,
+          pxWidth: zoom >= baseZoom ? 68 : 38,
+          pxHeight: zoom >= baseZoom ? 30 : 18,
+          isMissed: !vState.unlockedCounties.has(c.name),
+          lat: c.lat,
+          lng: lngWithOffset
+        });
+      }
     });
   } else {
     activeItems.forEach((t) => {
@@ -68,10 +72,6 @@ function renderSmartLabelsAndLeaderLines() {
       const unlocked = vState.unlockedTowns.has(t.id);
       const missed = vState.missedTowns.has(t.id);
       if (!unlocked && !missed) return;
-
-      const pt = map.latLngToContainerPoint([t.lat, t.lng]);
-      // Strict Viewport Culling (地圖外區域不顯示名稱)
-      if (pt.x < padX || pt.y < padY || pt.x > mapSize.x - padX || pt.y > mapSize.y - 90) return;
 
       let pxWidth = 20;
       let pxHeight = 14;
@@ -96,17 +96,24 @@ function renderSmartLabelsAndLeaderLines() {
             ? (t.baseName || t.townName)
             : t.townName);
 
-      itemsToLabel.push({
-        id: t.id,
-        label: displayLabel,
-        fullTitle: t.fullHierarchyName || t.fullCountyTown || t.townName,
-        pt,
-        pxWidth,
-        pxHeight,
-        isMissed: missed,
-        lat: t.lat,
-        lng: t.lng
-      });
+      for (let oi = 0; oi < lngOffsets.length; oi++) {
+        const lngWithOffset = t.lng + lngOffsets[oi];
+        const pt = map.latLngToContainerPoint([t.lat, lngWithOffset]);
+        // Strict Viewport Culling (地圖外區域不顯示名稱)
+        if (pt.x < padX || pt.y < padY || pt.x > mapSize.x - padX || pt.y > mapSize.y - 90) continue;
+
+        itemsToLabel.push({
+          id: t.id,
+          label: displayLabel,
+          fullTitle: t.fullHierarchyName || t.fullCountyTown || t.townName,
+          pt,
+          pxWidth,
+          pxHeight,
+          isMissed: missed,
+          lat: t.lat,
+          lng: lngWithOffset
+        });
+      }
     });
   }
 

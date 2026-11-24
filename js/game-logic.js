@@ -2090,7 +2090,14 @@ function focusMapOnLatLng(lat, lng, minZ) {
   const resolvedMinZ = Number.isFinite(minZ)
     ? minZ
     : (Number.isFinite(mapView.targetFocusZoom) ? mapView.targetFocusZoom : 10);
-  map.flyTo([lat, lng], Math.max(map.getZoom(), resolvedMinZ), { duration: 0.5 });
+  let targetLng = lng;
+  if (mapView && mapView.worldCopyJump && typeof getClosestWrappedLng === "function" && typeof map.getCenter === "function") {
+    const curCenter = map.getCenter();
+    if (curCenter && Number.isFinite(curCenter.lng)) {
+      targetLng = getClosestWrappedLng(lng, curCenter.lng);
+    }
+  }
+  map.flyTo([lat, targetLng], Math.max(map.getZoom(), resolvedMinZ), { duration: 0.5 });
 }
 
 function updateTargetBannerUI() {

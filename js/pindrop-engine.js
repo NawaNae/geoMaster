@@ -83,12 +83,16 @@ function isPointInGeoJsonGeometry(lng, lat, geometry) {
 }
 
 function nearestPointOnSegment(px, py, ax, ay, bx, by) {
-  const pLng = Number(px);
+  let pLng = Number(px);
   const pLat = Number(py);
   const aLng = Number(ax);
   const aLat = Number(ay);
   const bLng = Number(bx);
   const bLat = Number(by);
+  const segMidLng = (aLng + bLng) / 2;
+  if (Number.isFinite(pLng) && Number.isFinite(segMidLng) && Math.abs(pLng - segMidLng) > 180) {
+    pLng = segMidLng + (((((pLng - segMidLng + 180) % 360) + 360) % 360) - 180);
+  }
 
   const cosLat = Math.cos((pLat * Math.PI) / 180);
   const dx = (bLng - aLng) * cosLat;
@@ -140,10 +144,13 @@ function collectGeoJsonRings(geometry, outRings = []) {
 
 function computeDistanceToGeoJson(lat, lng, geometry) {
   const qLat = Number(lat);
-  const qLng = Number(lng);
-  if (!Number.isFinite(qLat) || !Number.isFinite(qLng) || !geometry) {
-    return { inside: false, distanceKm: Infinity, nearestLat: qLat, nearestLng: qLng };
+  const rawLng = Number(lng);
+  if (!Number.isFinite(qLat) || !Number.isFinite(rawLng) || !geometry) {
+    return { inside: false, distanceKm: Infinity, nearestLat: qLat, nearestLng: rawLng };
   }
+  const qLng = rawLng > 180 || rawLng < -180
+    ? ((((rawLng + 180) % 360) + 360) % 360) - 180
+    : rawLng;
 
   if (isPointInGeoJsonGeometry(qLng, qLat, geometry)) {
     return {
@@ -456,6 +463,15 @@ function renderPinDropRevealLayers(target, record) {
   const group = ensurePinDropLayerGroup();
   if (!group || typeof L === "undefined" || !target || !record) return;
 
+  const packMv = typeof getActivePackMapView === "function" ? getActivePackMapView() : null;
+  const useWorldWrap = Boolean(packMv && packMv.worldCopyJump);
+  const displayGuessLng = record.guessLng;
+  const displayNearestLng =
+    useWorldWrap && typeof getClosestWrappedLng === "function"
+      ? getClosestWrappedLng(record.nearestLng, displayGuessLng)
+      : record.nearestLng;
+  const targetLngShift = displayNearestLng - record.nearestLng;
+
   // 1. Target highlight (polygon style refresh for admin areas; glowing emerald marker for point targets)
   if (target.kind === "town" || target.kind === "county") {
     if (typeof refreshAllPolygonStyles === "function") {
@@ -479,7 +495,7 @@ function renderPinDropRevealLayers(target, record) {
       iconSize: [32, 32],
       iconAnchor: [16, 16]
     });
-    pinTargetRevealLayer = L.marker([target.lat, target.lng], {
+    pinTargetRevealLayer = L.marker([target.lat, target.lng + targetLngShift], {
       icon: tIcon,
       interactive: false,
       keyboard: false,
@@ -490,8 +506,8 @@ function renderPinDropRevealLayers(target, record) {
   // 2. Amber dashed polyline from player's guess to nearest boundary point / target point
   pinDashPolyline = L.polyline(
     [
-      [record.guessLat, record.guessLng],
-      [record.nearestLat, record.nearestLng]
+      [record.guessLat, displayGuessLng],
+      [record.nearestLat, displayNearestLng]
     ],
     {
       renderer: typeof canvasRenderer !== "undefined" && canvasRenderer ? canvasRenderer : undefined,
@@ -505,7 +521,7 @@ function renderPinDropRevealLayers(target, record) {
 
   // 3. Midpoint pill badge showing distance km & score (floated above midpoint so it never covers pins)
   const midLat = (record.guessLat + record.nearestLat) / 2;
-  const midLng = (record.guessLng + record.nearestLng) / 2;
+  const midLng = (displayGuessLng + displayNearestLng) / 2;
   const pill = document.createElement("div");
   pill.className = record.inside
     ? "pindrop-midpoint-pill pindrop-midpoint-perfect"
@@ -534,8 +550,8 @@ function renderPinDropRevealLayers(target, record) {
   // 4. Auto fitBounds framing player pin + target
   if (typeof map !== "undefined" && map && typeof L.latLngBounds === "function") {
     const frameBounds = L.latLngBounds(
-      [record.guessLat, record.guessLng],
-      [record.nearestLat, record.nearestLng]
+      [record.guessLat, displayGuessLng],
+      [record.nearestLat, displayNearestLng]
     );
     const refObj = target.ref;
     if (refObj) {
@@ -546,9 +562,16 @@ function renderPinDropRevealLayers(target, record) {
           ? refObj.bounds
           : null;
       if (tb) {
-        frameBounds.extend(tb);
+        if (targetLngShift !== 0) {
+          const sw = tb.getSouthWest();
+          const ne = tb.getNorthEast();
+          frameBounds.extend([sw.lat, sw.lng + targetLngShift]);
+          frameBounds.extend([ne.lat, ne.lng + targetLngShift]);
+        } else {
+          frameBounds.extend(tb);
+        }
       } else if (Number.isFinite(target.lat) && Number.isFinite(target.lng)) {
-        frameBounds.extend([target.lat, target.lng]);
+        frameBounds.extend([target.lat, target.lng + targetLngShift]);
       }
     }
     if (frameBounds.isValid()) {
@@ -823,8 +846,12 @@ function handlePinDropMapClick(latlng) {
   renderPinDropPreviewPin(lat, lng);
   updatePinDropBannerAndDockUI();
   if (typeof setFeedback === "function") {
+    const dispLng =
+      (lng > 180 || lng < -180) && typeof normalizeWorldLng === "function"
+        ? normalizeWorldLng(lng)
+        : lng;
     setFeedback(
-      `📍 已放置預覽標記 (${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E)，可再次點擊微調或按「確認標記」送出！`,
+      `📍 已放置預覽標記 (${lat.toFixed(4)}°N, ${dispLng.toFixed(4)}°E)，可再次點擊微調或按「確認標記」送出！`,
       "info"
     );
   }

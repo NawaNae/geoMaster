@@ -184,6 +184,7 @@ if (typeof window.L === "undefined") {
     divIcon: (opts = {}) => ({ options: opts }),
     DomEvent: { stopPropagation() {} },
     map: (_id, opts = {}) => ({
+      options: { ...opts },
       _zoom: typeof opts.zoom === "number" ? opts.zoom : 8,
       _minZoom: typeof opts.minZoom === "number" ? opts.minZoom : 7,
       _maxZoom: typeof opts.maxZoom === "number" ? opts.maxZoom : 18,
@@ -271,6 +272,59 @@ let rafMovePending = false;
 
 const TAIWAN_MAX_BOUNDS = L.latLngBounds([20.2, 116.5], [27.4, 123.8]);
 const TAIWAN_FULL_VIEW_BOUNDS = L.latLngBounds([21.82, 119.25], [25.38, 122.08]);
+const WORLD_WRAP_OFFSETS = [-360, 360];
+
+function normalizeWorldLng(lng) {
+  const n = Number(lng);
+  if (!Number.isFinite(n)) return 0;
+  return ((((n + 180) % 360) + 360) % 360) - 180;
+}
+
+function getClosestWrappedLng(targetLng, refLng) {
+  const t = Number(targetLng);
+  const r = Number(refLng);
+  if (!Number.isFinite(t) || !Number.isFinite(r)) return t;
+  return r + normalizeWorldLng(t - r);
+}
+
+function shiftGeoJsonCoordsLng(coords, lngOffset) {
+  if (!Array.isArray(coords)) return coords;
+  if (coords.length >= 2 && typeof coords[0] === "number" && typeof coords[1] === "number") {
+    return coords.length === 2
+      ? [coords[0] + lngOffset, coords[1]]
+      : [coords[0] + lngOffset, coords[1], ...coords.slice(2)];
+  }
+  return coords.map((item) => shiftGeoJsonCoordsLng(item, lngOffset));
+}
+
+function shiftGeoJsonFeatureLng(obj, lngOffset) {
+  if (!obj || !lngOffset) return obj;
+  if (obj.type === "FeatureCollection" && Array.isArray(obj.features)) {
+    return {
+      ...obj,
+      features: obj.features.map((f) => shiftGeoJsonFeatureLng(f, lngOffset))
+    };
+  }
+  if (obj.type === "Feature" && obj.geometry) {
+    return {
+      ...obj,
+      geometry: shiftGeoJsonFeatureLng(obj.geometry, lngOffset)
+    };
+  }
+  if (obj.type === "GeometryCollection" && Array.isArray(obj.geometries)) {
+    return {
+      ...obj,
+      geometries: obj.geometries.map((g) => shiftGeoJsonFeatureLng(g, lngOffset))
+    };
+  }
+  if (obj.coordinates) {
+    return {
+      ...obj,
+      coordinates: shiftGeoJsonCoordsLng(obj.coordinates, lngOffset)
+    };
+  }
+  return obj;
+}
 
 const _packTopoDataCache = new Map();
 const _itemLayersById = new Map();
@@ -401,7 +455,8 @@ function initMap() {
     maxZoom: Number.isFinite(mv.maxZoom) ? mv.maxZoom : 18,
     maxBounds: initMaxBounds || undefined,
     maxBoundsViscosity: initMaxBounds ? 0.9 : 0.0,
-    worldCopyJump: Boolean(mv.worldCopyJump),
+    // Always initialize Leaflet's Map.Drag worldCopyJump hooks once at startup so switching to world_countries enables seamless infinite horizontal wrapping.
+    worldCopyJump: true,
     preferCanvas: true,
     renderer: canvasRenderer,
     zoomControl: false,
@@ -472,6 +527,18 @@ function initMap() {
     isCssZoomAnimActive = false;
     if (svgEl) svgEl.classList.remove("overlay-moving-hidden");
     if (domEl) domEl.classList.remove("overlay-moving-hidden");
+    // Ensure keyboard pan, touch inertia, or programmatic flyTo across ±180° wraps cleanly back to [-180, 180) on world packs
+    const mvEnd = _mapActivePackView();
+    if (mvEnd && mvEnd.worldCopyJump && typeof map.getCenter === "function" && typeof map.setView === "function") {
+      const curCenter = map.getCenter();
+      if (curCenter && Number.isFinite(curCenter.lng) && (curCenter.lng >= 180 || curCenter.lng < -180)) {
+        const wrappedLng = normalizeWorldLng(curCenter.lng);
+        if (Math.abs(wrappedLng - curCenter.lng) > 1e-6) {
+          map.setView([curCenter.lat, wrappedLng], map.getZoom(), { animate: false });
+          return;
+        }
+      }
+    }
     applyMapZoomVisualVars(map.getZoom());
     updateTransportZoomClass();
     if (typeof syncPoiViewportMarkers === "function") syncPoiViewportMarkers(false);
@@ -1110,6 +1177,7 @@ function computeCountyMainPoint(countyName, townList = null) {
 }
 
 let satelliteTargetMarker = null;
+let satelliteTargetWrapMarkers = [];
 
 function getSatelliteTargetMarker() {
   return satelliteTargetMarker;
@@ -1124,7 +1192,36 @@ function clearSatelliteTargetMarker() {
     }
     satelliteTargetMarker = null;
   }
+  if (satelliteTargetWrapMarkers.length > 0) {
+    satelliteTargetWrapMarkers.forEach((m) => {
+      if (m && typeof m.remove === "function") {
+        m.remove();
+      } else if (m && map && typeof map.removeLayer === "function") {
+        map.removeLayer(m);
+      }
+    });
+    satelliteTargetWrapMarkers = [];
+  }
   state.satelliteTargetPoint = null;
+}
+
+function _buildSatelliteTargetDivIcon() {
+  const pinEl = document.createElement("div");
+  pinEl.className = "satellite-target-pin";
+  const pulseEl = document.createElement("span");
+  pulseEl.className = "satellite-target-pin-pulse";
+  const coreEl = document.createElement("span");
+  coreEl.className = "satellite-target-pin-core";
+  coreEl.textContent = "?";
+  pinEl.appendChild(pulseEl);
+  pinEl.appendChild(coreEl);
+
+  return L.divIcon({
+    className: "satellite-target-pin-wrapper",
+    html: pinEl,
+    iconSize: [36, 36],
+    iconAnchor: [18, 18]
+  });
 }
 
 function updateSatelliteTargetMarker(pickObj) {
@@ -1154,29 +1251,25 @@ function updateSatelliteTargetMarker(pickObj) {
 
   state.satelliteTargetPoint = { lat: pt.lat, lng: pt.lng };
 
-  const pinEl = document.createElement("div");
-  pinEl.className = "satellite-target-pin";
-  const pulseEl = document.createElement("span");
-  pulseEl.className = "satellite-target-pin-pulse";
-  const coreEl = document.createElement("span");
-  coreEl.className = "satellite-target-pin-core";
-  coreEl.textContent = "?";
-  pinEl.appendChild(pulseEl);
-  pinEl.appendChild(coreEl);
-
-  const icon = L.divIcon({
-    className: "satellite-target-pin-wrapper",
-    html: pinEl,
-    iconSize: [36, 36],
-    iconAnchor: [18, 18]
-  });
-
   satelliteTargetMarker = L.marker([pt.lat, pt.lng], {
-    icon,
+    icon: _buildSatelliteTargetDivIcon(),
     interactive: false,
     keyboard: false,
     zIndexOffset: 900
   }).addTo(map);
+
+  const mv = _mapActivePackView();
+  if (mv && mv.worldCopyJump) {
+    WORLD_WRAP_OFFSETS.forEach((offset) => {
+      const wrapM = L.marker([pt.lat, pt.lng + offset], {
+        icon: _buildSatelliteTargetDivIcon(),
+        interactive: false,
+        keyboard: false,
+        zIndexOffset: 900
+      }).addTo(map);
+      satelliteTargetWrapMarkers.push(wrapM);
+    });
+  }
 
   return satelliteTargetMarker;
 }
@@ -1628,6 +1721,8 @@ function rebuildMapLayers(topoData) {
 
   const activeItems = _mapActiveItems();
   const activeGroups = _mapActiveGroups();
+  const packMv = _mapActivePackView();
+  const wrapOffsets = packMv && packMv.worldCopyJump ? WORLD_WRAP_OFFSETS : [];
   activeItems.forEach((t) => {
     t.layers = [];
     t.bounds = null;
@@ -1674,6 +1769,20 @@ function rebuildMapLayers(topoData) {
       townObj.layers.push(polyLayer);
       if (!_itemLayersById.has(townObj.id)) _itemLayersById.set(townObj.id, []);
       _itemLayersById.get(townObj.id).push(polyLayer);
+      wrapOffsets.forEach((lngOffset) => {
+        const wrappedFeat = shiftGeoJsonFeatureLng(feat, lngOffset);
+        const wrapLayer = L.geoJSON(wrappedFeat, {
+          renderer: canvasRenderer,
+          style: () => computePolygonStyle(townObj)
+        });
+        wrapLayer._worldWrapOffset = lngOffset;
+        wrapLayer.eachLayer((subLayer) => {
+          bindPolygonEvents(subLayer, townObj);
+        });
+        if (geoLayerGroup) wrapLayer.addTo(geoLayerGroup);
+        townObj.layers.push(wrapLayer);
+        _itemLayersById.get(townObj.id).push(wrapLayer);
+      });
       try {
         const b = polyLayer.getBounds();
         const mainB = computeMainPolygonBounds(feat);
@@ -1740,16 +1849,24 @@ function rebuildMapLayers(topoData) {
     });
 
     if (loadedTopoData.countiesGeo && countyBorderLayerGroup) {
+      const borderStyle = () => ({
+        color: "rgba(226, 232, 240, 0.45)",
+        weight: 1.4,
+        fill: false,
+        opacity: 0.78
+      });
       L.geoJSON(loadedTopoData.countiesGeo, {
         renderer: canvasRenderer,
         interactive: false,
-        style: () => ({
-          color: "rgba(226, 232, 240, 0.45)",
-          weight: 1.4,
-          fill: false,
-          opacity: 0.78
-        })
+        style: borderStyle
       }).addTo(countyBorderLayerGroup);
+      wrapOffsets.forEach((lngOffset) => {
+        L.geoJSON(shiftGeoJsonFeatureLng(loadedTopoData.countiesGeo, lngOffset), {
+          renderer: canvasRenderer,
+          interactive: false,
+          style: borderStyle
+        }).addTo(countyBorderLayerGroup);
+      });
     }
     if (countyBorderLayerGroup && map) {
       if (state.showDistrictBorders && state.playMode !== "satellite_quiz") {
@@ -1800,6 +1917,18 @@ function rebuildMapLayers(topoData) {
       item.layers.push(dot);
       if (!_itemLayersById.has(item.id)) _itemLayersById.set(item.id, []);
       _itemLayersById.get(item.id).push(dot);
+      wrapOffsets.forEach((lngOffset) => {
+        const wrapDot = L.circleMarker([item.lat, item.lng + lngOffset], {
+          renderer: canvasRenderer,
+          ...hotspotStyle
+        });
+        wrapDot._isHotspotMarker = true;
+        wrapDot._worldWrapOffset = lngOffset;
+        bindPolygonEvents(wrapDot, item);
+        wrapDot.addTo(microstateLayerGroup);
+        item.layers.push(wrapDot);
+        _itemLayersById.get(item.id).push(wrapDot);
+      });
       if (!item.mainPoint) {
         item.mainPoint = { lat: item.lat, lng: item.lng };
       }

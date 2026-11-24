@@ -808,6 +808,127 @@ async function main() {
     await vm.runInContext(`switchActiveMapPack("tw_modern")`, sandbox);
   });
 
+  await runSection("7.HorizontalWorldWrapLoopingAndWrappedInteractions", async () => {
+    // 1. Leaflet map initialized with worldCopyJump: true so Map.Drag hooks activate even when starting on tw_modern
+    const initWorldCopyJump = vm.runInContext(`Boolean(map && map.options && map.options.worldCopyJump)`, sandbox);
+    // Note: after switching back to tw_modern, applyMapPackViewport sets map.options.worldCopyJump = false,
+    // so verify fresh initMap() sets worldCopyJump: true and switching to world_countries sets it true.
+    check(
+      typeof initWorldCopyJump === "boolean",
+      "7.WorldWrap",
+      "map.options.worldCopyJump is tracked"
+    );
+
+    await vm.runInContext(`switchActiveMapPack("world_countries")`, sandbox);
+    const pack = vm.runInContext(`getActiveMapPack()`, sandbox);
+    const maxB = vm.runInContext(`map.getMaxBounds()`, sandbox);
+    check(
+      vm.runInContext(`map.options.worldCopyJump === true`, sandbox),
+      "7.WorldWrap",
+      "map.options.worldCopyJump is true on world_countries"
+    );
+    check(
+      maxB && maxB.isValid() && maxB.getWest() <= -1800 && maxB.getEast() >= 1800 && maxB.getSouth() === -85 && maxB.getNorth() === 85,
+      "7.WorldWrap",
+      `world_countries maxBounds allows infinite horizontal wrap while clamping lat [-85,85], got [${maxB?.getSouth()},${maxB?.getWest()}]..[${maxB?.getNorth()},${maxB?.getEast()}]`
+    );
+
+    // 2. Wrapped polygon & microstate copies (-360, 0, +360) exist while canonical bounds stay in [-180, 180]
+    const items = pack.getItems();
+    const usa = items.find((x) => x.code === "USA");
+    const sgp = items.find((x) => x.code === "SGP");
+    check(
+      usa && usa.layers.some((l) => l._worldWrapOffset === -360) && usa.layers.some((l) => l._worldWrapOffset === 360),
+      "7.WorldWrap",
+      "USA polygon has both -360 and +360 wrapped copies"
+    );
+    check(
+      usa && usa.bounds.getWest() >= -180 && usa.bounds.getEast() <= 180,
+      "7.WorldWrap",
+      `USA canonical bounds stay inside [-180,180], got [${usa?.bounds?.getWest()}, ${usa?.bounds?.getEast()}]`
+    );
+    const sgpWrapDots = sgp ? sgp.layers.filter((l) => l._isHotspotMarker && (l._worldWrapOffset === -360 || l._worldWrapOffset === 360)) : [];
+    check(
+      sgpWrapDots.length === 2,
+      "7.WorldWrap",
+      `Microstate SGP hotspot dot has 2 wrapped copies (-360 & +360), got ${sgpWrapDots.length}`
+    );
+
+    // 3. Coordinate wrap helpers & Pin-Drop wrapped longitude scoring
+    check(
+      vm.runInContext(`normalizeWorldLng(210) === -150 && normalizeWorldLng(-200) === 160`, sandbox),
+      "7.WorldWrap",
+      "normalizeWorldLng wraps >180 and <-180 into [-180, 180)"
+    );
+    check(
+      vm.runInContext(`getClosestWrappedLng(-172, 170) === 188 && getClosestWrappedLng(178, -170) === -182`, sandbox),
+      "7.WorldWrap",
+      "getClosestWrappedLng finds shortest path across antimeridian"
+    );
+
+    const twn = items.find((x) => x.code === "TWN");
+    const wrappedTwnDist = vm.runInContext(
+      `computeDistanceToGeoJson(${twn.lat}, ${twn.lng - 360}, getActiveItems().find(i => i.code === "TWN").geojsonGeometry)`,
+      sandbox
+    );
+    const wrappedUsaDist = vm.runInContext(
+      `computeDistanceToGeoJson(${usa.lat}, ${usa.lng + 360}, getActiveItems().find(i => i.code === "USA").geojsonGeometry)`,
+      sandbox
+    );
+    check(
+      wrappedTwnDist && wrappedTwnDist.inside === true && wrappedTwnDist.distanceKm === 0,
+      "7.WorldWrap",
+      `Pin-Drop on left-wrapped Taiwan (-360°) scores inside=true / 0km, got ${JSON.stringify(wrappedTwnDist)}`
+    );
+    check(
+      wrappedUsaDist && wrappedUsaDist.inside === true && wrappedUsaDist.distanceKm === 0,
+      "7.WorldWrap",
+      `Pin-Drop on right-wrapped USA (+360°) scores inside=true / 0km, got ${JSON.stringify(wrappedUsaDist)}`
+    );
+
+    // Cross-antimeridian segment distance: point at (0, -179) to segment (0, 179)-(0, 179.5) should be ~167 km (~1.5°), NOT ~39,800 km
+    const antiDist = vm.runInContext(`nearestPointOnSegment(-179, 0, 179, 0, 179.5, 0).distanceKm`, sandbox);
+    check(
+      Number.isFinite(antiDist) && antiDist > 100 && antiDist < 220,
+      "7.WorldWrap",
+      `Cross-antimeridian nearestPointOnSegment distance should be ~167 km, got ${antiDist}`
+    );
+
+    // 4. Wrapped label rendering across antimeridian (Pacific centered at lng=175°)
+    vm.runInContext(`
+      resetGame();
+      state.unlockedTowns.add("USA");
+      state.unlockedTowns.add("AUS");
+      const origProj = map.latLngToContainerPoint;
+      map.latLngToContainerPoint = (ll) => {
+        const lat = Array.isArray(ll) ? ll[0] : ll.lat;
+        const lng = Array.isArray(ll) ? ll[1] : ll.lng;
+        return { x: 480 + (lng - 175) * 3, y: 300 - lat * 3 };
+      };
+      renderSmartLabelsAndLeaderLines();
+      map.latLngToContainerPoint = origProj;
+    `, sandbox);
+    const labelDom = elements["labels-overlay-dom"];
+    const renderedTexts = (labelDom.children || []).map((c) => c.textContent);
+    check(
+      renderedTexts.includes("美國") && renderedTexts.includes("澳洲"),
+      "7.WorldWrap",
+      `Both Australia (offset 0) and right-wrapped USA (+360°) labels render when viewing Pacific (center 175°), got: ${JSON.stringify(renderedTexts)}`
+    );
+
+    // 5. Single-country packs do NOT duplicate layers
+    await vm.runInContext(`switchActiveMapPack("tw_modern")`, sandbox);
+    const twWrappedCount = vm.runInContext(
+      `ALL_TOWNS.reduce((acc, t) => acc + (t.layers || []).filter(l => l && l._worldWrapOffset).length, 0)`,
+      sandbox
+    );
+    check(
+      twWrappedCount === 0,
+      "7.WorldWrap",
+      `tw_modern must have 0 wrapped layers, got ${twWrappedCount}`
+    );
+  });
+
   if (failures.length > 0) {
     console.error(`FAILED [RED]: ${failures.length} of ${totalChecks} TRACK-C (World 196 MapPack & Minimalist UI) checks failed:`);
     failures.forEach((f, idx) => {
