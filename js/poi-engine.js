@@ -465,8 +465,9 @@ function syncPoiViewportMarkers(forceRebuild = false) {
   }
 
   const viewState = typeof getActiveViewState === "function" ? getActiveViewState() : state;
-  const unlockedSet = viewState.unlockedPois || state.unlockedPois;
-  const missedSet = viewState.missedPois || state.missedPois;
+  const hideGuessed = typeof isHideGuessedOthersActive === "function" && isHideGuessedOthersActive(viewState);
+  const unlockedSet = hideGuessed ? new Set() : (viewState.unlockedPois || state.unlockedPois);
+  const missedSet = hideGuessed ? new Set() : (viewState.missedPois || state.missedPois);
   const activeTargetId = viewState.targetPoiId !== undefined ? viewState.targetPoiId : state.targetPoiId;
   const viewportBounds = getPoiViewportBounds();
   const visibleIds = new Set();

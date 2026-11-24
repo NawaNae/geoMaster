@@ -24,6 +24,8 @@ function renderSmartLabelsAndLeaderLines() {
   svgEl.replaceChildren();
   domEl.replaceChildren();
   if (state.playMode === "pin_drop") return;
+  const _lblViewState = typeof getActiveViewState === "function" ? getActiveViewState() : state;
+  if (typeof isHideGuessedOthersActive === "function" && isHideGuessedOthersActive(_lblViewState)) return;
 
   const mapSize = map.getSize();
   const zoom = lastRenderZoom;

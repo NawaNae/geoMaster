@@ -95,6 +95,12 @@ const state = {
   },
   difficulty: "casual",       // 'casual' | 'county_only' | 'hard_suffix' | 'hard_full' | 'master_hierarchy'
   playMode: "free",           // 'free' | 'target_random' | 'target_click' | 'satellite_quiz'
+  targetQuestionLimit: 0,     // 0 = all/unlimited; >0 = N questions per round (target_random / satellite_quiz)
+  allowPass: true,            // Allow Pass/Skip in target_random / satellite_quiz
+  hideGuessedOthers: false,   // Hide already-guessed other regions/stations/POIs in target_random / satellite_quiz / pin_drop
+  targetQueue: [],            // Synchronized/ordered queue of { kind, id } for N-question or synced PK rounds
+  targetQueueIndex: 0,
+  passedTargetKeys: new Set(),
   satelliteStyle: "day",      // 'day' | 'night' | 'hybrid'
   satelliteLockViewport: true,
   satelliteOutlineRevealed: false,
@@ -367,4 +373,14 @@ function playTone(type) {
       osc.stop(now + 0.16);
     }
   } catch (e) {}
+}
+
+function isHideGuessedOthersActive(vState = state) {
+  return Boolean(
+    state.hideGuessedOthers &&
+      !(vState && vState.isGameOver) &&
+      (state.playMode === "target_random" ||
+        state.playMode === "satellite_quiz" ||
+        state.playMode === "pin_drop")
+  );
 }

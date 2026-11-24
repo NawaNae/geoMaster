@@ -1234,3 +1234,21 @@ body.perf-lite .tw-poi-state-missed {
 .text-indigo-100 { color: #e0e7ff; }
 .bg-indigo-400\/25 { background-color: rgba(129, 140, 248, 0.25); }
 .bg-indigo-500\/25 { background-color: rgba(99, 102, 241, 0.25); }
+
+/* Mobile touch responsiveness & tooltip click-suppression guard */
+#modal-scope button,
+#modal-scope label,
+.playmode-btn,
+.diff-btn,
+.settings-tab-btn,
+.hub-timer-btn,
+.pindrop-rounds-btn,
+.pindrop-layer-btn,
+.satellite-style-btn,
+.target-limit-btn {
+  touch-action: manipulation;
+}
+#floating-tip-popover {
+  pointer-events: none !important;
+}
+.z-\[650\] { z-index: 650; }

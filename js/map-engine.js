@@ -1898,19 +1898,22 @@ function computePolygonStyle(townObj) {
     };
   }
 
-  const isUnlocked =
+  const rawUnlocked =
     state.difficulty === "county_only"
       ? vState.unlockedCounties.has(townObj.countyName)
       : vState.unlockedTowns.has(townObj.id);
 
-  const isMissed = vState.missedTowns.has(townObj.id);
+  const rawMissed = vState.missedTowns.has(townObj.id);
+  const hideGuessed = typeof isHideGuessedOthersActive === "function" && isHideGuessedOthersActive(vState);
   const isTarget =
     (state.playMode === "target_random" || state.playMode === "target_click" || state.playMode === "satellite_quiz") &&
-    !isUnlocked &&
-    !isMissed &&
+    !rawUnlocked &&
+    !rawMissed &&
     (state.difficulty === "county_only"
       ? vState.targetId === townObj.countyName
       : vState.targetId === townObj.id);
+  const isUnlocked = hideGuessed ? false : rawUnlocked;
+  const isMissed = hideGuessed ? false : rawMissed;
 
   const countyUnlockedInMaster =
     state.difficulty === "master_hierarchy" && vState.unlockedCounties.has(townObj.countyName);
@@ -2083,18 +2086,21 @@ function computeHotspotStyle(item) {
     };
   }
 
-  const isUnlocked =
+  const rawUnlocked =
     state.difficulty === "county_only"
       ? vState.unlockedCounties.has(item.countyName)
       : vState.unlockedTowns.has(item.id);
-  const isMissed = vState.missedTowns.has(item.id);
+  const rawMissed = vState.missedTowns.has(item.id);
+  const hideGuessed = typeof isHideGuessedOthersActive === "function" && isHideGuessedOthersActive(vState);
   const isTarget =
     (state.playMode === "target_random" || state.playMode === "target_click" || state.playMode === "satellite_quiz") &&
-    !isUnlocked &&
-    !isMissed &&
+    !rawUnlocked &&
+    !rawMissed &&
     (state.difficulty === "county_only"
       ? vState.targetId === item.countyName
       : vState.targetId === item.id);
+  const isUnlocked = hideGuessed ? false : rawUnlocked;
+  const isMissed = hideGuessed ? false : rawMissed;
 
   if (state.playMode === "satellite_quiz" && !isUnlocked && !isMissed && !vState.isGameOver) {
     if (isTarget && state.satelliteOutlineRevealed) {

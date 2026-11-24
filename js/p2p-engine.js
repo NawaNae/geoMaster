@@ -280,7 +280,7 @@ function syncPrimaryOpponentFromRoster() {
   state.opponent.finalStats = primary.finalStats || null;
 }
 
-function getHostSyncConfig(isSettingChange = false, changeLabel = "", changeDetail = "") {
+function getHostSyncConfig(isSettingChange = false, changeLabel = "", changeDetail = "", includeTargetQueue = false) {
   const lruleEl = document.getElementById("p2p-layer-rule-select");
   const flayerEl = document.getElementById("p2p-forced-layer-select");
   const rruleEl = document.getElementById("p2p-rail-rule-select");
@@ -317,6 +317,15 @@ function getHostSyncConfig(isSettingChange = false, changeLabel = "", changeDeta
     quizStationLines: state.stationQuizEnabled ? Array.from(state.quizStationLines) : [],
     difficulty: state.difficulty,
     playMode: state.playMode === "pin_drop" ? "free" : state.playMode,
+    targetQuestionLimit: Math.max(0, parseInt(state.targetQuestionLimit, 10) || 0),
+    allowPass: state.allowPass !== false,
+    hideGuessedOthers: Boolean(state.hideGuessedOthers),
+    sharedTargetQueue:
+      includeTargetQueue &&
+      (state.playMode === "target_random" || state.playMode === "satellite_quiz") &&
+      typeof buildTargetQuizQueue === "function"
+        ? buildTargetQuizQueue(state.targetQuestionLimit)
+        : undefined,
     satelliteStyle: state.satelliteStyle || "day",
     satelliteLockViewport: Boolean(state.satelliteLockViewport),
     timerMode: state.timerMode,
@@ -368,11 +377,16 @@ function getConciseDifficultySummaryText() {
     target_click: " · 點選指定區塊",
     satellite_quiz: ` · 🛰️ 衛星影像猜題（${satStyleMap[state.satelliteStyle] || "日間衛星"} · ${satLockStr}）`
   };
+  const isRnd = state.playMode === "target_random" || state.playMode === "satellite_quiz";
+  const qLimit = Math.max(0, parseInt(state.targetQuestionLimit, 10) || 0);
+  const limitStr = isRnd && qLimit > 0 ? ` · 限 ${qLimit} 題` : "";
+  const passStr = isRnd && state.allowPass === false ? " · 禁略過" : "";
+  const hideStr = state.hideGuessedOthers ? " · 隱藏已猜地區" : "";
   const timerStr =
     state.timerMode === "down"
       ? ` · 限時 ${Math.round((state.countdownTotalSec || 300) / 60)} 分鐘`
       : "";
-  return `${diffMap[state.difficulty] || diffMap.casual}${pmMap[state.playMode] || ""}${timerStr}`;
+  return `${diffMap[state.difficulty] || diffMap.casual}${pmMap[state.playMode] || ""}${limitStr}${passStr}${hideStr}${timerStr}`;
 }
 
 function getConciseRegionSummaryText() {
@@ -3584,6 +3598,21 @@ function _applyRemoteSyncConfigAfterPack(cfg, fromCountdown = false) {
   if (cfg.quizTargetMode) {
     state.quizTargetMode = cfg.quizTargetMode;
   }
+  if (typeof cfg.targetQuestionLimit !== "undefined") {
+    state.targetQuestionLimit = Math.max(0, Math.min(999, parseInt(cfg.targetQuestionLimit, 10) || 0));
+  }
+  if (typeof cfg.allowPass === "boolean") {
+    state.allowPass = cfg.allowPass;
+  }
+  if (typeof cfg.hideGuessedOthers === "boolean") {
+    state.hideGuessedOthers = cfg.hideGuessedOthers;
+  }
+  const hasSharedQueue = Array.isArray(cfg.sharedTargetQueue) && cfg.sharedTargetQueue.length > 0;
+  if (hasSharedQueue) {
+    state.targetQueue = cfg.sharedTargetQueue.slice();
+    state.targetQueueIndex = 0;
+    if (state.passedTargetKeys) state.passedTargetKeys.clear();
+  }
   if (typeof cfg.showStationTerminusHints !== "undefined") {
     state.showStationTerminusHints = Boolean(cfg.showStationTerminusHints);
     const c1 = document.getElementById("chk-station-terminus-hints");
@@ -3786,7 +3815,7 @@ function _applyRemoteSyncConfigAfterPack(cfg, fromCountdown = false) {
     );
   }
 
-  resetGame();
+  resetGame({ preserveTargetQueue: hasSharedQueue });
   if (typeof refreshPoiMapLayer === "function") refreshPoiMapLayer();
   renderScopeModalGrid();
 

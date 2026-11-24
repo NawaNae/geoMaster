@@ -673,6 +673,17 @@ function renderCountyProgressSidebar() {
 
 function checkVictoryCondition() {
   if (state.isGameOver || state.finished || state.role === "spectator") return;
+  if (
+    (state.playMode === "target_random" || state.playMode === "satellite_quiz") &&
+    Math.max(0, parseInt(state.targetQuestionLimit, 10) || 0) > 0 &&
+    Array.isArray(state.targetQueue) &&
+    state.targetQueue.length > 0 &&
+    typeof _isTargetEntryCompleted === "function" &&
+    state.targetQueue.every((entry) => _isTargetEntryCompleted(entry))
+  ) {
+    finishGame(state.passedTargetKeys && state.passedTargetKeys.size > 0 ? "round_complete" : "victory");
+    return;
+  }
   const allItems = _dashItems();
   const features = _dashFeatures();
   const activeSt = features.supportsTransportQuiz && typeof getActiveQuizStations === "function" ? getActiveQuizStations() : [];
@@ -2406,8 +2417,17 @@ function fallbackCopy(text) {
   setFeedback("📋 已成功複製挑戰成績單至剪貼簿！", "success");
 }
 
-function resetGame() {
+function resetGame(options = {}) {
   stopTimer();
+  if (state.passedTargetKeys) state.passedTargetKeys.clear();
+  state.targetQueueIndex = 0;
+  if (!options || !options.preserveTargetQueue) {
+    state.targetQueue =
+      (state.playMode === "target_random" || state.playMode === "satellite_quiz") &&
+      typeof buildTargetQuizQueue === "function"
+        ? buildTargetQuizQueue(state.targetQuestionLimit)
+        : [];
+  }
   state.unlockedTowns.clear();
   state.unlockedCounties.clear();
   state.unlockedProvinces.clear();

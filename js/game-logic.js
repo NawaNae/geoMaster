@@ -1519,12 +1519,203 @@ function ensureSatelliteQuizEnvironment() {
   }
 }
 
+function _targetEntryKey(entry) {
+  return entry ? `${entry.kind}:${entry.id}` : "";
+}
+
+function _isTargetEntryCompleted(entry) {
+  if (!entry) return true;
+  if (state.passedTargetKeys && state.passedTargetKeys.has(_targetEntryKey(entry))) return true;
+  if (entry.kind === "poi") return Boolean(state.unlockedPois && state.unlockedPois.has(entry.id));
+  if (entry.kind === "station") return Boolean(state.unlockedStations && state.unlockedStations.has(entry.id));
+  if (entry.kind === "county") return Boolean(state.unlockedCounties && state.unlockedCounties.has(entry.id));
+  return Boolean(state.unlockedTowns && state.unlockedTowns.has(entry.id));
+}
+
+function buildTargetQuizQueue(limit = state.targetQuestionLimit) {
+  const features = _activeFeatures();
+  const isGroupMode = !_isSingleLayer() && state.difficulty === "county_only";
+  const pool = [];
+
+  if (isGroupMode) {
+    getScopeCounties().forEach((c) => pool.push({ kind: "county", id: c.name }));
+  } else {
+    getScopeTowns().forEach((t) => pool.push({ kind: "town", id: t.id }));
+  }
+  if (features.supportsTransportQuiz && typeof getActiveQuizStations === "function") {
+    getActiveQuizStations().forEach((s) => pool.push({ kind: "station", id: s.key }));
+  }
+  if (features.supportsPoiQuiz && typeof getActiveQuizPois === "function") {
+    getActiveQuizPois().forEach((p) => pool.push({ kind: "poi", id: p.id }));
+  }
+
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = pool[i];
+    pool[i] = pool[j];
+    pool[j] = tmp;
+  }
+
+  const parsedLimit = Math.max(0, parseInt(limit, 10) || 0);
+  return parsedLimit > 0 ? pool.slice(0, parsedLimit) : pool;
+}
+
+function _activateTargetEntry(entry) {
+  if (!entry) return false;
+  const isSatellite = state.playMode === "satellite_quiz";
+  const features = _activeFeatures();
+  const mapView = _activeMapView();
+  const targetFocusZoom = Number.isFinite(mapView.targetFocusZoom) ? mapView.targetFocusZoom : 10;
+  const groupFocusZoom = Number.isFinite(mapView.groupFocusZoom) ? mapView.groupFocusZoom : 9;
+  const targetMaxZoom = Number.isFinite(mapView.targetMaxZoom) ? mapView.targetMaxZoom : 12;
+
+  if (entry.kind === "poi" && features.supportsPoiQuiz && typeof getActiveQuizPois === "function") {
+    const pickPoi = getActiveQuizPois().find((p) => p.id === entry.id);
+    if (!pickPoi) return false;
+    state.targetId = null;
+    state.targetStationKey = null;
+    state.targetPoiId = pickPoi.id;
+    state.lastTargetLat = pickPoi.lat;
+    state.lastTargetLng = pickPoi.lng;
+    if (isSatellite) applySatelliteTargetViewport(pickPoi);
+    else focusMapOnLatLng(pickPoi.lat, pickPoi.lng, targetFocusZoom);
+    if (typeof refreshPoiMapLayer === "function") refreshPoiMapLayer();
+    updateTargetBannerUI();
+    refreshAllPolygonStyles();
+    if (state.roomCode && typeof broadcastP2PState === "function") broadcastP2PState();
+    return true;
+  }
+
+  if (entry.kind === "station" && features.supportsTransportQuiz && typeof getActiveQuizStations === "function") {
+    const pickSt = getActiveQuizStations().find((s) => s.key === entry.id);
+    if (!pickSt) return false;
+    state.targetId = null;
+    state.targetPoiId = null;
+    state.targetStationKey = pickSt.key;
+    state.lastTargetLat = pickSt.lat;
+    state.lastTargetLng = pickSt.lng;
+    if (isSatellite) applySatelliteTargetViewport(pickSt);
+    else focusMapOnLatLng(pickSt.lat, pickSt.lng, targetMaxZoom);
+    updateRoadAndRailwayTileOverlays();
+    if (typeof refreshPoiMapLayer === "function") refreshPoiMapLayer();
+    updateTargetBannerUI();
+    refreshAllPolygonStyles();
+    if (state.roomCode && typeof broadcastP2PState === "function") broadcastP2PState();
+    return true;
+  }
+
+  if (entry.kind === "county") {
+    const pick = getScopeCounties().find((c) => c.name === entry.id);
+    if (!pick) return false;
+    state.targetStationKey = null;
+    state.targetPoiId = null;
+    state.targetId = pick.name;
+    state.lastTargetLat = pick.lat;
+    state.lastTargetLng = pick.lng;
+    if (isSatellite) applySatelliteTargetViewport(pick);
+    else focusMapOnLatLng(pick.lat, pick.lng, groupFocusZoom);
+    updateTargetBannerUI();
+    refreshAllPolygonStyles();
+    if (state.roomCode && typeof broadcastP2PState === "function") broadcastP2PState();
+    return true;
+  }
+
+  const pick = getScopeTowns().find((t) => t.id === entry.id);
+  if (!pick) return false;
+  state.targetStationKey = null;
+  state.targetPoiId = null;
+  state.targetId = pick.id;
+  state.lastTargetLat = pick.lat;
+  state.lastTargetLng = pick.lng;
+  if (isSatellite) applySatelliteTargetViewport(pick);
+  else focusMapOnLatLng(pick.lat, pick.lng, targetFocusZoom);
+  updateTargetBannerUI();
+  refreshAllPolygonStyles();
+  if (state.roomCode && typeof broadcastP2PState === "function") broadcastP2PState();
+  return true;
+}
+
+function passCurrentTarget() {
+  if (state.isGameOver || state.finished || state.role === "spectator") {
+    return { ok: false, reason: "inactive" };
+  }
+  if (state.playMode !== "target_random" && state.playMode !== "satellite_quiz") {
+    return { ok: false, reason: "wrong_mode" };
+  }
+  if (state.allowPass === false) {
+    setFeedback("🔒 本局設定已關閉「略過 (Pass)」功能！", "warn");
+    playTone("error");
+    return { ok: false, reason: "pass_disabled" };
+  }
+  if (!state.passedTargetKeys) state.passedTargetKeys = new Set();
+
+  let key = "";
+  if (state.targetPoiId) {
+    key = `poi:${state.targetPoiId}`;
+    state.passedTargetKeys.add(key);
+    if (state.missedPois) state.missedPois.add(state.targetPoiId);
+  } else if (state.targetStationKey) {
+    key = `station:${state.targetStationKey}`;
+    state.passedTargetKeys.add(key);
+    if (state.missedStations) state.missedStations.add(state.targetStationKey);
+  } else if (state.targetId) {
+    const isGroupMode = !_isSingleLayer() && state.difficulty === "county_only";
+    if (isGroupMode) {
+      key = `county:${state.targetId}`;
+      state.passedTargetKeys.add(key);
+      _activeItems().filter((t) => t.countyName === state.targetId).forEach((t) => state.missedTowns.add(t.id));
+    } else {
+      key = `town:${state.targetId}`;
+      state.passedTargetKeys.add(key);
+      state.missedTowns.add(state.targetId);
+    }
+  }
+
+  if (Array.isArray(state.targetQueue) && state.targetQueue.length > 0) {
+    state.targetQueueIndex = Math.min(state.targetQueue.length, (state.targetQueueIndex || 0) + 1);
+  }
+  state.targetId = null;
+  state.targetStationKey = null;
+  state.targetPoiId = null;
+
+  setFeedback("⏭️ 已略過本題，進入下一題！", "info");
+  playTone("error");
+  if (typeof updateScoreAndProgressUI === "function") updateScoreAndProgressUI();
+  pickNextTargetRegion();
+  return { ok: true, passedKey: key };
+}
+
 function pickNextTargetRegion() {
   state.hintLevel = 0;
   state.satelliteOutlineRevealed = false;
   const isSatellite = state.playMode === "satellite_quiz";
   if (isSatellite) {
     ensureSatelliteQuizEnvironment();
+  }
+
+  const limit = Math.max(0, parseInt(state.targetQuestionLimit, 10) || 0);
+  if ((!Array.isArray(state.targetQueue) || state.targetQueue.length === 0) && (limit > 0 || state.roomCode)) {
+    state.targetQueue = buildTargetQuizQueue(limit);
+    state.targetQueueIndex = 0;
+  }
+  if (Array.isArray(state.targetQueue) && state.targetQueue.length > 0) {
+    let idx = Math.max(0, state.targetQueueIndex || 0);
+    while (idx < state.targetQueue.length && _isTargetEntryCompleted(state.targetQueue[idx])) {
+      idx++;
+    }
+    state.targetQueueIndex = idx;
+    if (idx >= state.targetQueue.length) {
+      state.targetId = null;
+      state.targetStationKey = null;
+      state.targetPoiId = null;
+      if (typeof finishGame === "function") {
+        finishGame(state.passedTargetKeys && state.passedTargetKeys.size > 0 ? "round_complete" : "victory");
+      }
+      return;
+    }
+    if (_activateTargetEntry(state.targetQueue[idx])) {
+      return;
+    }
   }
 
   const features = _activeFeatures();
@@ -1671,7 +1862,7 @@ function exitTargetQuizMode() {
 
 // Move target selection to the nearest locked neighbor in direction ('N' | 'S' | 'W' | 'E')
 function moveTargetByDirection(dir) {
-  if (state.playMode === "free" || state.playMode === "satellite_quiz") {
+  if (state.playMode !== "target_click") {
     return;
   }
   const features = _activeFeatures();
@@ -1837,7 +2028,7 @@ function handlePolygonClick(townObj, ev) {
     return;
   }
 
-  if (state.playMode === "target_click" || state.playMode === "target_random") {
+  if (state.playMode === "target_click") {
     if (!isSingleLayer && state.difficulty === "county_only") {
       if (state.unlockedCounties.has(townObj.countyName)) {
         setFeedback(`「${townObj.countyName}」已經解鎖囉！`, "info");
@@ -1937,13 +2128,17 @@ function updateTargetBannerUI() {
 
   // 依據模式精確區分按鈕：指定模式只保留上下左右；隨機/衛星模式顯示隨機按鈕；衛星模式顯示顯示輪廓與提示；皆可退出
   const dirGroup = document.getElementById("target-dir-group");
+  const passBtn = document.getElementById("btn-target-pass");
   const nextBtn = document.getElementById("btn-target-next");
   const hintBtn = document.getElementById("btn-target-hint");
   const revealBtn = document.getElementById("btn-target-reveal-outline");
   const exitBtn = document.getElementById("btn-target-exit");
 
+  const hasLimit = Math.max(0, parseInt(state.targetQuestionLimit, 10) || 0) > 0;
+  const allowPass = state.allowPass !== false;
   if (dirGroup) dirGroup.classList.toggle("hidden", !isClick);
-  if (nextBtn) nextBtn.classList.toggle("hidden", !isRandom);
+  if (passBtn) passBtn.classList.toggle("hidden", !(isRandom && allowPass));
+  if (nextBtn) nextBtn.classList.toggle("hidden", !(isRandom && !hasLimit && !allowPass));
   if (hintBtn) hintBtn.classList.toggle("hidden", !(state.allowTargetHints || isSatellite));
   if (revealBtn) {
     revealBtn.classList.toggle("hidden", !isSatellite);
@@ -1970,7 +2165,11 @@ function updateTargetBannerUI() {
     const styleLabel = state.satelliteActiveQuestionStyle === "night" ? "🌙 夜間燈火" : "☀️ 日間衛星";
     titleEl.textContent = `🛰️ 衛星影像猜題 · ${styleLabel}`;
   } else {
-    titleEl.textContent = isRandom ? "🎯 隨機抽題模式" : "👆 指定點選模式";
+    const qLen = Array.isArray(state.targetQueue) ? state.targetQueue.length : 0;
+    const qCur = Math.min(qLen, (state.targetQueueIndex || 0) + 1);
+    const passCnt = state.passedTargetKeys ? state.passedTargetKeys.size : 0;
+    const progStr = hasLimit && qLen > 0 ? ` · 第 ${qCur}/${qLen} 題${passCnt > 0 ? ` (略過 ${passCnt})` : ""}` : "";
+    titleEl.textContent = isRandom ? `🎯 隨機抽題模式${progStr}` : "👆 指定點選模式";
   }
 
   let reqText;

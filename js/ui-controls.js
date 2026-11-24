@@ -670,6 +670,36 @@ function syncConfigButtonsUI() {
   if (chkPinBorders) {
     chkPinBorders.checked = Boolean(state.pinDropShowBorders);
   }
+  const chkPinHide = document.getElementById("chk-pindrop-hide-guessed");
+  if (chkPinHide) {
+    chkPinHide.checked = Boolean(state.hideGuessedOthers);
+  }
+
+  const targetOptPanel = document.getElementById("target-quiz-options-panel");
+  const isTargetQuizMode = state.playMode === "target_random" || state.playMode === "satellite_quiz";
+  if (targetOptPanel) {
+    targetOptPanel.classList.toggle("hidden", !isTargetQuizMode);
+  }
+  const curLimit = Math.max(0, parseInt(state.targetQuestionLimit, 10) || 0);
+  document.querySelectorAll(".target-limit-btn").forEach((btn) => {
+    const lim = parseInt(btn.getAttribute("data-target-limit"), 10);
+    const isCur = lim === curLimit;
+    btn.className = isCur
+      ? "target-limit-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border transition bg-emerald-500/25 border-emerald-400 text-emerald-200 shadow"
+      : "target-limit-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition";
+  });
+  const limitInput = document.getElementById("input-target-question-limit");
+  if (limitInput && document.activeElement !== limitInput) {
+    limitInput.value = String(curLimit);
+  }
+  const chkAllowPass = document.getElementById("chk-allow-pass");
+  if (chkAllowPass) {
+    chkAllowPass.checked = state.allowPass !== false;
+  }
+  const chkTargetHide = document.getElementById("chk-target-hide-guessed");
+  if (chkTargetHide) {
+    chkTargetHide.checked = Boolean(state.hideGuessedOthers);
+  }
 
   // Target hints toggle is ONLY relevant in target_random / target_click / satellite_quiz!
   const showTargetHintsToggle =
@@ -801,6 +831,68 @@ function setPlayMode(pm) {
   if (state.isHost && state.roomCode) {
     onHostSettingChange("出題方式");
   }
+}
+
+function setTargetQuestionLimit(val) {
+  const parsed = Math.max(0, Math.min(999, parseInt(val, 10) || 0));
+  if (!canLocalModifyGameConfig()) {
+    setFeedback("🔒 僅房主可調整題數限制！", "error");
+    playTone("error");
+    syncConfigButtonsUI();
+    return;
+  }
+  if (state.isHost && state.roomCode) {
+    if (parsed === (Number(state.targetQuestionLimit) || 0)) return;
+    requestOrApplyConfigChange({ targetQuestionLimit: parsed }, "題數限制");
+    return;
+  }
+  state.targetQuestionLimit = parsed;
+  syncConfigButtonsUI();
+  if (state.playMode === "target_random" || state.playMode === "satellite_quiz") {
+    resetGame();
+  }
+  if (typeof renderRoomConciseSettingsSummary === "function") renderRoomConciseSettingsSummary();
+}
+
+function setAllowPass(allowed) {
+  const nextVal = Boolean(allowed);
+  if (!canLocalModifyGameConfig()) {
+    setFeedback("🔒 僅房主可調整略過 (Pass) 設定！", "error");
+    playTone("error");
+    syncConfigButtonsUI();
+    return;
+  }
+  if (state.isHost && state.roomCode) {
+    if (nextVal === Boolean(state.allowPass)) return;
+    requestOrApplyConfigChange({ allowPass: nextVal }, "略過開關");
+    return;
+  }
+  state.allowPass = nextVal;
+  syncConfigButtonsUI();
+  if (typeof updateTargetBannerUI === "function") updateTargetBannerUI();
+  if (typeof renderRoomConciseSettingsSummary === "function") renderRoomConciseSettingsSummary();
+}
+
+function setHideGuessedOthers(hidden) {
+  const nextVal = Boolean(hidden);
+  if (!canLocalModifyGameConfig()) {
+    setFeedback("🔒 僅房主可調整隱藏已猜地區設定！", "error");
+    playTone("error");
+    syncConfigButtonsUI();
+    return;
+  }
+  if (state.isHost && state.roomCode) {
+    if (nextVal === Boolean(state.hideGuessedOthers)) return;
+    requestOrApplyConfigChange({ hideGuessedOthers: nextVal }, "隱藏已猜地區");
+    return;
+  }
+  state.hideGuessedOthers = nextVal;
+  syncConfigButtonsUI();
+  if (typeof refreshAllPolygonStyles === "function") refreshAllPolygonStyles();
+  if (typeof refreshPoiMapLayer === "function") refreshPoiMapLayer();
+  if (typeof updateRoadAndRailwayTileOverlays === "function") updateRoadAndRailwayTileOverlays();
+  if (typeof renderSmartLabelsAndLeaderLines === "function") renderSmartLabelsAndLeaderLines();
+  if (typeof renderRoomConciseSettingsSummary === "function") renderRoomConciseSettingsSummary();
 }
 
 function setSatelliteStyle(styleKey) {
@@ -1593,6 +1685,8 @@ function initHoverAndTouchTipSystem() {
   const tipEl = document.getElementById("floating-tip-popover");
   if (!tipEl) return;
   let hideTimer = null;
+  let longPressTimer = null;
+  let lastTouchTime = 0;
 
   const showTipForTarget = (target) => {
     if (typeof isPinDropPlacing === "function" && isPinDropPlacing()) return;
@@ -1615,32 +1709,56 @@ function initHoverAndTouchTipSystem() {
   };
 
   const hideTip = () => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
     tipEl.classList.add("hidden");
   };
 
   document.addEventListener("mouseover", (e) => {
-    const el = e.target.closest("[data-tip]");
+    if (Date.now() - lastTouchTime < 650) return;
+    const el = e.target && e.target.closest ? e.target.closest("[data-tip]") : null;
     if (el) showTipForTarget(el);
   });
 
   document.addEventListener("mouseout", (e) => {
-    const el = e.target.closest("[data-tip]");
+    if (Date.now() - lastTouchTime < 650) return;
+    const el = e.target && e.target.closest ? e.target.closest("[data-tip]") : null;
     if (el) hideTip();
   });
 
   document.addEventListener(
     "touchstart",
     (e) => {
-      const el = e.target.closest("[data-tip]");
+      lastTouchTime = Date.now();
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+      const el = e.target && e.target.closest ? e.target.closest("[data-tip]") : null;
       if (el) {
-        showTipForTarget(el);
-        hideTimer = setTimeout(hideTip, 2200);
+        longPressTimer = setTimeout(() => {
+          showTipForTarget(el);
+          hideTimer = setTimeout(hideTip, 2200);
+        }, 450);
       } else {
         hideTip();
       }
     },
     { passive: true }
   );
+
+  const cancelLongPress = () => {
+    lastTouchTime = Date.now();
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+  };
+  document.addEventListener("touchend", cancelLongPress, { passive: true });
+  document.addEventListener("touchmove", cancelLongPress, { passive: true });
+  document.addEventListener("touchcancel", cancelLongPress, { passive: true });
 }
 
 function bindAllUIEvents() {
@@ -2086,6 +2204,24 @@ function bindAllUIEvents() {
     });
   });
 
+  document.querySelectorAll(".target-limit-btn").forEach((btn) => {
+    btn.addEventListener("click", () => setTargetQuestionLimit(btn.getAttribute("data-target-limit")));
+  });
+  document.getElementById("input-target-question-limit")?.addEventListener("change", (e) => {
+    setTargetQuestionLimit(e.target.value);
+  });
+  document.getElementById("chk-allow-pass")?.addEventListener("change", (e) => {
+    setAllowPass(e.target.checked);
+  });
+  document.getElementById("chk-target-hide-guessed")?.addEventListener("change", (e) => {
+    setHideGuessedOthers(e.target.checked);
+  });
+  document.getElementById("chk-pindrop-hide-guessed")?.addEventListener("change", (e) => {
+    setHideGuessedOthers(e.target.checked);
+  });
+  document.getElementById("btn-target-pass")?.addEventListener("click", () => {
+    if (typeof passCurrentTarget === "function") passCurrentTarget();
+  });
   document.getElementById("btn-target-next")?.addEventListener("click", () => pickNextTargetRegion());
   document.getElementById("btn-target-hint")?.addEventListener("click", () => giveTargetHint());
   document.getElementById("btn-target-reveal-outline")?.addEventListener("click", () => {
@@ -2994,7 +3130,7 @@ function bindAllUIEvents() {
       setFeedback("⚠️ 請等待所有參賽選手點擊「準備」，再開始對戰！", "warn");
       return;
     }
-    const payload = getHostSyncConfig(false);
+    const payload = getHostSyncConfig(false, "", "", true);
     startSynchronizedP2PCountdown(payload, true);
   });
   document.getElementById("btn-quick-sim-rival").addEventListener("click", () => toggleAiRivalSimulation());

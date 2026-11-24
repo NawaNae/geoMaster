@@ -980,8 +980,10 @@ function updateRoadAndRailwayTileOverlays() {
     state.quizStationLines.size > 0;
   const activeStations = getVisualOverlayStations();
   activeStations.forEach((st) => {
-    const isUnlocked = isStationQuizActive && vState.unlockedStations.has(st.key);
+    const hideGuessed = typeof isHideGuessedOthersActive === "function" && isHideGuessedOthersActive(vState);
+    const isUnlocked = !hideGuessed && isStationQuizActive && vState.unlockedStations.has(st.key);
     const isMissed =
+      !hideGuessed &&
       isStationQuizActive &&
       ((vState.isGameOver && !isUnlocked) || (vState.missedStations && vState.missedStations.has(st.key)));
     const isTarget = isStationQuizActive && vState.targetStationKey === st.key;
@@ -1062,7 +1064,11 @@ function updateRoadAndRailwayTileOverlays() {
         return;
       }
 
-      // 指定點選模式 (target_click) 或隨機模式 (target_random)
+      if (state.playMode !== "target_click") {
+        setFeedback(`🛤️ 路線資訊：此車站隸屬【${lineInfoText}】`, "info");
+        return;
+      }
+      // 指定點選模式 (target_click)
       if (isUnlocked) {
         setFeedback(`🚉 已解鎖車站：【${st.displayName}】· 所屬路線：${lineInfoText}`, "info");
         return;
