@@ -899,21 +899,89 @@ def parse_svg_edcp_geometries(svg_path: Path) -> dict[str, object]:
                     geoms["roc_shenyang"] = geom
 
     # Carve any municipalities not drawn as separate polygons in the 1945 SVG (e.g. Xi'an, Dalian, Harbin)
-    # and ensure all 12 municipalities are cleanly disjoint from their parent provinces.
     meta_by_id = {m["id"]: m for m in ITEMS_META}
-    for mid, parent_id in MUNI_PARENT.items():
+    for mid in MUNI_PARENT:
         if mid not in geoms or geoms[mid].is_empty:
             m = meta_by_id[mid]
             geoms[mid] = Point(m["lng"], m["lat"]).buffer(0.22, resolution=3)
-        if parent_id in geoms and not geoms[parent_id].is_empty:
-            geoms[parent_id] = keep_polygonal(geoms[parent_id].difference(geoms[mid]))
 
-    # Gentle topology-preserving simplification to retain natural river/mountain borders
-    # while keeping the bundled TopoJSON pack well under the 380 KB target.
-    for gid in list(geoms.keys()):
-        tol = 0.018 if gid not in MUNI_PARENT else 0.004
-        geoms[gid] = keep_polygonal(geoms[gid].simplify(tol, preserve_topology=True))
+    # Enforce exact planar shared-edge topology (eliminates Illustrator sliver gaps/overlaps
+    # AND avoids double-line artifacts caused by independent per-polygon simplification).
+    from shapely import set_precision
+    from shapely.ops import linemerge, polygonize
 
+    grid = 1e-4
+    muni_ids = list(MUNI_PARENT.keys())
+    prov_ids = sorted([gid for gid in geoms if gid not in MUNI_PARENT], key=lambda k: geoms[k].area)
+
+    clean = {}
+    claimed = None
+    for gid in muni_ids + prov_ids:
+        g = set_precision(make_valid(geoms[gid]), grid)
+        if claimed is not None:
+            g = set_precision(make_valid(g.difference(claimed)), grid)
+        g = keep_polygonal(g)
+        clean[gid] = g
+        claimed = set_precision(make_valid(unary_union([claimed, g])), grid) if claimed is not None else g
+
+    # Absorb tiny internal sliver gaps (< 0.15 deg^2) into their longest-border neighbor
+    total_union = set_precision(make_valid(unary_union(list(clean.values()))), grid)
+    tu_polys = [total_union] if total_union.geom_type == "Polygon" else list(total_union.geoms)
+    for poly in tu_polys:
+        for interior in poly.interiors:
+            hp = Polygon(interior)
+            if hp.area < 0.15:
+                hole = set_precision(make_valid(hp), grid)
+                hb = hole.buffer(grid * 2)
+                best_gid, best_len = None, 0.0
+                for gid in prov_ids:
+                    if clean[gid].intersects(hb):
+                        shared_len = clean[gid].boundary.intersection(hb).length
+                        if shared_len > best_len:
+                            best_len = shared_len
+                            best_gid = gid
+                if best_gid:
+                    clean[best_gid] = keep_polygonal(
+                        set_precision(make_valid(unary_union([clean[best_gid], hole])), grid)
+                    )
+
+    # Shared-edge simplification: node all boundaries -> merge degree-2 chains -> simplify each shared edge ONCE -> polygonize
+    noded = unary_union([g.boundary for g in clean.values()])
+    merged = linemerge(noded)
+    edge_list = [merged] if merged.geom_type == "LineString" else list(merged.geoms)
+    simp_edges = []
+    for edge in edge_list:
+        e_tol = 0.004 if edge.length < 1.5 else 0.015
+        se = edge.simplify(e_tol, preserve_topology=True)
+        if not se.is_empty and se.length > 0:
+            simp_edges.append(se)
+
+    faces = list(polygonize(unary_union(simp_edges)))
+    rebuilt: dict[str, list] = {gid: [] for gid in clean}
+    for face in faces:
+        if face.area < 1e-5:
+            continue
+        rp = face.representative_point()
+        owner = None
+        for gid, g in clean.items():
+            if g.contains(rp):
+                owner = gid
+                break
+        if owner is None:
+            best_a = 0.0
+            for gid, g in clean.items():
+                if g.intersects(face):
+                    a = g.intersection(face).area
+                    if a > best_a:
+                        best_a = a
+                        owner = gid
+        if owner is not None:
+            rebuilt[owner].append(face)
+
+    geoms = {
+        gid: keep_polygonal(unary_union(flist)) if flist else clean[gid]
+        for gid, flist in rebuilt.items()
+    }
     return geoms
 
 
