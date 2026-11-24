@@ -820,7 +820,7 @@ def parse_svg_edcp_geometries(svg_path: Path) -> dict[str, object]:
     if abs(vw - base_w) > 5.0 and vw > base_w:
         # Calibrated against 6 stable provinces (IoU > 0.925, control points < 10 km)
         x_off = vx + (vw - base_w) - 0.5932617
-        y_off = vy - 1.0
+        y_off = vy
         eff_w = base_w
         eff_h = vh
     else:
