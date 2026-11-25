@@ -258,4 +258,82 @@ sandbox.state.isGameOver = true;
 const revealedStyle = sandbox.computePolygonStyle(unlockedTown);
 check(revealedStyle.fillOpacity >= 0.6, "computePolygonStyle reveals unlocked town fill after gameOver");
 
+// 7. Limited N-question round scoring, 1/N live progress, grading & P2P counts
+sandbox.state.playMode = "target_random";
+sandbox.state.difficulty = "casual";
+sandbox.state.timerMode = "up";
+sandbox.state.regionQuizEnabled = true;
+sandbox.state.stationQuizEnabled = false;
+sandbox.state.airportQuizEnabled = false;
+sandbox.state.portQuizEnabled = false;
+sandbox.state.reservoirQuizEnabled = false;
+sandbox.state.lakeQuizEnabled = false;
+sandbox.state.settlementQuizEnabled = false;
+sandbox.state.selectedCounties = new sandbox.Set(sandbox.ALL_TOWNS.map((t) => t.countyName));
+sandbox.state.selectedTownIds = new sandbox.Set(sandbox.ALL_TOWNS.map((t) => t.id));
+sandbox.state.targetQuestionLimit = 20;
+sandbox.state.allowPass = true;
+sandbox.state.hideGuessedOthers = true;
+
+sandbox.resetGame();
+check(sandbox.state.targetQueue.length === 20, "368-town scope with limit=20 builds 20-question targetQueue");
+check(getEl("top-score-display").textContent === "0 / 20 題", `initial top-score-display shows 0 / 20 題, got ${getEl("top-score-display").textContent}`);
+check(getEl("top-percent-display").textContent === "0.0%", `initial top-percent-display shows 0.0%, got ${getEl("top-percent-display").textContent}`);
+
+// Answer 1st question -> should show 1 / 20 (5.0%), NOT 1 / 368 (0.3%)
+const firstQ = sandbox.ALL_TOWNS.find((t) => t.id === sandbox.state.targetId);
+sandbox.state.elapsedSec = 2;
+sandbox.evaluateGuess(firstQ.baseName);
+check(getEl("top-score-display").textContent === "1 / 20 題", `after 1st answer top-score-display shows 1 / 20 題, got ${getEl("top-score-display").textContent}`);
+check(getEl("top-percent-display").textContent === "5.0%", `after 1st answer top-percent-display shows 5.0%, got ${getEl("top-percent-display").textContent}`);
+check(getEl("local-p2p-score").textContent === "1 / 20", `local-p2p-score shows 1 / 20, got ${getEl("local-p2p-score").textContent}`);
+const p2pLimitedCounts = sandbox.getLocalGrandCounts();
+check(p2pLimitedCounts.grandCurrent === 1 && p2pLimitedCounts.grandTotal === 20, `getLocalGrandCounts returns 1/20, got ${p2pLimitedCounts.grandCurrent}/${p2pLimitedCounts.grandTotal}`);
+
+// Answer remaining 19 questions -> 20/20 perfect score in 40s should get SSS/SS/S+ (NOT C!)
+sandbox.state.elapsedSec = 40;
+for (let i = 1; i < 20; i++) {
+  const curT = sandbox.ALL_TOWNS.find((t) => t.id === sandbox.state.targetId);
+  sandbox.evaluateGuess(curT.baseName);
+}
+check(sandbox.state.isGameOver === true, "20/20 ends the round");
+check(sandbox.state.finalStats.grandScore === 20 && sandbox.state.finalStats.grandTotal === 20, `20/20 finalStats must be 20/20, got ${sandbox.state.finalStats.grandScore}/${sandbox.state.finalStats.grandTotal}`);
+check(sandbox.state.finalStats.isLimitedRound === true, "finalStats.isLimitedRound is true");
+const perfectGrade = sandbox.getGradeFromStats(sandbox.state.finalStats);
+check(["SSS", "SS", "S+"].includes(perfectGrade.grade), `20/20 perfect score must earn SSS/SS/S+, got ${perfectGrade.grade}`);
+check(getEl("settlement-pct").textContent === "100.0%", `settlement-pct shows 100.0%, got ${getEl("settlement-pct").textContent}`);
+check(getEl("settlement-grand-score").textContent === "20 / 20 題", `settlement-grand-score shows 20 / 20 題, got ${getEl("settlement-grand-score").textContent}`);
+
+// 18/20 with 2 passes -> 90% S grade, and ONLY 2 missedTowns (not 350!)
+sandbox.resetGame();
+sandbox.state.elapsedSec = 50;
+for (let i = 0; i < 18; i++) {
+  const curT = sandbox.ALL_TOWNS.find((t) => t.id === sandbox.state.targetId);
+  sandbox.evaluateGuess(curT.baseName);
+}
+sandbox.passCurrentTarget();
+sandbox.passCurrentTarget();
+check(sandbox.state.isGameOver === true, "18 answered + 2 passed finishes 20-question round");
+check(sandbox.state.finalStats.grandScore === 18 && sandbox.state.finalStats.grandTotal === 20, `18/20 finalStats must be 18/20, got ${sandbox.state.finalStats.grandScore}/${sandbox.state.finalStats.grandTotal}`);
+check(sandbox.state.finalStats.reason === "round_complete", `18/20 with 2 passes reason is round_complete, got ${sandbox.state.finalStats.reason}`);
+check(sandbox.state.missedTowns.size === 2, `18/20 limited round must mark ONLY the 2 missed towns (not 350), got ${sandbox.state.missedTowns.size}`);
+const ninetyGrade = sandbox.getGradeFromStats(sandbox.state.finalStats);
+check(ninetyGrade.grade === "S", `18/20 (90%) must earn S grade, got ${ninetyGrade.grade}`);
+
+// Limit > pool size (limit=50 on Taipei 12 districts) -> denominator caps at 12
+sandbox.state.selectedCounties = new sandbox.Set(["臺北市"]);
+sandbox.state.selectedTownIds = new sandbox.Set(
+  sandbox.ALL_TOWNS.filter((t) => t.countyName === "臺北市").map((t) => t.id)
+);
+sandbox.state.targetQuestionLimit = 50;
+sandbox.resetGame();
+check(getEl("top-score-display").textContent === "0 / 12 題", `limit=50 on 12-district scope caps at 0 / 12 題, got ${getEl("top-score-display").textContent}`);
+
+// Unlimited mode (targetQuestionLimit=0) still uses full pool total
+sandbox.state.targetQuestionLimit = 0;
+sandbox.state.selectedCounties = new sandbox.Set(sandbox.ALL_TOWNS.map((t) => t.countyName));
+sandbox.state.selectedTownIds = new sandbox.Set(sandbox.ALL_TOWNS.map((t) => t.id));
+sandbox.resetGame();
+check(sandbox.getLocalGrandCounts().grandTotal === 368, "unlimited mode restores full 368 grandTotal");
+
 console.log(`PASS: All ${checks} checks passed for mobile touch fix, N-question limit, Pass, synced PK queue, and hideGuessedOthers!`);

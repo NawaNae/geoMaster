@@ -132,6 +132,37 @@ function getLocalGrandCounts() {
     });
   }
 
+  const rawGrandCurrent = regionCurrent + stationCurrent + poiCurrent;
+  const rawGrandTotal = regionTotal + stationTotal + poiTotal;
+  const limitedStats =
+    typeof getLimitedRoundStats === "function"
+      ? getLimitedRoundStats(state, { grandCurrent: rawGrandCurrent, grandTotal: rawGrandTotal })
+      : null;
+
+  if (limitedStats) {
+    const limitedMacro = {};
+    if (limitedStats.regionTotal > 0) {
+      limitedMacro["地區"] = { cur: limitedStats.regionCurrent, tot: limitedStats.regionTotal };
+    }
+    if (limitedStats.stationTotal > 0) {
+      limitedMacro["車站"] = { cur: limitedStats.stationCurrent, tot: limitedStats.stationTotal };
+    }
+    if (limitedStats.poiTotal > 0) {
+      limitedMacro["地標"] = { cur: limitedStats.poiCurrent, tot: limitedStats.poiTotal };
+    }
+    return {
+      regionCurrent: limitedStats.regionCurrent,
+      regionTotal: limitedStats.regionTotal,
+      stationCurrent: limitedStats.stationCurrent,
+      stationTotal: limitedStats.stationTotal,
+      poiCurrent: limitedStats.poiCurrent,
+      poiTotal: limitedStats.poiTotal,
+      grandCurrent: limitedStats.grandCurrent,
+      grandTotal: limitedStats.grandTotal,
+      macroProgress: limitedMacro
+    };
+  }
+
   return {
     regionCurrent,
     regionTotal,
@@ -139,8 +170,8 @@ function getLocalGrandCounts() {
     stationTotal,
     poiCurrent,
     poiTotal,
-    grandCurrent: regionCurrent + stationCurrent + poiCurrent,
-    grandTotal: regionTotal + stationTotal + poiTotal,
+    grandCurrent: rawGrandCurrent,
+    grandTotal: rawGrandTotal,
     macroProgress
   };
 }

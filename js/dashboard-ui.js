@@ -59,6 +59,115 @@ function _dashUnlockViewport(opts) {
   }
 }
 
+function getLimitedRoundStats(vStateArg = null, fallbackRaw = null) {
+  if (state.playMode !== "target_random" && state.playMode !== "satellite_quiz") {
+    return null;
+  }
+  const limit = Math.max(0, parseInt(state.targetQuestionLimit, 10) || 0);
+  if (limit <= 0) return null;
+
+  const vState = vStateArg || (typeof getActiveViewState === "function" ? getActiveViewState() : state);
+  const queue = Array.isArray(state.targetQueue) && state.targetQueue.length > 0 ? state.targetQueue : null;
+  const emptyPoiBreakdown = {
+    airport: { current: 0, total: 0 },
+    port: { current: 0, total: 0 },
+    reservoir: { current: 0, total: 0 },
+    lake: { current: 0, total: 0 },
+    settlement: { current: 0, total: 0 }
+  };
+
+  if (queue) {
+    let regionTotal = 0;
+    let regionCurrent = 0;
+    let stationTotal = 0;
+    let stationCurrent = 0;
+    let poiTotal = 0;
+    let poiCurrent = 0;
+
+    const uCounties = vState.unlockedCounties || new Set();
+    const uTowns = vState.unlockedTowns || new Set();
+    const uStations = vState.unlockedStations || new Set();
+    const uPois = vState.unlockedPois || state.unlockedPois || new Set();
+    const activePois =
+      _dashFeatures().supportsPoiQuiz && typeof getActiveQuizPois === "function"
+        ? getActiveQuizPois()
+        : [];
+    const poiById = activePois.length > 0 ? new Map(activePois.map((p) => [p.id, p])) : null;
+
+    queue.forEach((entry) => {
+      if (!entry) return;
+      if (entry.kind === "station") {
+        stationTotal++;
+        if (uStations.has(entry.id)) stationCurrent++;
+      } else if (entry.kind === "poi") {
+        poiTotal++;
+        const unlocked = uPois.has(entry.id);
+        if (unlocked) poiCurrent++;
+        const poiObj = poiById ? poiById.get(entry.id) : null;
+        const cats = poiObj
+          ? (Array.isArray(poiObj.categories) && poiObj.categories.length > 0 ? poiObj.categories : [poiObj.category])
+          : [];
+        cats.forEach((cat) => {
+          if (emptyPoiBreakdown[cat]) {
+            emptyPoiBreakdown[cat].total++;
+            if (unlocked) emptyPoiBreakdown[cat].current++;
+          }
+        });
+      } else if (entry.kind === "county") {
+        regionTotal++;
+        if (uCounties.has(entry.id)) regionCurrent++;
+      } else {
+        regionTotal++;
+        if (uTowns.has(entry.id)) regionCurrent++;
+      }
+    });
+
+    const grandTotal = queue.length;
+    const grandCurrent = regionCurrent + stationCurrent + poiCurrent;
+    const isSpectatingOther = Boolean(vState && vState.spectatingPlayer);
+    const passedCount =
+      !isSpectatingOther && state.passedTargetKeys instanceof Set
+        ? queue.filter((entry) => state.passedTargetKeys.has(`${entry.kind}:${entry.id}`)).length
+        : 0;
+
+    return {
+      isLimited: true,
+      limit,
+      grandTotal,
+      grandCurrent,
+      regionTotal,
+      regionCurrent,
+      stationTotal,
+      stationCurrent,
+      poiTotal,
+      poiCurrent,
+      poiBreakdown: emptyPoiBreakdown,
+      passedCount,
+      remainingCount: Math.max(0, grandTotal - grandCurrent - passedCount)
+    };
+  }
+
+  const rawPool = fallbackRaw && Number.isFinite(fallbackRaw.grandTotal) ? fallbackRaw.grandTotal : 0;
+  const rawCur = fallbackRaw && Number.isFinite(fallbackRaw.grandCurrent) ? fallbackRaw.grandCurrent : 0;
+  const grandTotal = rawPool > 0 ? Math.min(limit, rawPool) : limit;
+  const grandCurrent = Math.min(grandTotal, rawCur);
+  return {
+    isLimited: true,
+    limit,
+    grandTotal,
+    grandCurrent,
+    regionTotal: grandTotal,
+    regionCurrent: grandCurrent,
+    stationTotal: 0,
+    stationCurrent: 0,
+    poiTotal: 0,
+    poiCurrent: 0,
+    poiBreakdown: emptyPoiBreakdown,
+    passedCount: 0,
+    remainingCount: Math.max(0, grandTotal - grandCurrent)
+  };
+}
+
 function updateScoreAndProgressUI() {
   if (state.playMode === "pin_drop" && typeof renderPinDropDashboardUI === "function") {
     renderPinDropDashboardUI();
@@ -118,13 +227,36 @@ function updateScoreAndProgressUI() {
   const regionTotal = state.difficulty === "county_only" ? scopeCounties.length : scopeTowns.length;
   const regionPct = state.difficulty === "county_only" ? countyPct : townPct;
 
-  const grandCurrent = regionCurrent + unlockedStCount + unlockedPoiCount;
-  const grandTotal = regionTotal + activeSt.length + activePois.length;
+  const rawGrandCurrent = regionCurrent + unlockedStCount + unlockedPoiCount;
+  const rawGrandTotal = regionTotal + activeSt.length + activePois.length;
+  const limitedStats = getLimitedRoundStats(vState, {
+    grandCurrent: rawGrandCurrent,
+    grandTotal: rawGrandTotal
+  });
+
+  const grandCurrent = limitedStats ? limitedStats.grandCurrent : rawGrandCurrent;
+  const grandTotal = limitedStats ? limitedStats.grandTotal : rawGrandTotal;
   const grandPct = grandTotal > 0 ? ((grandCurrent / grandTotal) * 100).toFixed(1) : "0.0";
 
   // Update Top Dual Cards (Card 1: 地區進度 or 總進度; Card 2: 車站進度 or 鄉鎮進度)
   const cLabelEl = document.getElementById("stat-county-label");
-  if (regionTotal > 0 && stAndPoiTotal > 0) {
+  if (limitedStats) {
+    const roundModeLbl = state.playMode === "satellite_quiz" ? "🛰️ 本輪衛星進度" : "🎯 本輪答對進度";
+    if (cLabelEl) cLabelEl.textContent = roundModeLbl;
+    document.getElementById("stat-county-count").textContent = `${limitedStats.grandCurrent} / ${limitedStats.grandTotal} 題`;
+    document.getElementById("stat-county-pct").textContent = `${grandPct}%`;
+    document.getElementById("stat-county-bar").style.width = `${Math.min(100, parseFloat(grandPct))}%`;
+
+    const doneCount = Math.min(limitedStats.grandTotal, limitedStats.grandCurrent + limitedStats.passedCount);
+    const donePct = limitedStats.grandTotal > 0 ? ((doneCount / limitedStats.grandTotal) * 100).toFixed(1) : "0.0";
+    document.getElementById("stat-town-label").textContent = limitedStats.passedCount > 0 ? "📋 剩餘 / 略過" : "📋 剩餘題數";
+    document.getElementById("stat-town-count").textContent =
+      limitedStats.passedCount > 0
+        ? `剩 ${limitedStats.remainingCount} 題 · 略過 ${limitedStats.passedCount}`
+        : `${limitedStats.remainingCount} 題`;
+    document.getElementById("stat-town-pct").textContent = `${donePct}%`;
+    document.getElementById("stat-town-bar").style.width = `${Math.min(100, parseFloat(donePct))}%`;
+  } else if (regionTotal > 0 && stAndPoiTotal > 0) {
     if (cLabelEl) cLabelEl.textContent = "🗺️ 地區完成度";
     document.getElementById("stat-county-count").textContent = `${regionCurrent} / ${regionTotal} ${state.difficulty === "county_only" ? unitLabels.group : unitLabels.itemShort}`;
     document.getElementById("stat-county-pct").textContent = `${regionPct}%`;
@@ -220,7 +352,12 @@ function updateScoreAndProgressUI() {
   }
 
   // Top Header Main Metric
-  if (regionTotal === 0 && activeSt.length > 0) {
+  if (limitedStats) {
+    document.getElementById("top-metric-label").textContent =
+      state.playMode === "satellite_quiz" ? "衛星限題" : "本輪進度";
+    document.getElementById("top-score-display").textContent = `${limitedStats.grandCurrent} / ${limitedStats.grandTotal} 題`;
+    document.getElementById("top-percent-display").textContent = `${grandPct}%`;
+  } else if (regionTotal === 0 && activeSt.length > 0) {
     document.getElementById("top-metric-label").textContent = "車站完成度";
     document.getElementById("top-score-display").textContent = `${unlockedStCount} / ${activeSt.length} 站`;
     document.getElementById("top-percent-display").textContent = `${stPct}%`;
@@ -251,46 +388,76 @@ function updateScoreAndProgressUI() {
     const bars = [];
     // 1. 總進度
     bars.push({
-      label: "🏆 總進度",
+      label: limitedStats ? `🏆 本輪進度 (限 ${limitedStats.grandTotal} 題)` : "🏆 總進度",
       cur: grandCurrent,
       tot: grandTotal,
-      unit: "項",
+      unit: limitedStats ? "題" : "項",
       color: "linear-gradient(90deg, #38bdf8, #10b981)"
     });
-    // 2. 地區 (有開才顯示)
-    if (regionTotal > 0) {
-      bars.push({
-        label: isTw ? "🗺️ 地區 (行政區)" : `🗺️ ${unitLabels.item}`,
-        cur: regionCurrent,
-        tot: regionTotal,
-        unit: state.difficulty === "county_only" ? unitLabels.group : unitLabels.itemShort,
-        color: "#38bdf8"
-      });
-    }
-    // 3. 軌道各系統 (僅在支援軌道測驗的地圖包且有開啟時顯示)
-    if (features.supportsTransportQuiz && activeSt.length > 0) {
-      const macroOrder = [
-        { key: "台鐵", label: "🚆 台鐵", color: "#0ea5e9" },
-        { key: "高鐵", label: "🚄 高鐵", color: "#fb923c" },
-        { key: "捷運", label: "🚇 捷運", color: "#f43f5e" },
-        { key: "輕軌", label: "🚋 輕軌", color: "#2dd4bf" },
-        { key: "纜車", label: "🚡 纜車", color: "#a855f7" },
-        { key: "林鐵", label: "🌲 林鐵", color: "#10b981" },
-        { key: "糖鐵", label: "🍬 糖鐵", color: "#f59e0b" }
-      ];
-      macroOrder.forEach((m) => {
-        const mStations = activeSt.filter((s) => s.macro === m.key);
-        if (mStations.length > 0) {
-          const mUnlocked = mStations.filter((s) => vState.unlockedStations.has(s.key)).length;
-          bars.push({
-            label: m.label,
-            cur: mUnlocked,
-            tot: mStations.length,
-            unit: "站",
-            color: m.color
-          });
-        }
-      });
+    if (limitedStats) {
+      if (limitedStats.regionTotal > 0 && (limitedStats.stationTotal > 0 || limitedStats.poiTotal > 0)) {
+        bars.push({
+          label: isTw ? "🗺️ 本輪行政區" : `🗺️ 本輪${unitLabels.item}`,
+          cur: limitedStats.regionCurrent,
+          tot: limitedStats.regionTotal,
+          unit: "題",
+          color: "#38bdf8"
+        });
+      }
+      if (limitedStats.stationTotal > 0 && (limitedStats.regionTotal > 0 || limitedStats.poiTotal > 0)) {
+        bars.push({
+          label: "🚉 本輪車站",
+          cur: limitedStats.stationCurrent,
+          tot: limitedStats.stationTotal,
+          unit: "題",
+          color: "#0ea5e9"
+        });
+      }
+      if (limitedStats.poiTotal > 0 && (limitedStats.regionTotal > 0 || limitedStats.stationTotal > 0)) {
+        bars.push({
+          label: "📍 本輪地標",
+          cur: limitedStats.poiCurrent,
+          tot: limitedStats.poiTotal,
+          unit: "題",
+          color: "#a855f7"
+        });
+      }
+    } else {
+      // 2. 地區 (有開才顯示)
+      if (regionTotal > 0) {
+        bars.push({
+          label: isTw ? "🗺️ 地區 (行政區)" : `🗺️ ${unitLabels.item}`,
+          cur: regionCurrent,
+          tot: regionTotal,
+          unit: state.difficulty === "county_only" ? unitLabels.group : unitLabels.itemShort,
+          color: "#38bdf8"
+        });
+      }
+      // 3. 軌道各系統 (僅在支援軌道測驗的地圖包且有開啟時顯示)
+      if (features.supportsTransportQuiz && activeSt.length > 0) {
+        const macroOrder = [
+          { key: "台鐵", label: "🚆 台鐵", color: "#0ea5e9" },
+          { key: "高鐵", label: "🚄 高鐵", color: "#fb923c" },
+          { key: "捷運", label: "🚇 捷運", color: "#f43f5e" },
+          { key: "輕軌", label: "🚋 輕軌", color: "#2dd4bf" },
+          { key: "纜車", label: "🚡 纜車", color: "#a855f7" },
+          { key: "林鐵", label: "🌲 林鐵", color: "#10b981" },
+          { key: "糖鐵", label: "🍬 糖鐵", color: "#f59e0b" }
+        ];
+        macroOrder.forEach((m) => {
+          const mStations = activeSt.filter((s) => s.macro === m.key);
+          if (mStations.length > 0) {
+            const mUnlocked = mStations.filter((s) => vState.unlockedStations.has(s.key)).length;
+            bars.push({
+              label: m.label,
+              cur: mUnlocked,
+              tot: mStations.length,
+              unit: "站",
+              color: m.color
+            });
+          }
+        });
+      }
     }
 
     multiBarsEl.replaceChildren();
@@ -726,27 +893,50 @@ function finishGame(reason = "victory") {
 
   const allItems = _dashItems();
   const features = _dashFeatures();
+  const isLimitedQueueRound =
+    (state.playMode === "target_random" || state.playMode === "satellite_quiz") &&
+    Math.max(0, parseInt(state.targetQuestionLimit, 10) || 0) > 0 &&
+    Array.isArray(state.targetQueue) &&
+    state.targetQueue.length > 0;
 
   if (reason !== "victory") {
-    if (state.difficulty === "county_only") {
-      getScopeCounties().forEach((c) => {
-        if (!state.unlockedCounties.has(c.name)) {
-          allItems.filter((t) => t.countyName === c.name).forEach((t) => state.missedTowns.add(t.id));
+    if (isLimitedQueueRound) {
+      // Only reveal unanswered targets from this N-question round instead of flooding the entire map in red
+      state.targetQueue.forEach((entry) => {
+        if (!entry) return;
+        if (entry.kind === "poi") {
+          if (!state.unlockedPois.has(entry.id) && state.missedPois) state.missedPois.add(entry.id);
+        } else if (entry.kind === "station") {
+          if (!state.unlockedStations.has(entry.id) && state.missedStations) state.missedStations.add(entry.id);
+        } else if (entry.kind === "county") {
+          if (!state.unlockedCounties.has(entry.id)) {
+            allItems.filter((t) => t.countyName === entry.id).forEach((t) => state.missedTowns.add(t.id));
+          }
+        } else {
+          if (!state.unlockedTowns.has(entry.id)) state.missedTowns.add(entry.id);
         }
       });
     } else {
-      getScopeTowns().forEach((t) => {
-        if (!state.unlockedTowns.has(t.id)) {
-          state.missedTowns.add(t.id);
-        }
-      });
-    }
-    if (features.supportsPoiQuiz && typeof getActiveQuizPois === "function") {
-      getActiveQuizPois().forEach((p) => {
-        if (!state.unlockedPois.has(p.id)) {
-          state.missedPois.add(p.id);
-        }
-      });
+      if (state.difficulty === "county_only") {
+        getScopeCounties().forEach((c) => {
+          if (!state.unlockedCounties.has(c.name)) {
+            allItems.filter((t) => t.countyName === c.name).forEach((t) => state.missedTowns.add(t.id));
+          }
+        });
+      } else {
+        getScopeTowns().forEach((t) => {
+          if (!state.unlockedTowns.has(t.id)) {
+            state.missedTowns.add(t.id);
+          }
+        });
+      }
+      if (features.supportsPoiQuiz && typeof getActiveQuizPois === "function") {
+        getActiveQuizPois().forEach((p) => {
+          if (!state.unlockedPois.has(p.id)) {
+            state.missedPois.add(p.id);
+          }
+        });
+      }
     }
   }
 
@@ -756,37 +946,60 @@ function finishGame(reason = "victory") {
   updateScoreAndProgressUI();
 
   const activeSt = features.supportsTransportQuiz && typeof getActiveQuizStations === "function" ? getActiveQuizStations() : [];
-  const unlockedStCount = activeSt.filter((s) => state.unlockedStations.has(s.key)).length;
+  const rawUnlockedStCount = activeSt.filter((s) => state.unlockedStations.has(s.key)).length;
   const activePois = features.supportsPoiQuiz && typeof getActiveQuizPois === "function" ? getActiveQuizPois() : [];
-  const unlockedPoiCount = activePois.filter((p) => state.unlockedPois.has(p.id)).length;
+  const rawUnlockedPoiCount = activePois.filter((p) => state.unlockedPois.has(p.id)).length;
   const scopeCounties = getScopeCounties();
   const scopeTowns = getScopeTowns();
-  const adminTotal = state.difficulty === "county_only" ? scopeCounties.length : scopeTowns.length;
-  const adminCurrent = state.difficulty === "county_only"
+  const rawAdminTotal = state.difficulty === "county_only" ? scopeCounties.length : scopeTowns.length;
+  const rawAdminCurrent = state.difficulty === "county_only"
     ? Array.from(state.unlockedCounties).filter((c) => state.selectedCounties.has(c)).length
     : Array.from(state.unlockedTowns).filter((id) => {
         const t = allItems.find((x) => x.id === id);
         return t && (typeof isTownInScope === "function" ? isTownInScope(t) : state.selectedCounties.has(t.countyName));
       }).length;
 
-  const grandTotal = adminTotal + activeSt.length + activePois.length;
-  const grandScore = adminCurrent + unlockedStCount + unlockedPoiCount;
+  const rawGrandTotal = rawAdminTotal + activeSt.length + activePois.length;
+  const rawGrandScore = rawAdminCurrent + rawUnlockedStCount + rawUnlockedPoiCount;
+  const limitedStats = getLimitedRoundStats(state, {
+    grandCurrent: rawGrandScore,
+    grandTotal: rawGrandTotal
+  });
+
+  const adminTotal = limitedStats ? limitedStats.regionTotal : rawAdminTotal;
+  const adminCurrent = limitedStats ? limitedStats.regionCurrent : rawAdminCurrent;
+  const stationTotal = limitedStats ? limitedStats.stationTotal : activeSt.length;
+  const unlockedStCount = limitedStats ? limitedStats.stationCurrent : rawUnlockedStCount;
+  const poiTotal = limitedStats ? limitedStats.poiTotal : activePois.length;
+  const unlockedPoiCount = limitedStats ? limitedStats.poiCurrent : rawUnlockedPoiCount;
+  const grandTotal = limitedStats ? limitedStats.grandTotal : rawGrandTotal;
+  const grandScore = limitedStats ? limitedStats.grandCurrent : rawGrandScore;
+
   const totalAttempts = (state.stats && state.stats.totalAttempts) || grandScore;
   const wrongAttempts = (state.stats && state.stats.wrongAttempts) || 0;
   const correctAttempts = (state.stats && state.stats.correctAttempts) || grandScore;
-  const accuracy = totalAttempts > 0 ? Math.round((correctAttempts / totalAttempts) * 100) : 100;
+  const accuracy = totalAttempts > 0 ? Math.round((correctAttempts / totalAttempts) * 100) : (limitedStats && limitedStats.passedCount > 0 && grandScore === 0 ? 0 : 100);
   const maxStreak = (state.stats && state.stats.maxStreak) || 0;
-  const poiBreakdown = {};
-  ["airport", "port", "reservoir", "lake", "settlement"].forEach((cat) => {
-    if (features.supportsPoiQuiz && typeof isPoiCategoryActive === "function" && isPoiCategoryActive(cat) && typeof getActiveQuizPois === "function") {
-      const list = getActiveQuizPois(cat);
-      const unlocked = list.filter((p) => state.unlockedPois.has(p.id)).length;
-      poiBreakdown[cat] = { current: unlocked, total: list.length };
-    } else {
-      poiBreakdown[cat] = { current: 0, total: 0 };
-    }
-  });
+  const poiBreakdown = limitedStats ? limitedStats.poiBreakdown : {};
+  if (!limitedStats) {
+    ["airport", "port", "reservoir", "lake", "settlement"].forEach((cat) => {
+      if (features.supportsPoiQuiz && typeof isPoiCategoryActive === "function" && isPoiCategoryActive(cat) && typeof getActiveQuizPois === "function") {
+        const list = getActiveQuizPois(cat);
+        const unlocked = list.filter((p) => state.unlockedPois.has(p.id)).length;
+        poiBreakdown[cat] = { current: unlocked, total: list.length };
+      } else {
+        poiBreakdown[cat] = { current: 0, total: 0 };
+      }
+    });
+  }
   const blockStats = computeClearedBlocksStats(scopeCounties, scopeTowns, activeSt);
+  const limitedSummaryText = limitedStats
+    ? (limitedStats.passedCount > 0
+        ? `限題挑戰 ${grandScore}/${grandTotal} 題（略過 ${limitedStats.passedCount} 題）`
+        : grandScore >= grandTotal && grandTotal > 0
+        ? `限題挑戰 ${grandScore}/${grandTotal} 題（全數答對）`
+        : `限題挑戰 ${grandScore}/${grandTotal} 題`)
+    : blockStats.clearedSummaryText;
 
   state.finalStats = {
     name: (document.getElementById("p2p-nickname-input")?.value.trim()) || state.nickname || "玩家",
@@ -795,10 +1008,14 @@ function finishGame(reason = "victory") {
     adminCurrent,
     adminTotal,
     unlockedStCount,
-    stationTotal: activeSt.length,
+    stationTotal,
     poiCurrent: unlockedPoiCount,
-    poiTotal: activePois.length,
+    poiTotal,
     poiBreakdown,
+    isLimitedRound: Boolean(limitedStats),
+    targetQuestionLimit: limitedStats ? limitedStats.grandTotal : 0,
+    passedCount: limitedStats ? limitedStats.passedCount : 0,
+    fullPoolTotal: rawGrandTotal,
     elapsedSec: state.elapsedSec,
     timerMode: state.timerMode,
     countdownTotalSec: state.countdownTotalSec,
@@ -807,9 +1024,9 @@ function finishGame(reason = "victory") {
     totalScopeCounties: blockStats.totalScopeCounties,
     completedLines: blockStats.completedLines,
     totalScopeLines: blockStats.totalScopeLines,
-    completedBlocks: blockStats.completedBlocks,
-    totalBlocks: blockStats.totalBlocks,
-    clearedSummaryText: blockStats.clearedSummaryText,
+    completedBlocks: limitedStats ? 0 : blockStats.completedBlocks,
+    totalBlocks: limitedStats ? 0 : blockStats.totalBlocks,
+    clearedSummaryText: limitedSummaryText,
     accuracy,
     wrongAttempts,
     maxStreak,
@@ -826,7 +1043,10 @@ function finishGame(reason = "victory") {
   showSettlementModal();
 
   if (reason === "victory") {
-    setFeedback(`🎉 恭喜全數通關！共完成 ${grandScore} 題，耗時 ${formatTime(state.elapsedSec)}！`, "tier");
+    setFeedback(`🎉 恭喜全數通關！共完成 ${grandScore}/${grandTotal} 題，耗時 ${formatTime(state.elapsedSec)}！`, "tier");
+  } else if (reason === "round_complete") {
+    const pctDone = grandTotal > 0 ? ((grandScore / grandTotal) * 100).toFixed(1) : "0.0";
+    setFeedback(`🏁 本輪 ${grandTotal} 題挑戰完成！答對 ${grandScore}/${grandTotal} 題 (${pctDone}%)，已生成挑戰成績單！`, "tier");
   } else if (reason === "timeout") {
     setFeedback("⏰ 時間到！已依答題速率與破關區塊數生成挑戰成績單。", "error");
   } else {
@@ -1612,21 +1832,25 @@ function getGradeFromStats(stats) {
 
   const qPerSecStr = qPerSec.toFixed(2);
   const secPerQStr = grandScore > 0 ? secPerQ.toFixed(1) : "0.0";
+  const isLimitedRound = Boolean(stats.isLimitedRound);
+  const displayScopeLabel = isLimitedRound ? `${scopeLabel} · 限 ${grandTotal} 題` : scopeLabel;
   let desc = "";
   if (pct >= 100) {
-    desc = `100% 完美制霸【${scopeLabel}】！平均 ${secPerQStr} 秒/題 (${qPerSecStr} 題/秒) · ${clearedText}`;
+    desc = isLimitedRound
+      ? `100% 滿分通關【${displayScopeLabel}】！平均 ${secPerQStr} 秒/題 (${qPerSecStr} 題/秒)`
+      : `100% 完美制霸【${scopeLabel}】！平均 ${secPerQStr} 秒/題 (${qPerSecStr} 題/秒) · ${clearedText}`;
   } else if (isCountdown) {
     const mins = Math.round(countdownLimitSec / 60);
-    desc = `限時 ${mins} 分鐘極限衝刺【${scopeLabel}】！速率 ${qPerSecStr} 題/秒 (${secPerQStr} 秒/題) · ${clearedText}`;
+    desc = `限時 ${mins} 分鐘極限衝刺【${displayScopeLabel}】！速率 ${qPerSecStr} 題/秒 (${secPerQStr} 秒/題) · ${clearedText}`;
   } else {
-    desc = `挑戰【${scopeLabel}】完成 ${grandScore}/${grandTotal} 題 (${pct.toFixed(1)}%) · 速率 ${qPerSecStr} 題/秒 · ${clearedText}`;
+    desc = `挑戰【${displayScopeLabel}】完成 ${grandScore}/${grandTotal} 題 (${pct.toFixed(1)}%) · 速率 ${qPerSecStr} 題/秒 · ${clearedText}`;
   }
 
   const victoryHeadline = pct >= 100
-    ? `🎉 恭喜通關！【${scopeLabel}】完全制霸`
+    ? (isLimitedRound ? `🎉 滿分通關！【${displayScopeLabel}】` : `🎉 恭喜通關！【${scopeLabel}】完全制霸`)
     : isCountdown
-    ? `⏱️ 限時挑戰完成！【${scopeLabel}】結算`
-    : `🏁 挑戰結算完成！【${scopeLabel}】`;
+    ? `⏱️ 限時挑戰完成！【${displayScopeLabel}】結算`
+    : `🏁 挑戰結算完成！【${displayScopeLabel}】`;
 
   return { grade, title, desc, scopeLabel, victoryHeadline, qPerSecStr, secPerQStr, clearedText };
 }
@@ -1824,7 +2048,11 @@ function showSettlementModal() {
   }
   const scopeSummary = scopeParts.length > 0 ? scopeParts.join(" + ") : defaultScopeName;
 
-  if (modeBadge) modeBadge.textContent = `${diffLabel} · ${scopeSummary}`;
+  if (modeBadge) {
+    modeBadge.textContent = stats.isLimitedRound
+      ? `${diffLabel} · ${scopeSummary} · 限 ${stats.grandTotal} 題`
+      : `${diffLabel} · ${scopeSummary}`;
+  }
   if (rematchBtnText) rematchBtnText.textContent = isMultiplayer ? "發起重開對戰" : "再玩一局";
 
   const pctNum = stats.grandTotal > 0 ? ((stats.grandScore / stats.grandTotal) * 100) : 0;
