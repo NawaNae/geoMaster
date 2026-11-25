@@ -799,6 +799,18 @@ function syncConfigButtonsUI() {
   if (chkPinHide) {
     chkPinHide.checked = Boolean(state.hideGuessedOthers);
   }
+  const chkPinRush = document.getElementById("chk-pindrop-countdown-rush");
+  if (chkPinRush) {
+    chkPinRush.checked = Boolean(state.questionCountdownEnabled);
+  }
+  const chkPinBonus = document.getElementById("chk-pindrop-countdown-bonus");
+  if (chkPinBonus) {
+    chkPinBonus.checked = state.pinDropCountdownBonus !== false;
+  }
+  const pinSecRow = document.getElementById("pindrop-countdown-sec-row");
+  if (pinSecRow) {
+    pinSecRow.classList.toggle("hidden", !state.questionCountdownEnabled);
+  }
 
   const targetOptPanel = document.getElementById("target-quiz-options-panel");
   const isTargetQuizMode = state.playMode === "target_random" || state.playMode === "satellite_quiz";
@@ -825,6 +837,22 @@ function syncConfigButtonsUI() {
   if (chkTargetHide) {
     chkTargetHide.checked = Boolean(state.hideGuessedOthers);
   }
+  const chkTargetRush = document.getElementById("chk-target-countdown-rush");
+  if (chkTargetRush) {
+    chkTargetRush.checked = Boolean(state.questionCountdownEnabled);
+  }
+  const targetSecRow = document.getElementById("target-countdown-sec-row");
+  if (targetSecRow) {
+    targetSecRow.classList.toggle("hidden", !state.questionCountdownEnabled);
+  }
+  const curQcdSec = Math.max(3, parseInt(state.questionCountdownSec, 10) || 15);
+  document.querySelectorAll(".question-countdown-sec-btn").forEach((btn) => {
+    const sec = parseInt(btn.getAttribute("data-qcd-sec"), 10);
+    const isCur = sec === curQcdSec;
+    btn.className = isCur
+      ? "question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border transition bg-emerald-500/25 border-emerald-400 text-emerald-200 shadow"
+      : "question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition";
+  });
 
   // Target hints toggle is ONLY relevant in target_random / target_click / satellite_quiz!
   const showTargetHintsToggle =
@@ -966,15 +994,79 @@ function setTargetQuestionLimit(val) {
     syncConfigButtonsUI();
     return;
   }
+  const prevLimit = Math.max(0, parseInt(state.targetQuestionLimit, 10) || 0);
+  // N-question mode defaults to hiding already-guessed blocks; returning to 0 (全部) defaults to showing them
+  let nextHideGuessed = Boolean(state.hideGuessedOthers);
+  if (prevLimit === 0 && parsed > 0) {
+    nextHideGuessed = true;
+  } else if (prevLimit > 0 && parsed === 0) {
+    nextHideGuessed = false;
+  }
+
   if (state.isHost && state.roomCode) {
-    if (parsed === (Number(state.targetQuestionLimit) || 0)) return;
-    requestOrApplyConfigChange({ targetQuestionLimit: parsed }, "題數限制");
+    if (parsed === prevLimit && nextHideGuessed === Boolean(state.hideGuessedOthers)) return;
+    requestOrApplyConfigChange(
+      { targetQuestionLimit: parsed, hideGuessedOthers: nextHideGuessed },
+      "題數限制"
+    );
     return;
   }
   state.targetQuestionLimit = parsed;
+  state.hideGuessedOthers = nextHideGuessed;
   syncConfigButtonsUI();
   if (state.playMode === "target_random" || state.playMode === "satellite_quiz") {
     resetGame();
+  } else {
+    if (typeof refreshAllPolygonStyles === "function") refreshAllPolygonStyles();
+    if (typeof renderSmartLabelsAndLeaderLines === "function") renderSmartLabelsAndLeaderLines();
+  }
+  if (typeof renderRoomConciseSettingsSummary === "function") renderRoomConciseSettingsSummary();
+}
+
+function setQuestionCountdownEnabled(enabled) {
+  const nextVal = Boolean(enabled);
+  if (!canLocalModifyGameConfig()) {
+    setFeedback("🔒 僅房主可調整倒數搶答設定！", "error");
+    playTone("error");
+    syncConfigButtonsUI();
+    return;
+  }
+  if (state.isHost && state.roomCode) {
+    if (nextVal === Boolean(state.questionCountdownEnabled)) return;
+    requestOrApplyConfigChange({ questionCountdownEnabled: nextVal }, "倒數搶答");
+    return;
+  }
+  state.questionCountdownEnabled = nextVal;
+  syncConfigButtonsUI();
+  if (nextVal) {
+    if (typeof startQuestionCountdown === "function") startQuestionCountdown();
+  } else {
+    if (typeof stopQuestionCountdown === "function") stopQuestionCountdown();
+  }
+  if (state.playMode === "pin_drop" && typeof updatePinDropBannerAndDockUI === "function") {
+    updatePinDropBannerAndDockUI();
+    if (typeof updateScoreAndProgressUI === "function") updateScoreAndProgressUI();
+  }
+  if (typeof renderRoomConciseSettingsSummary === "function") renderRoomConciseSettingsSummary();
+}
+
+function setQuestionCountdownSec(sec) {
+  const parsed = Math.max(3, Math.min(120, parseInt(sec, 10) || 15));
+  if (!canLocalModifyGameConfig()) {
+    setFeedback("🔒 僅房主可調整倒數搶答秒數！", "error");
+    playTone("error");
+    syncConfigButtonsUI();
+    return;
+  }
+  if (state.isHost && state.roomCode) {
+    if (parsed === (parseInt(state.questionCountdownSec, 10) || 15)) return;
+    requestOrApplyConfigChange({ questionCountdownSec: parsed }, "搶答秒數");
+    return;
+  }
+  state.questionCountdownSec = parsed;
+  syncConfigButtonsUI();
+  if (state.questionCountdownEnabled && typeof startQuestionCountdown === "function") {
+    startQuestionCountdown();
   }
   if (typeof renderRoomConciseSettingsSummary === "function") renderRoomConciseSettingsSummary();
 }
@@ -1922,6 +2014,10 @@ function bindAllUIEvents() {
       return;
     }
     state.showDistrictBorders = visible;
+    if (state.playMode === "pin_drop" && !forceBypassLock) {
+      state.pinDropShowBorders = Boolean(visible);
+      if (typeof syncConfigButtonsUI === "function") syncConfigButtonsUI();
+    }
     const bBtn = document.getElementById("btn-toggle-borders");
     if (bBtn) {
       const sp = bBtn.querySelector("span") || bBtn;
@@ -2243,10 +2339,10 @@ function bindAllUIEvents() {
     }
   });
   document.getElementById("btn-reset-view-side")?.addEventListener("click", () => _resetToFullPackView());
-  document.getElementById("btn-view-north").addEventListener("click", () => map.flyTo([25.04, 121.52], 11, { duration: 0.5 }));
-  document.getElementById("btn-view-kinmen").addEventListener("click", () => map.flyTo([24.44, 118.36], 11, { duration: 0.5 }));
-  document.getElementById("btn-view-matsu").addEventListener("click", () => map.flyTo([26.16, 119.95], 11, { duration: 0.5 }));
-  document.getElementById("btn-view-penghu").addEventListener("click", () => map.flyTo([23.57, 119.61], 11, { duration: 0.5 }));
+  document.getElementById("btn-view-north").addEventListener("click", () => map.flyTo([25.04, 121.52], 11, { duration: 0.28 }));
+  document.getElementById("btn-view-kinmen").addEventListener("click", () => map.flyTo([24.44, 118.36], 11, { duration: 0.28 }));
+  document.getElementById("btn-view-matsu").addEventListener("click", () => map.flyTo([26.16, 119.95], 11, { duration: 0.28 }));
+  document.getElementById("btn-view-penghu").addEventListener("click", () => map.flyTo([23.57, 119.61], 11, { duration: 0.28 }));
 
   document.getElementById("btn-zoom-in").addEventListener("click", () => map && map.zoomIn());
   document.getElementById("btn-zoom-out").addEventListener("click", () => map && map.zoomOut());
@@ -2343,6 +2439,20 @@ function bindAllUIEvents() {
   });
   document.getElementById("chk-pindrop-hide-guessed")?.addEventListener("change", (e) => {
     setHideGuessedOthers(e.target.checked);
+  });
+  document.getElementById("chk-target-countdown-rush")?.addEventListener("change", (e) => {
+    setQuestionCountdownEnabled(e.target.checked);
+  });
+  document.getElementById("chk-pindrop-countdown-rush")?.addEventListener("change", (e) => {
+    setQuestionCountdownEnabled(e.target.checked);
+  });
+  document.getElementById("chk-pindrop-countdown-bonus")?.addEventListener("change", (e) => {
+    if (typeof setPinDropCountdownBonus === "function") {
+      setPinDropCountdownBonus(e.target.checked);
+    }
+  });
+  document.querySelectorAll(".question-countdown-sec-btn").forEach((btn) => {
+    btn.addEventListener("click", () => setQuestionCountdownSec(btn.getAttribute("data-qcd-sec")));
   });
   document.getElementById("btn-target-pass")?.addEventListener("click", () => {
     if (typeof passCurrentTarget === "function") passCurrentTarget();
@@ -2465,7 +2575,7 @@ function bindAllUIEvents() {
         if (!state.isImeComposing && answerInput.value.trim()) {
           evaluateGuess(answerInput.value, true);
         }
-      }, 15);
+      }, 0);
     }
   });
 
@@ -3112,12 +3222,16 @@ function bindAllUIEvents() {
     if (state.selectedCounties.size === 0 && activeSt.length > 0 && map) {
       const bounds = L.latLngBounds(activeSt.map((s) => [s.lat, s.lng]));
       if (bounds.isValid()) {
-        map.flyToBounds(bounds.pad(0.18), { duration: 0.6, maxZoom: 13 });
+        map.flyToBounds(bounds.pad(0.18), { duration: 0.28, maxZoom: 13 });
       }
       setFeedback(`🚉 已開啟車站挑戰 (共 ${state.quizStationLines.size} 條路線、${activeSt.length} 座車站)！`, "tier");
     }
 
     if (typeof syncModalBodyScrollLock === "function") syncModalBodyScrollLock();
+    if (state.playMode !== "pin_drop" && state.role !== "spectator") {
+      const inp = document.getElementById("answer-input");
+      if (inp && typeof inp.focus === "function") inp.focus({ preventScroll: true });
+    }
 
     // Only broadcast if local user is Host in an active room and config changed on apply! Solo mode never broadcasts!
     if (state.isHost && state.roomCode) {

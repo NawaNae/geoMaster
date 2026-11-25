@@ -100,7 +100,20 @@ const state = {
   playMode: "free",           // 'free' | 'target_random' | 'target_click' | 'satellite_quiz'
   targetQuestionLimit: 0,     // 0 = all/unlimited; >0 = N questions per round (target_random / satellite_quiz)
   allowPass: true,            // Allow Pass/Skip in target_random / satellite_quiz
-  hideGuessedOthers: false,   // Hide already-guessed other regions/stations/POIs in target_random / satellite_quiz / pin_drop
+  hideGuessedOthers: false,   // Hide already-guessed other regions/stations/POIs (defaults to true when N-question limit > 0)
+  questionCountdownEnabled: false, // 允許倒數搶答 (per-question countdown in target_random / satellite_quiz / pin_drop)
+  questionCountdownSec: 15,   // Per-question countdown duration in seconds (5 | 10 | 15 | 20 | 30)
+  pinDropCountdownBonus: true,// 標點模式倒數計分加成 (default ON; awards speed bonus when countdown rush is active)
+  questionTimer: {
+    active: false,
+    totalMs: 15000,
+    remainingMs: 15000,
+    startedAt: 0,
+    deadlineAt: 0,
+    intervalId: null,
+    autoNextTimerId: null,
+    lastBeepSec: null
+  },
   targetQueue: [],            // Synchronized/ordered queue of { kind, id } for N-question or synced PK rounds
   targetQueueIndex: 0,
   passedTargetKeys: new Set(),
@@ -115,7 +128,7 @@ const state = {
   pinDropRounds: 10,          // 5 | 10 | 20 | 0 (0 = endless)
   pinDropBaseLayer: "satellite", // 'satellite' | 'terrain' | 'vector'
   pinDropLockBaseLayer: false,
-  pinDropShowBorders: false,
+  pinDropShowBorders: true,   // 預設都顯示區塊（可手動關閉進入無界挑戰）
   pinDropSavedBaseLayer: null,
   pinDropSavedDistrictBorders: null,
   pinDrop: {

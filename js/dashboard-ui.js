@@ -2544,4 +2544,7 @@ function stopTimer() {
     clearInterval(state.timerInterval);
     state.timerInterval = null;
   }
+  if (typeof stopQuestionCountdown === "function") {
+    stopQuestionCountdown();
+  }
 }

@@ -1638,6 +1638,225 @@ function _activateTargetEntry(entry) {
   return true;
 }
 
+// =========================================================================
+// 7B. PER-QUESTION COUNTDOWN RUSH ENGINE (隨機 / 衛星 / 標座標 倒數搶答)
+// =========================================================================
+function isQuestionCountdownModeActive(pm = state.playMode) {
+  return pm === "target_random" || pm === "satellite_quiz" || pm === "pin_drop";
+}
+
+function isQuestionCountdownPausedByModal() {
+  const blockingIds = ["modal-scope", "modal-room", "modal-join-entry", "p2p-countdown-overlay"];
+  for (let i = 0; i < blockingIds.length; i++) {
+    const el = document.getElementById(blockingIds[i]);
+    if (el && el.classList && !el.classList.contains("hidden")) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function getQuestionCountdownRemainingMs() {
+  const qt = state.questionTimer;
+  if (!qt || !qt.active) return 0;
+  if (Number.isFinite(qt.deadlineAt) && qt.deadlineAt > 0) {
+    return Math.max(0, qt.deadlineAt - Date.now());
+  }
+  return Math.max(0, Number(qt.remainingMs) || 0);
+}
+
+function syncQuestionCountdownUI() {
+  const pill = document.getElementById("target-countdown-pill");
+  const barWrap = document.getElementById("target-countdown-bar-wrap");
+  const bar = document.getElementById("target-countdown-bar");
+  const qt = state.questionTimer;
+  const show = Boolean(
+    state.questionCountdownEnabled &&
+      isQuestionCountdownModeActive() &&
+      qt &&
+      qt.active &&
+      !state.isGameOver &&
+      state.role !== "spectator"
+  );
+
+  if (pill) pill.classList.toggle("hidden", !show);
+  if (barWrap) barWrap.classList.toggle("hidden", !show);
+  if (!show) return;
+
+  const remMs = getQuestionCountdownRemainingMs();
+  const totalMs = Math.max(1000, Number(qt.totalMs) || 15000);
+  const ratio = Math.max(0, Math.min(1, remMs / totalMs));
+  const secVal = remMs / 1000;
+
+  if (pill) {
+    pill.textContent = `⚡ ${secVal.toFixed(1)}s`;
+    if (secVal <= 3) {
+      pill.className = "font-mono-num text-[11px] font-black px-2 py-0.5 rounded-lg bg-rose-500/25 text-rose-200 border border-rose-400/60 animate-pulse whitespace-nowrap";
+    } else if (ratio <= 0.45) {
+      pill.className = "font-mono-num text-[11px] font-black px-2 py-0.5 rounded-lg bg-amber-500/25 text-amber-200 border border-amber-400/50 whitespace-nowrap";
+    } else {
+      pill.className = "font-mono-num text-[11px] font-black px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-200 border border-emerald-400/40 whitespace-nowrap";
+    }
+  }
+  if (bar) {
+    bar.style.width = `${(ratio * 100).toFixed(1)}%`;
+    bar.className =
+      secVal <= 3
+        ? "h-full bg-rose-400 transition-[width] duration-100 ease-linear"
+        : ratio <= 0.45
+        ? "h-full bg-amber-400 transition-[width] duration-100 ease-linear"
+        : "h-full bg-emerald-400 transition-[width] duration-100 ease-linear";
+  }
+}
+
+function stopQuestionCountdown() {
+  if (!state.questionTimer) return;
+  if (state.questionTimer.intervalId) {
+    clearInterval(state.questionTimer.intervalId);
+    state.questionTimer.intervalId = null;
+  }
+  state.questionTimer.active = false;
+  state.questionTimer.remainingMs = 0;
+  state.questionTimer.deadlineAt = 0;
+  state.questionTimer.lastBeepSec = null;
+  syncQuestionCountdownUI();
+}
+
+function startQuestionCountdown(customSec = null) {
+  stopQuestionCountdown();
+  if (!state.questionCountdownEnabled || state.isGameOver || state.role === "spectator") return false;
+  if (!isQuestionCountdownModeActive()) return false;
+  if (state.playMode === "pin_drop" && (!state.pinDrop || state.pinDrop.phase !== "placing")) return false;
+  if (
+    (state.playMode === "target_random" || state.playMode === "satellite_quiz") &&
+    !state.targetId &&
+    !state.targetStationKey &&
+    !state.targetPoiId
+  ) {
+    return false;
+  }
+
+  const sec = Math.max(3, Math.min(120, parseInt(customSec != null ? customSec : state.questionCountdownSec, 10) || 15));
+  const totalMs = sec * 1000;
+  const now = Date.now();
+  const qt = state.questionTimer;
+  qt.active = true;
+  qt.totalMs = totalMs;
+  qt.remainingMs = totalMs;
+  qt.startedAt = now;
+  qt.deadlineAt = now + totalMs;
+  qt.lastBeepSec = null;
+
+  qt.intervalId = setInterval(() => {
+    if (!qt.active || !state.questionCountdownEnabled || state.isGameOver) {
+      stopQuestionCountdown();
+      return;
+    }
+    if (isQuestionCountdownPausedByModal()) {
+      // Keep full remaining time while settings/room modal covers the screen
+      qt.deadlineAt = Date.now() + qt.remainingMs;
+      return;
+    }
+    const rem = Math.max(0, qt.deadlineAt - Date.now());
+    qt.remainingMs = rem;
+    const wholeSec = Math.ceil(rem / 1000);
+    if (wholeSec > 0 && wholeSec <= 3 && wholeSec !== qt.lastBeepSec) {
+      qt.lastBeepSec = wholeSec;
+      if (typeof playCountdownBeep === "function") {
+        playCountdownBeep(wholeSec === 1 ? 660 : 520, 0.08, "sine");
+      }
+    }
+    syncQuestionCountdownUI();
+    if (rem <= 0) {
+      handleQuestionCountdownTimeout();
+    }
+  }, 100);
+
+  syncQuestionCountdownUI();
+  return true;
+}
+
+function resolveCurrentTargetReadableName() {
+  if (state.targetPoiId && typeof TAIWAN_POI_BY_ID !== "undefined") {
+    const p = TAIWAN_POI_BY_ID.get(state.targetPoiId);
+    if (p) return p.name || p.shortName || state.targetPoiId;
+  }
+  if (state.targetStationKey && typeof getActiveQuizStations === "function") {
+    const st = getActiveQuizStations().find((s) => s.key === state.targetStationKey);
+    if (st) return `${st.lineName} ${st.displayName}`;
+  }
+  if (state.targetId) {
+    const isGroupMode = !_isSingleLayer() && state.difficulty === "county_only";
+    if (isGroupMode) {
+      const c = _activeGroupByName(state.targetId);
+      return c ? c.name : state.targetId;
+    }
+    const t = _activeItems().find((x) => x.id === state.targetId);
+    if (t) return _isSingleLayer() ? t.townName : (t.fullCountyTown || t.townName);
+    return state.targetId;
+  }
+  return "";
+}
+
+function handleQuestionCountdownTimeout() {
+  stopQuestionCountdown();
+  if (state.isGameOver || state.finished || state.role === "spectator") return false;
+
+  if (state.playMode === "pin_drop") {
+    return typeof handlePinDropCountdownTimeout === "function" ? handlePinDropCountdownTimeout() : false;
+  }
+  if (state.playMode !== "target_random" && state.playMode !== "satellite_quiz") return false;
+  if (!state.passedTargetKeys) state.passedTargetKeys = new Set();
+
+  const answerLabel = resolveCurrentTargetReadableName();
+  let key = "";
+  if (state.targetPoiId) {
+    key = `poi:${state.targetPoiId}`;
+    state.passedTargetKeys.add(key);
+    if (state.missedPois) state.missedPois.add(state.targetPoiId);
+  } else if (state.targetStationKey) {
+    key = `station:${state.targetStationKey}`;
+    state.passedTargetKeys.add(key);
+    if (state.missedStations) state.missedStations.add(state.targetStationKey);
+  } else if (state.targetId) {
+    const isGroupMode = !_isSingleLayer() && state.difficulty === "county_only";
+    if (isGroupMode) {
+      key = `county:${state.targetId}`;
+      state.passedTargetKeys.add(key);
+      _activeItems().filter((t) => t.countyName === state.targetId).forEach((t) => state.missedTowns.add(t.id));
+    } else {
+      key = `town:${state.targetId}`;
+      state.passedTargetKeys.add(key);
+      state.missedTowns.add(state.targetId);
+    }
+  }
+
+  if (state.stats) {
+    state.stats.totalAttempts++;
+    state.stats.wrongAttempts++;
+    state.stats.streak = 0;
+  }
+  if (Array.isArray(state.targetQueue) && state.targetQueue.length > 0) {
+    state.targetQueueIndex = Math.min(state.targetQueue.length, (state.targetQueueIndex || 0) + 1);
+  }
+  state.targetId = null;
+  state.targetStationKey = null;
+  state.targetPoiId = null;
+
+  clearCoreInput();
+  setFeedback(
+    answerLabel ? `⌛ 搶答時間到！正確答案：【${answerLabel}】` : "⌛ 搶答時間到！已進入下一題",
+    "error"
+  );
+  playTone("error");
+  if (typeof updateScoreAndProgressUI === "function") updateScoreAndProgressUI();
+  if (state.roomCode && typeof broadcastP2PState === "function") broadcastP2PState();
+  pickNextTargetRegion();
+  const inp = document.getElementById("answer-input");
+  if (inp && !state.isGameOver) inp.focus({ preventScroll: true });
+  return true;
+}
+
 function passCurrentTarget() {
   if (state.isGameOver || state.finished || state.role === "spectator") {
     return { ok: false, reason: "inactive" };
@@ -1650,6 +1869,7 @@ function passCurrentTarget() {
     playTone("error");
     return { ok: false, reason: "pass_disabled" };
   }
+  stopQuestionCountdown();
   if (!state.passedTargetKeys) state.passedTargetKeys = new Set();
 
   let key = "";
@@ -1681,10 +1901,13 @@ function passCurrentTarget() {
   state.targetStationKey = null;
   state.targetPoiId = null;
 
+  clearCoreInput();
   setFeedback("⏭️ 已略過本題，進入下一題！", "info");
   playTone("error");
   if (typeof updateScoreAndProgressUI === "function") updateScoreAndProgressUI();
   pickNextTargetRegion();
+  const inp = document.getElementById("answer-input");
+  if (inp && !state.isGameOver) inp.focus({ preventScroll: true });
   return { ok: true, passedKey: key };
 }
 
@@ -1708,6 +1931,7 @@ function pickNextTargetRegion() {
     }
     state.targetQueueIndex = idx;
     if (idx >= state.targetQueue.length) {
+      stopQuestionCountdown();
       state.targetId = null;
       state.targetStationKey = null;
       state.targetPoiId = null;
@@ -1717,6 +1941,8 @@ function pickNextTargetRegion() {
       return;
     }
     if (_activateTargetEntry(state.targetQueue[idx])) {
+      if (state.questionCountdownEnabled) startQuestionCountdown();
+      else stopQuestionCountdown();
       return;
     }
   }
@@ -1730,18 +1956,18 @@ function pickNextTargetRegion() {
 
   const remainingStations =
     features.supportsTransportQuiz && typeof getActiveQuizStations === "function"
-      ? getActiveQuizStations().filter((s) => !state.unlockedStations.has(s.key))
+      ? getActiveQuizStations().filter((s) => !state.unlockedStations.has(s.key) && !(state.passedTargetKeys && state.passedTargetKeys.has(`station:${s.key}`)))
       : [];
   const remainingPois =
     features.supportsPoiQuiz && typeof getActiveQuizPois === "function"
-      ? getActiveQuizPois().filter((p) => !state.unlockedPois.has(p.id))
+      ? getActiveQuizPois().filter((p) => !state.unlockedPois.has(p.id) && !(state.passedTargetKeys && state.passedTargetKeys.has(`poi:${p.id}`)))
       : [];
   const scopeTowns = getScopeTowns();
   const regionDone =
     scopeTowns.length === 0 ||
     (isGroupMode
-      ? getScopeCounties().every((c) => state.unlockedCounties.has(c.name))
-      : scopeTowns.every((t) => state.unlockedTowns.has(t.id)));
+      ? getScopeCounties().every((c) => state.unlockedCounties.has(c.name) || (state.passedTargetKeys && state.passedTargetKeys.has(`county:${c.name}`)))
+      : scopeTowns.every((t) => state.unlockedTowns.has(t.id) || (state.passedTargetKeys && state.passedTargetKeys.has(`town:${t.id}`))));
 
   // If region is done (or off) and POIs remain (and no stations left, or pure POI mode)
   if (regionDone && remainingPois.length > 0 && (remainingStations.length === 0 || Math.random() < 0.5)) {
@@ -1759,6 +1985,8 @@ function pickNextTargetRegion() {
     if (typeof refreshPoiMapLayer === "function") refreshPoiMapLayer();
     updateTargetBannerUI();
     refreshAllPolygonStyles();
+    if (state.questionCountdownEnabled) startQuestionCountdown();
+    else stopQuestionCountdown();
     if (state.roomCode && typeof broadcastP2PState === "function") broadcastP2PState();
     return;
   }
@@ -1780,6 +2008,8 @@ function pickNextTargetRegion() {
     if (typeof refreshPoiMapLayer === "function") refreshPoiMapLayer();
     updateTargetBannerUI();
     refreshAllPolygonStyles();
+    if (state.questionCountdownEnabled) startQuestionCountdown();
+    else stopQuestionCountdown();
     if (state.roomCode && typeof broadcastP2PState === "function") broadcastP2PState();
     return;
   }
@@ -1787,10 +2017,17 @@ function pickNextTargetRegion() {
   state.targetStationKey = null;
   state.targetPoiId = null;
   if (isGroupMode) {
-    const remaining = getScopeCounties().filter((c) => !state.unlockedCounties.has(c.name));
+    const remaining = getScopeCounties().filter(
+      (c) => !state.unlockedCounties.has(c.name) && !(state.passedTargetKeys && state.passedTargetKeys.has(`county:${c.name}`))
+    );
     if (remaining.length === 0) {
+      stopQuestionCountdown();
       state.targetId = null;
-      checkVictoryCondition();
+      if (state.passedTargetKeys && state.passedTargetKeys.size > 0 && typeof finishGame === "function") {
+        finishGame("round_complete");
+      } else {
+        checkVictoryCondition();
+      }
       return;
     }
     const pick = remaining[Math.floor(Math.random() * remaining.length)];
@@ -1803,10 +2040,17 @@ function pickNextTargetRegion() {
       focusMapOnLatLng(pick.lat, pick.lng, groupFocusZoom);
     }
   } else {
-    const remaining = scopeTowns.filter((t) => !state.unlockedTowns.has(t.id));
+    const remaining = scopeTowns.filter(
+      (t) => !state.unlockedTowns.has(t.id) && !(state.passedTargetKeys && state.passedTargetKeys.has(`town:${t.id}`))
+    );
     if (remaining.length === 0) {
+      stopQuestionCountdown();
       state.targetId = null;
-      checkVictoryCondition();
+      if (state.passedTargetKeys && state.passedTargetKeys.size > 0 && typeof finishGame === "function") {
+        finishGame("round_complete");
+      } else {
+        checkVictoryCondition();
+      }
       return;
     }
     const pick = remaining[Math.floor(Math.random() * remaining.length)];
@@ -1821,11 +2065,14 @@ function pickNextTargetRegion() {
   }
   updateTargetBannerUI();
   refreshAllPolygonStyles();
+  if (state.questionCountdownEnabled) startQuestionCountdown();
+  else stopQuestionCountdown();
   if (state.roomCode && typeof broadcastP2PState === "function") broadcastP2PState();
 }
 
 // Exit target/random/satellite mode back to normal free recall mode
 function exitTargetQuizMode() {
+  stopQuestionCountdown();
   if (state.playMode === "pin_drop" && typeof restorePinDropEnvironment === "function") {
     restorePinDropEnvironment();
   }
@@ -1923,7 +2170,7 @@ function moveTargetByDirection(dir) {
     updateTargetBannerUI();
     refreshAllPolygonStyles();
     if (state.roomCode && typeof broadcastP2PState === "function") broadcastP2PState();
-    if (map) map.panTo([bestSt.lat, bestSt.lng], { animate: true, duration: 0.35 });
+    if (map) map.panTo([bestSt.lat, bestSt.lng], { animate: true, duration: 0.18 });
     const inp = document.getElementById("answer-input");
     if (inp) inp.focus({ preventScroll: true });
     return;
@@ -1983,7 +2230,7 @@ function moveTargetByDirection(dir) {
   refreshAllPolygonStyles();
   if (state.roomCode && typeof broadcastP2PState === "function") broadcastP2PState();
   if (map) {
-    map.panTo([best.lat, best.lng], { animate: true, duration: 0.35 });
+    map.panTo([best.lat, best.lng], { animate: true, duration: 0.18 });
   }
   const inp = document.getElementById("answer-input");
   if (inp) inp.focus({ preventScroll: true });
@@ -2097,7 +2344,7 @@ function focusMapOnLatLng(lat, lng, minZ) {
       targetLng = getClosestWrappedLng(lng, curCenter.lng);
     }
   }
-  map.flyTo([lat, targetLng], Math.max(map.getZoom(), resolvedMinZ), { duration: 0.5 });
+  map.flyTo([lat, targetLng], Math.max(map.getZoom(), resolvedMinZ), { duration: 0.2, easeLinearity: 0.5 });
 }
 
 function updateTargetBannerUI() {

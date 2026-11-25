@@ -323,6 +323,8 @@ function getHostSyncConfig(isSettingChange = false, changeLabel = "", changeDeta
     targetQuestionLimit: Math.max(0, parseInt(state.targetQuestionLimit, 10) || 0),
     allowPass: state.allowPass !== false,
     hideGuessedOthers: Boolean(state.hideGuessedOthers),
+    questionCountdownEnabled: Boolean(state.questionCountdownEnabled),
+    questionCountdownSec: Math.max(3, parseInt(state.questionCountdownSec, 10) || 15),
     sharedTargetQueue:
       includeTargetQueue &&
       (state.playMode === "target_random" || state.playMode === "satellite_quiz") &&
@@ -384,12 +386,16 @@ function getConciseDifficultySummaryText() {
   const qLimit = Math.max(0, parseInt(state.targetQuestionLimit, 10) || 0);
   const limitStr = isRnd && qLimit > 0 ? ` · 限 ${qLimit} 題` : "";
   const passStr = isRnd && state.allowPass === false ? " · 禁略過" : "";
-  const hideStr = state.hideGuessedOthers ? " · 隱藏已猜地區" : "";
+  const hideStr = state.hideGuessedOthers ? " · 隱藏已猜區塊" : "";
+  const rushStr =
+    isRnd && state.questionCountdownEnabled
+      ? ` · ⚡ 倒數搶答 ${Math.max(3, parseInt(state.questionCountdownSec, 10) || 15)}秒`
+      : "";
   const timerStr =
     state.timerMode === "down"
       ? ` · 限時 ${Math.round((state.countdownTotalSec || 300) / 60)} 分鐘`
       : "";
-  return `${diffMap[state.difficulty] || diffMap.casual}${pmMap[state.playMode] || ""}${limitStr}${passStr}${hideStr}${timerStr}`;
+  return `${diffMap[state.difficulty] || diffMap.casual}${pmMap[state.playMode] || ""}${limitStr}${passStr}${hideStr}${rushStr}${timerStr}`;
 }
 
 function getConciseRegionSummaryText() {
@@ -1382,7 +1388,7 @@ function showRoomConfigChangeToast(message, tone = "warn", alsoShowInRoomFooter 
   }
 
   const durationMs =
-    typeof window.CONFIG_TOAST_DURATION_MS === "number" ? window.CONFIG_TOAST_DURATION_MS : 3200;
+    typeof window.CONFIG_TOAST_DURATION_MS === "number" ? window.CONFIG_TOAST_DURATION_MS : 2400;
   state._configToastTimer = setTimeout(() => {
     hideRoomConfigChangeToast();
   }, durationMs);
@@ -1511,6 +1517,20 @@ function describeConfigDiff(patch) {
   if (typeof patch.allowTargetHints === "boolean" && patch.allowTargetHints !== state.allowTargetHints) {
     lines.push(patch.allowTargetHints ? "開放指定/隨機模式提示按鈕" : "禁用 (Ban) 指定/隨機模式提示按鈕");
   }
+  if (typeof patch.targetQuestionLimit === "number" && patch.targetQuestionLimit !== (parseInt(state.targetQuestionLimit, 10) || 0)) {
+    lines.push(patch.targetQuestionLimit > 0 ? `限 ${patch.targetQuestionLimit} 題` : "全部題庫");
+  }
+  if (typeof patch.allowPass === "boolean" && patch.allowPass !== (state.allowPass !== false)) {
+    lines.push(patch.allowPass ? "允許略過 (Pass)" : "關閉略過 (Pass)");
+  }
+  if (typeof patch.hideGuessedOthers === "boolean" && patch.hideGuessedOthers !== Boolean(state.hideGuessedOthers)) {
+    lines.push(patch.hideGuessedOthers ? "隱藏已猜區塊" : "顯示已猜區塊");
+  }
+  if (typeof patch.questionCountdownEnabled === "boolean" && patch.questionCountdownEnabled !== Boolean(state.questionCountdownEnabled)) {
+    lines.push(patch.questionCountdownEnabled ? `開啟倒數搶答 (${patch.questionCountdownSec || state.questionCountdownSec || 15}秒)` : "關閉倒數搶答");
+  } else if (typeof patch.questionCountdownSec === "number" && patch.questionCountdownSec !== (parseInt(state.questionCountdownSec, 10) || 15)) {
+    lines.push(`倒數搶答 ${patch.questionCountdownSec} 秒`);
+  }
   if (patch.timerMode) {
     const newTimerDesc = patch.timerMode === "up" ? "正計時" : `倒數 ${Math.round((patch.countdownTotalSec || state.countdownTotalSec) / 60)} 分鐘`;
     lines.push(newTimerDesc);
@@ -1583,6 +1603,11 @@ function buildProposedConfigFromPatch(patch) {
   if (Array.isArray(patch.settlementSubTypes)) base.settlementSubTypes = patch.settlementSubTypes.slice();
   if (patch.difficulty) base.difficulty = patch.difficulty;
   if (patch.playMode) base.playMode = patch.playMode;
+  if (typeof patch.targetQuestionLimit === "number") base.targetQuestionLimit = patch.targetQuestionLimit;
+  if (typeof patch.allowPass === "boolean") base.allowPass = patch.allowPass;
+  if (typeof patch.hideGuessedOthers === "boolean") base.hideGuessedOthers = patch.hideGuessedOthers;
+  if (typeof patch.questionCountdownEnabled === "boolean") base.questionCountdownEnabled = patch.questionCountdownEnabled;
+  if (typeof patch.questionCountdownSec === "number") base.questionCountdownSec = patch.questionCountdownSec;
   if (patch.satelliteStyle) base.satelliteStyle = patch.satelliteStyle;
   if (typeof patch.satelliteLockViewport === "boolean") {
     base.satelliteLockViewport = patch.satelliteLockViewport;
@@ -2573,7 +2598,7 @@ function requestP2PRematch() {
     setTimeout(() => {
       document.getElementById("modal-settlement")?.classList.add("hidden");
       startSynchronizedP2PCountdown(getHostSyncConfig(false), true);
-    }, 600);
+    }, 250);
     return;
   }
 
@@ -3534,29 +3559,33 @@ function startSynchronizedP2PCountdown(cfg, isHost) {
           statusEl.textContent = isSpec ? "👁️ 對戰已開始，點擊排行可自由切換觀看任意選手地圖！" : "🔥 比賽開始！輸入第一個地名即刻進攻！";
           statusEl.className = "text-base font-bold text-emerald-300 tracking-wider";
         }
-        playCountdownBeep(880, 0.35, "triangle");
-      } else {
+        playCountdownBeep(880, 0.25, "triangle");
         clearInterval(interval);
-        if (overlay) overlay.classList.add("hidden");
-        startTimer();
-        setFeedback(
-          isSpec
-            ? "👁️ 觀戰開始！正在即時同步觀看選手作答"
-            : isSoloShowcase
-            ? "🎬 單人展演開始！觀戰者正在即時觀看你的地圖與進度！"
-            : "⚔️ 對戰正式開始！全員同步計時，衝向 100% 吧！",
-          "tier"
-        );
-        if (typeof startAiRivalLoop === "function") {
-          startAiRivalLoop();
-        }
-        if (!isSpec) {
-          const inp = document.getElementById("answer-input");
-          if (inp) inp.focus({ preventScroll: true });
-        }
-        if (window.scrollY > 0) window.scrollTo(0, 0);
+        setTimeout(() => {
+          if (overlay) overlay.classList.add("hidden");
+          startTimer();
+          if (state.questionCountdownEnabled && typeof startQuestionCountdown === "function") {
+            startQuestionCountdown();
+          }
+          setFeedback(
+            isSpec
+              ? "👁️ 觀戰開始！正在即時同步觀看選手作答"
+              : isSoloShowcase
+              ? "🎬 單人展演開始！觀戰者正在即時觀看你的地圖與進度！"
+              : "⚔️ 對戰正式開始！全員同步計時，衝向 100% 吧！",
+            "tier"
+          );
+          if (typeof startAiRivalLoop === "function") {
+            startAiRivalLoop();
+          }
+          if (!isSpec) {
+            const inp = document.getElementById("answer-input");
+            if (inp) inp.focus({ preventScroll: true });
+          }
+          if (window.scrollY > 0) window.scrollTo(0, 0);
+        }, 320);
       }
-    }, 1000);
+    }, 600);
   };
 
   if (cfg) {
@@ -3662,6 +3691,12 @@ function _applyRemoteSyncConfigAfterPack(cfg, fromCountdown = false) {
   }
   if (typeof cfg.hideGuessedOthers === "boolean") {
     state.hideGuessedOthers = cfg.hideGuessedOthers;
+  }
+  if (typeof cfg.questionCountdownEnabled === "boolean") {
+    state.questionCountdownEnabled = cfg.questionCountdownEnabled;
+  }
+  if (typeof cfg.questionCountdownSec !== "undefined") {
+    state.questionCountdownSec = Math.max(3, Math.min(120, parseInt(cfg.questionCountdownSec, 10) || 15));
   }
   const hasSharedQueue = Array.isArray(cfg.sharedTargetQueue) && cfg.sharedTargetQueue.length > 0;
   if (hasSharedQueue) {

@@ -234,10 +234,14 @@
                 <div class="text-xs font-bold text-amber-300 uppercase tracking-wider flex flex-wrap items-center gap-1.5">
                   <span id="target-banner-title" class="whitespace-nowrap">指定區塊挑戰</span>
                   <span id="target-hint-badge" class="text-[11px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-200 whitespace-nowrap">請看地圖閃爍區塊</span>
+                  <span id="target-countdown-pill" class="hidden font-mono-num text-[11px] font-black px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-200 border border-emerald-400/40 whitespace-nowrap">⚡ 15.0s</span>
                 </div>
                 <p id="target-banner-desc" class="text-[11px] sm:text-xs text-slate-300 mt-0.5 leading-snug">
                   請輸入地圖上琥珀色高亮區塊的行政區名稱
                 </p>
+                <div id="target-countdown-bar-wrap" class="hidden mt-1.5 w-full h-1 bg-slate-800/90 rounded-full overflow-hidden">
+                  <div id="target-countdown-bar" class="h-full bg-emerald-400 transition-[width] duration-100 ease-linear" style="width: 100%"></div>
+                </div>
               </div>
             </div>
             <div class="flex flex-wrap items-center gap-1.5 pl-4">
@@ -935,14 +939,32 @@
                     <input id="chk-pindrop-lock-layer" type="checkbox" class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-rose-500 accent-rose-400 cursor-pointer" />
                     <span class="font-bold text-rose-200">🔒 鎖定底圖</span>
                   </label>
-                  <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="預設隱藏區界以防看形狀秒殺，勾選後顯示行政區邊界格線">
-                    <input id="chk-pindrop-show-borders" type="checkbox" class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-amber-500 accent-amber-400 cursor-pointer" />
-                    <span class="font-bold text-amber-200">📐 顯示區界</span>
+                  <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="預設顯示行政區區塊邊界，取消勾選可隱藏區界增加挑戰難度">
+                    <input id="chk-pindrop-show-borders" type="checkbox" checked class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-amber-500 accent-amber-400 cursor-pointer" />
+                    <span class="font-bold text-amber-200">📐 顯示區塊</span>
                   </label>
                   <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="開啟後隱藏其他已猜過的地區，無法利用已猜過區域推估位置（更難）">
                     <input id="chk-pindrop-hide-guessed" type="checkbox" class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-purple-500 accent-purple-400 cursor-pointer" />
                     <span class="font-bold text-purple-200">🙈 隱藏已猜地區</span>
                   </label>
+                  <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="開啟後每題限時倒數搶答，時間到自動送出預覽圖釘或記為超時 0 分">
+                    <input id="chk-pindrop-countdown-rush" type="checkbox" class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-emerald-500 accent-emerald-400 cursor-pointer" />
+                    <span class="font-bold text-emerald-200">⚡ 允許倒數搶答</span>
+                  </label>
+                  <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="預設開啟：啟用倒數搶答時，剩餘時間越多可獲得最高 +20% (+1,000 分) 速度加成">
+                    <input id="chk-pindrop-countdown-bonus" type="checkbox" checked class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-orange-500 accent-orange-400 cursor-pointer" />
+                    <span class="font-bold text-orange-200">🔥 倒數計分加成</span>
+                  </label>
+                </div>
+                <div id="pindrop-countdown-sec-row" class="hidden flex flex-wrap items-center justify-between gap-1.5 pt-1 border-t border-slate-800/80">
+                  <span class="text-[11px] font-extrabold text-emerald-300">⚡ 每題搶答秒數</span>
+                  <div class="flex flex-wrap items-center gap-1">
+                    <button type="button" data-qcd-sec="5" class="question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">5 秒</button>
+                    <button type="button" data-qcd-sec="10" class="question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">10 秒</button>
+                    <button type="button" data-qcd-sec="15" class="question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border transition bg-emerald-500/25 border-emerald-400 text-emerald-200 shadow">15 秒</button>
+                    <button type="button" data-qcd-sec="20" class="question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">20 秒</button>
+                    <button type="button" data-qcd-sec="30" class="question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">30 秒</button>
+                  </div>
                 </div>
               </div>
 
@@ -988,10 +1010,24 @@
                     <input id="chk-allow-pass" type="checkbox" checked class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-amber-500 accent-amber-400 cursor-pointer" />
                     <span class="font-bold text-amber-200">⏭️ 允許略過 (Pass)</span>
                   </label>
-                  <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="開啟後不顯示其他已猜過的地區與地名，無法利用已猜過區域推估（更難）">
+                  <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="限制 N 題時預設開啟：隱藏其他已猜過的區塊與地名，無法利用已猜過區域推估">
                     <input id="chk-target-hide-guessed" type="checkbox" class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-purple-500 accent-purple-400 cursor-pointer" />
-                    <span class="font-bold text-purple-200">🙈 隱藏已猜地區</span>
+                    <span class="font-bold text-purple-200">🙈 隱藏已猜區塊</span>
                   </label>
+                  <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="開啟後每題限時倒數搶答，時間到自動公佈答案並進入下一題">
+                    <input id="chk-target-countdown-rush" type="checkbox" class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-emerald-500 accent-emerald-400 cursor-pointer" />
+                    <span class="font-bold text-emerald-200">⚡ 允許倒數搶答</span>
+                  </label>
+                </div>
+                <div id="target-countdown-sec-row" class="hidden flex flex-wrap items-center justify-between gap-1.5 pt-1 border-t border-slate-800/80">
+                  <span class="text-[11px] font-extrabold text-emerald-300">⚡ 每題搶答秒數</span>
+                  <div class="flex flex-wrap items-center gap-1">
+                    <button type="button" data-qcd-sec="5" class="question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">5 秒</button>
+                    <button type="button" data-qcd-sec="10" class="question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">10 秒</button>
+                    <button type="button" data-qcd-sec="15" class="question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border transition bg-emerald-500/25 border-emerald-400 text-emerald-200 shadow">15 秒</button>
+                    <button type="button" data-qcd-sec="20" class="question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">20 秒</button>
+                    <button type="button" data-qcd-sec="30" class="question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">30 秒</button>
+                  </div>
                 </div>
               </div>
 

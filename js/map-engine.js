@@ -634,6 +634,21 @@ function initMap() {
     }
   });
 
+  map.on("dblclick", (ev) => {
+    if (state.playMode === "pin_drop" && typeof handlePinDropMapDoubleClick === "function" && ev && ev.latlng) {
+      if (ev.originalEvent && typeof ev.originalEvent.preventDefault === "function") {
+        ev.originalEvent.preventDefault();
+      }
+      handlePinDropMapDoubleClick(ev.latlng);
+    }
+  });
+
+  map.on("dragstart", () => {
+    if (state.playMode === "pin_drop" && typeof cancelPinDropAutoNext === "function") {
+      cancelPinDropAutoNext();
+    }
+  });
+
   // Mobile Virtual Keyboard Detection & Dynamic Full-Bleed Viewport Controller
   // Automatically detects when mobile virtual keyboard pops up via visualViewport API:
   // - When keyboard is OPEN: hides the reservable bottom status strip, shrinks #map-container to fit 100% between header and input dock right above the keyboard, and locks scroll at top so map & buttons never drift off-screen!
@@ -804,7 +819,7 @@ function applyMapPackViewport(pack, options = {}) {
   if (options.fly !== false) {
     if (fullB && fullB.isValid()) {
       if (typeof map.flyToBounds === "function") {
-        map.flyToBounds(fullB, { padding: [20, 20], duration: 0.45 });
+        map.flyToBounds(fullB, { padding: [20, 20], duration: 0.25 });
       } else if (typeof map.fitBounds === "function") {
         map.fitBounds(fullB, { padding: [20, 20] });
       }
@@ -812,7 +827,7 @@ function applyMapPackViewport(pack, options = {}) {
       if (typeof map.setView === "function") {
         map.setView(mv.center, Number.isFinite(mv.defaultZoom) ? mv.defaultZoom : 8);
       } else if (typeof map.flyTo === "function") {
-        map.flyTo(mv.center, Number.isFinite(mv.defaultZoom) ? mv.defaultZoom : 8, { duration: 0.45 });
+        map.flyTo(mv.center, Number.isFinite(mv.defaultZoom) ? mv.defaultZoom : 8, { duration: 0.25 });
       }
     }
   }
@@ -874,9 +889,9 @@ function resetToFullPackView() {
     _toLeafletBounds(mv.fullViewBounds) ||
     (!pack || pack.id === "tw_modern" ? TAIWAN_FULL_VIEW_BOUNDS : null);
   if (fullB && fullB.isValid()) {
-    map.flyToBounds(fullB, { padding: [20, 20], duration: 0.55 });
+    map.flyToBounds(fullB, { padding: [20, 20], duration: 0.28 });
   } else if (Array.isArray(mv.center)) {
-    map.flyTo(mv.center, Number.isFinite(mv.defaultZoom) ? mv.defaultZoom : 8, { duration: 0.55 });
+    map.flyTo(mv.center, Number.isFinite(mv.defaultZoom) ? mv.defaultZoom : 8, { duration: 0.28 });
   }
 }
 
@@ -894,9 +909,9 @@ function zoomToCountyCenter(countyName) {
     ? c.mainBounds
     : c.bounds;
   if (targetB && targetB.isValid()) {
-    map.flyToBounds(targetB, { padding: [45, 45], maxZoom: maxZ, duration: 0.55 });
+    map.flyToBounds(targetB, { padding: [45, 45], maxZoom: maxZ, duration: 0.28 });
   } else if (Number.isFinite(c.lat) && Number.isFinite(c.lng)) {
-    map.flyTo([c.lat, c.lng], fallbackZ, { duration: 0.55 });
+    map.flyTo([c.lat, c.lng], fallbackZ, { duration: 0.28 });
   }
 }
 
@@ -2067,6 +2082,18 @@ function rebuildMapLayers(topoData) {
 function bindPolygonEvents(layer, townObj) {
   layer.on("click", (ev) => {
     handlePolygonClick(townObj, ev);
+  });
+  layer.on("dblclick", (ev) => {
+    if (state.playMode === "pin_drop" && typeof handlePinDropMapDoubleClick === "function") {
+      if (ev && ev.originalEvent && typeof ev.originalEvent.preventDefault === "function") {
+        ev.originalEvent.preventDefault();
+      }
+      const ll =
+        (ev && ev.latlng) ||
+        (townObj && townObj.mainPoint) ||
+        (townObj ? { lat: townObj.lat, lng: townObj.lng } : null);
+      if (ll) handlePinDropMapDoubleClick(ll);
+    }
   });
 }
 

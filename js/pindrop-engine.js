@@ -202,6 +202,51 @@ function computePinDropScore(distanceKm, scaleKm = 25, perfectRadiusKm = 0) {
   return Math.max(0, Math.min(5000, Math.round(raw)));
 }
 
+function computePinDropCountdownBonus(baseScore, remainingMs, totalMs, enabled = true) {
+  if (!enabled) return 0;
+  const base = Number(baseScore);
+  const rem = Number(remainingMs);
+  const tot = Number(totalMs);
+  if (!Number.isFinite(base) || base <= 0) return 0;
+  if (!Number.isFinite(rem) || !Number.isFinite(tot) || tot <= 0 || rem <= 0) return 0;
+  const ratio = Math.max(0, Math.min(1, rem / tot));
+  return Math.round(base * 0.2 * ratio);
+}
+
+function isPinDropCountdownBonusActive() {
+  return Boolean(
+    typeof state !== "undefined" &&
+      state.questionCountdownEnabled &&
+      state.pinDropCountdownBonus !== false
+  );
+}
+
+function getPinDropMaxRoundScore(history = null) {
+  if (isPinDropCountdownBonusActive()) return 6000;
+  if (Array.isArray(history) && history.some((r) => Number(r && r.speedBonus) > 0)) return 6000;
+  return 5000;
+}
+
+function cancelPinDropAutoNext() {
+  if (typeof state !== "undefined" && state.questionTimer && state.questionTimer.autoNextTimerId) {
+    clearTimeout(state.questionTimer.autoNextTimerId);
+    state.questionTimer.autoNextTimerId = null;
+  }
+}
+
+function schedulePinDropAutoNext(delayMs = 2000) {
+  cancelPinDropAutoNext();
+  if (typeof state === "undefined" || !state.questionCountdownEnabled || state.playMode !== "pin_drop") return;
+  if (!state.pinDrop || state.pinDrop.phase !== "revealed") return;
+  if (!state.questionTimer) return;
+  state.questionTimer.autoNextTimerId = setTimeout(() => {
+    if (state.questionTimer) state.questionTimer.autoNextTimerId = null;
+    if (state.playMode === "pin_drop" && state.pinDrop && state.pinDrop.phase === "revealed") {
+      nextPinDropRound();
+    }
+  }, delayMs);
+}
+
 function getPinDropScaleKm(target = null) {
   const packScale =
     typeof getActiveMapPack === "function"
@@ -463,11 +508,12 @@ function renderPinDropRevealLayers(target, record) {
   const group = ensurePinDropLayerGroup();
   if (!group || typeof L === "undefined" || !target || !record) return;
 
+  const hasGuess = Number.isFinite(record.guessLat) && Number.isFinite(record.guessLng);
   const packMv = typeof getActivePackMapView === "function" ? getActivePackMapView() : null;
   const useWorldWrap = Boolean(packMv && packMv.worldCopyJump);
-  const displayGuessLng = record.guessLng;
+  const displayGuessLng = hasGuess ? record.guessLng : record.nearestLng;
   const displayNearestLng =
-    useWorldWrap && typeof getClosestWrappedLng === "function"
+    useWorldWrap && hasGuess && typeof getClosestWrappedLng === "function"
       ? getClosestWrappedLng(record.nearestLng, displayGuessLng)
       : record.nearestLng;
   const targetLngShift = displayNearestLng - record.nearestLng;
@@ -504,41 +550,46 @@ function renderPinDropRevealLayers(target, record) {
   }
 
   // 2. Amber dashed polyline from player's guess to nearest boundary point / target point
-  pinDashPolyline = L.polyline(
-    [
-      [record.guessLat, displayGuessLng],
-      [record.nearestLat, displayNearestLng]
-    ],
-    {
-      renderer: typeof canvasRenderer !== "undefined" && canvasRenderer ? canvasRenderer : undefined,
-      color: "#f59e0b",
-      weight: 3,
-      dashArray: "8, 6",
-      opacity: 0.95,
-      interactive: false
-    }
-  ).addTo(group);
+  if (hasGuess) {
+    pinDashPolyline = L.polyline(
+      [
+        [record.guessLat, displayGuessLng],
+        [record.nearestLat, displayNearestLng]
+      ],
+      {
+        renderer: typeof canvasRenderer !== "undefined" && canvasRenderer ? canvasRenderer : undefined,
+        color: "#f59e0b",
+        weight: 3,
+        dashArray: "8, 6",
+        opacity: 0.95,
+        interactive: false
+      }
+    ).addTo(group);
+  }
 
   // 3. Midpoint pill badge showing distance km & score (floated above midpoint so it never covers pins)
-  const midLat = (record.guessLat + record.nearestLat) / 2;
-  const midLng = (displayGuessLng + displayNearestLng) / 2;
+  const midLat = hasGuess ? (record.guessLat + record.nearestLat) / 2 : target.lat;
+  const midLng = hasGuess ? (displayGuessLng + displayNearestLng) / 2 : target.lng + targetLngShift;
   const pill = document.createElement("div");
   pill.className = record.inside
     ? "pindrop-midpoint-pill pindrop-midpoint-perfect"
     : "pindrop-midpoint-pill";
-  if (record.inside && (target.kind === "town" || target.kind === "county")) {
-    pill.textContent = "🎯 命中境內！0.0 km · +5,000 分";
+  const bonusStr = Number(record.speedBonus) > 0 ? ` (含⚡+${Number(record.speedBonus).toLocaleString()})` : "";
+  if (!hasGuess && record.timedOut) {
+    pill.textContent = `⌛ 超時未標記 · +0 分`;
+  } else if (record.inside && (target.kind === "town" || target.kind === "county")) {
+    pill.textContent = `🎯 命中境內！0.0 km · +${record.score.toLocaleString()} 分${bonusStr}`;
   } else if (record.inside) {
-    pill.textContent = `🎯 精準命中！${record.distanceKm.toFixed(2)} km · +5,000 分`;
+    pill.textContent = `🎯 精準命中！${record.distanceKm.toFixed(2)} km · +${record.score.toLocaleString()} 分${bonusStr}`;
   } else {
-    pill.textContent = `${record.distanceKm.toFixed(1)} km · +${record.score.toLocaleString()} 分`;
+    pill.textContent = `${record.distanceKm.toFixed(1)} km · +${record.score.toLocaleString()} 分${bonusStr}`;
   }
 
   const pillIcon = L.divIcon({
     className: "pindrop-midpoint-icon-wrapper",
     html: pill,
-    iconSize: [180, 28],
-    iconAnchor: [90, 38]
+    iconSize: [210, 28],
+    iconAnchor: [105, 38]
   });
   pinMidpointMarker = L.marker([midLat, midLng], {
     icon: pillIcon,
@@ -547,12 +598,11 @@ function renderPinDropRevealLayers(target, record) {
     zIndexOffset: 960
   }).addTo(group);
 
-  // 4. Auto fitBounds framing player pin + target
+  // 4. Auto fitBounds framing player pin + target (snappy 0.25s)
   if (typeof map !== "undefined" && map && typeof L.latLngBounds === "function") {
-    const frameBounds = L.latLngBounds(
-      [record.guessLat, displayGuessLng],
-      [record.nearestLat, displayNearestLng]
-    );
+    const frameBounds = hasGuess
+      ? L.latLngBounds([record.guessLat, displayGuessLng], [record.nearestLat, displayNearestLng])
+      : L.latLngBounds([target.lat, target.lng + targetLngShift], [target.lat, target.lng + targetLngShift]);
     const refObj = target.ref;
     if (refObj) {
       const tb =
@@ -576,7 +626,7 @@ function renderPinDropRevealLayers(target, record) {
     }
     if (frameBounds.isValid()) {
       const maxZ = target.kind === "county" ? 10 : 12;
-      map.fitBounds(frameBounds.pad(0.18), { padding: [60, 60], maxZoom: maxZ });
+      map.fitBounds(frameBounds.pad(0.18), { padding: [60, 60], maxZoom: maxZ, animate: true, duration: 0.25 });
     }
   }
 }
@@ -644,12 +694,15 @@ function ensurePinDropEnvironment() {
   }
   syncPinDropLayerLockUI();
 
-  // 2. Hide township district borders by default unless explicitly toggled on in Pin-Drop settings
+  // 2. Show township district borders by default unless explicitly toggled off in Pin-Drop settings
   const showBorders = Boolean(state.pinDropShowBorders);
   if (typeof window !== "undefined" && typeof window.setDistrictBordersVisible === "function") {
     window.setDistrictBordersVisible(showBorders, true);
   } else {
     state.showDistrictBorders = showBorders;
+  }
+  if (typeof map !== "undefined" && map && map.doubleClickZoom && typeof map.doubleClickZoom.disable === "function") {
+    map.doubleClickZoom.disable();
   }
 
   // 3. Hide floating hover tooltips & declutter non-applicable Free-Mode toolbar/dashboard controls
@@ -678,6 +731,8 @@ function ensurePinDropEnvironment() {
 }
 
 function restorePinDropEnvironment() {
+  cancelPinDropAutoNext();
+  if (typeof stopQuestionCountdown === "function") stopQuestionCountdown();
   clearPinDropLayers();
   if (typeof state === "undefined") return;
 
@@ -723,6 +778,9 @@ function restorePinDropEnvironment() {
   }
 
   resetPinDropViewportToFullView();
+  if (typeof map !== "undefined" && map && map.doubleClickZoom && typeof map.doubleClickZoom.enable === "function") {
+    map.doubleClickZoom.enable();
+  }
   if (typeof updateRoadAndRailwayTileOverlays === "function") updateRoadAndRailwayTileOverlays();
   if (typeof refreshPoiMapLayer === "function") refreshPoiMapLayer();
   if (typeof refreshAllPolygonStyles === "function") refreshAllPolygonStyles();
@@ -793,6 +851,7 @@ function startPinDropGame() {
 function beginPinDropRound() {
   if (!state.pinDrop || !state.pinDrop.active) return false;
 
+  cancelPinDropAutoNext();
   clearPinDropLayers();
   state.pinDrop.guessLatLng = null;
   state.pinDrop.lastReveal = null;
@@ -816,17 +875,31 @@ function beginPinDropRound() {
   state.pinDrop.currentTarget = nextTarget;
   state.pinDrop.phase = "placing";
 
-  // Strictly reset viewport to full Taiwan view at the start of every new round
+  // Strictly reset viewport to full view at the start of every new round
   resetPinDropViewportToFullView();
   ensurePinDropEnvironment();
   updatePinDropBannerAndDockUI();
+  if (typeof startQuestionCountdown === "function") {
+    if (state.questionCountdownEnabled) startQuestionCountdown();
+    else if (typeof stopQuestionCountdown === "function") stopQuestionCountdown();
+  }
   if (typeof updateScoreAndProgressUI === "function") {
     updateScoreAndProgressUI();
   }
   if (typeof setFeedback === "function") {
-    setFeedback(`📍 第 ${state.pinDrop.currentRound} 題：請點擊地圖放置藍色預覽圖釘，確認後送出！`, "info");
+    const rushNote = state.questionCountdownEnabled
+      ? `（⚡ ${state.questionCountdownSec || 15}秒倒數搶答${state.pinDropCountdownBonus !== false ? " · 越快越多加成" : ""}）`
+      : "";
+    setFeedback(`📍 第 ${state.pinDrop.currentRound} 題：點擊地圖放預覽圖釘或雙擊直接送出${rushNote}`, "info");
   }
   return true;
+}
+
+function handlePinDropMapDoubleClick(latlng) {
+  if (typeof state === "undefined" || state.playMode !== "pin_drop") return false;
+  if (state.role === "spectator" || !state.pinDrop || state.pinDrop.phase !== "placing") return false;
+  if (!handlePinDropMapClick(latlng)) return false;
+  return confirmPinDropGuess();
 }
 
 function handlePinDropMapClick(latlng) {
@@ -851,18 +924,82 @@ function handlePinDropMapClick(latlng) {
         ? normalizeWorldLng(lng)
         : lng;
     setFeedback(
-      `📍 已放置預覽標記 (${lat.toFixed(4)}°N, ${dispLng.toFixed(4)}°E)，可再次點擊微調或按「確認標記」送出！`,
+      `📍 已放置預覽標記 (${lat.toFixed(4)}°N, ${dispLng.toFixed(4)}°E)，可微調或按「確認標記」送出！`,
       "info"
     );
   }
   return true;
 }
 
-function confirmPinDropGuess() {
+function handlePinDropCountdownTimeout() {
+  if (typeof state === "undefined" || state.playMode !== "pin_drop" || !state.pinDrop) return false;
+  if (state.pinDrop.phase !== "placing" || !state.pinDrop.currentTarget) return false;
+
+  if (state.pinDrop.guessLatLng) {
+    return confirmPinDropGuess({ timedOut: true, remainingMs: 0 });
+  }
+
+  const target = state.pinDrop.currentTarget;
+  if (typeof stopQuestionCountdown === "function") stopQuestionCountdown();
+  const record = {
+    round: state.pinDrop.currentRound,
+    targetId: target.id,
+    rawId: target.rawId,
+    kind: target.kind,
+    poiCategory: target.poiCategory || null,
+    title: target.shortLabel,
+    promptTitle: target.promptTitle,
+    guessLat: null,
+    guessLng: null,
+    nearestLat: target.lat,
+    nearestLng: target.lng,
+    inside: false,
+    distanceKm: null,
+    baseScore: 0,
+    speedBonus: 0,
+    score: 0,
+    timedOut: true
+  };
+
+  state.pinDrop.phase = "revealed";
+  state.pinDrop.lastReveal = record;
+  state.pinDrop.history.push(record);
+
+  if (state.stats) {
+    state.stats.totalAttempts++;
+    state.stats.wrongAttempts++;
+    state.stats.streak = 0;
+  }
+  if (typeof playTone === "function") playTone("error");
+
+  renderPinDropRevealLayers(target, record);
+  updatePinDropBannerAndDockUI();
+  if (typeof updateScoreAndProgressUI === "function") updateScoreAndProgressUI();
+  if (typeof setFeedback === "function") {
+    setFeedback(`⌛ 搶答時間到！未標記座標 · +0 分（目標：【${target.shortLabel}】）`, "error");
+  }
+  schedulePinDropAutoNext(2000);
+  return true;
+}
+
+function confirmPinDropGuess(opts = {}) {
   if (typeof state === "undefined" || state.playMode !== "pin_drop" || !state.pinDrop) return false;
   if (state.pinDrop.phase !== "placing" || !state.pinDrop.currentTarget || !state.pinDrop.guessLatLng) {
     return false;
   }
+
+  const timedOut = Boolean(opts && opts.timedOut);
+  const totalMs =
+    (state.questionTimer && Number(state.questionTimer.totalMs)) ||
+    (Math.max(5, parseInt(state.questionCountdownSec, 10) || 15) * 1000);
+  const remainingMs = timedOut
+    ? 0
+    : typeof opts.remainingMs === "number"
+    ? opts.remainingMs
+    : typeof getQuestionCountdownRemainingMs === "function"
+    ? getQuestionCountdownRemainingMs()
+    : 0;
+  if (typeof stopQuestionCountdown === "function") stopQuestionCountdown();
 
   const target = state.pinDrop.currentTarget;
   const guess = state.pinDrop.guessLatLng;
@@ -882,9 +1019,14 @@ function confirmPinDropGuess() {
     };
   }
 
-  const score = distRes.inside
+  const baseScore = distRes.inside
     ? 5000
     : computePinDropScore(distRes.distanceKm, scaleKm, perfectRadiusKm);
+  const speedBonus =
+    !timedOut && isPinDropCountdownBonusActive()
+      ? computePinDropCountdownBonus(baseScore, remainingMs, totalMs, true)
+      : 0;
+  const score = baseScore + speedBonus;
 
   const record = {
     round: state.pinDrop.currentRound,
@@ -900,7 +1042,10 @@ function confirmPinDropGuess() {
     nearestLng: distRes.nearestLng,
     inside: Boolean(distRes.inside),
     distanceKm: Number(distRes.distanceKm),
-    score: Number(score)
+    baseScore: Number(baseScore),
+    speedBonus: Number(speedBonus),
+    score: Number(score),
+    timedOut
   };
 
   state.pinDrop.phase = "revealed";
@@ -910,7 +1055,7 @@ function confirmPinDropGuess() {
 
   if (state.stats) {
     state.stats.totalAttempts++;
-    if (record.score >= 2500) {
+    if (record.baseScore >= 2500) {
       state.stats.correctAttempts++;
       state.stats.streak++;
       if (state.stats.streak > state.stats.maxStreak) {
@@ -922,7 +1067,7 @@ function confirmPinDropGuess() {
   }
 
   if (typeof playTone === "function") {
-    playTone(record.score >= 4500 ? "tier" : record.score >= 2000 ? "unlock" : "error");
+    playTone(record.baseScore >= 4500 ? "tier" : record.baseScore >= 2000 ? "unlock" : "error");
   }
 
   renderPinDropRevealLayers(target, record);
@@ -933,19 +1078,23 @@ function confirmPinDropGuess() {
 
   if (typeof setFeedback === "function") {
     const isPolyTarget = target.kind === "town" || target.kind === "county";
+    const bonusTxt = record.speedBonus > 0 ? `（含倒數加成 ⚡+${record.speedBonus.toLocaleString()}）` : "";
+    const prefixTxt = timedOut ? "⌛ 時間到自動送出 · " : "";
     const msg = record.inside
       ? isPolyTarget
-        ? `🎯 滿分命中【${target.shortLabel}】境內！距離 0.0 km · +5,000 分`
-        : `🎯 精準命中【${target.shortLabel}】！距離 ${record.distanceKm.toFixed(2)} km · +5,000 分`
+        ? `${prefixTxt}🎯 滿分命中【${target.shortLabel}】境內！距離 0.0 km · +${record.score.toLocaleString()} 分${bonusTxt}`
+        : `${prefixTxt}🎯 精準命中【${target.shortLabel}】！距離 ${record.distanceKm.toFixed(2)} km · +${record.score.toLocaleString()} 分${bonusTxt}`
       : isPolyTarget
-      ? `📏 揭曉【${target.shortLabel}】：距離最近邊界 ${record.distanceKm.toFixed(1)} km · +${record.score.toLocaleString()} 分`
-      : `📏 揭曉【${target.shortLabel}】：距離 ${record.distanceKm.toFixed(1)} km · +${record.score.toLocaleString()} 分`;
-    setFeedback(msg, record.score >= 3500 ? "success" : "tier");
+      ? `${prefixTxt}📏 揭曉【${target.shortLabel}】：距離最近邊界 ${record.distanceKm.toFixed(1)} km · +${record.score.toLocaleString()} 分${bonusTxt}`
+      : `${prefixTxt}📏 揭曉【${target.shortLabel}】：距離 ${record.distanceKm.toFixed(1)} km · +${record.score.toLocaleString()} 分${bonusTxt}`;
+    setFeedback(msg, record.baseScore >= 3500 ? "success" : "tier");
   }
+  schedulePinDropAutoNext(2000);
   return true;
 }
 
 function nextPinDropRound() {
+  cancelPinDropAutoNext();
   if (typeof state === "undefined" || state.playMode !== "pin_drop" || !state.pinDrop) return false;
   if (state.pinDrop.phase !== "revealed") return false;
 
@@ -962,10 +1111,13 @@ function computePinDropSummaryStats() {
   const history = Array.isArray(pd.history) ? pd.history : [];
   const roundsPlayed = history.length;
   const totalScore = Number(pd.totalScore || 0);
-  const maxPossibleScore = (pd.totalRounds > 0 ? pd.totalRounds : Math.max(1, roundsPlayed)) * 5000;
+  const totalSpeedBonus = history.reduce((acc, r) => acc + Number(r.speedBonus || 0), 0);
+  const maxPerRound = getPinDropMaxRoundScore(history);
+  const maxPossibleScore = (pd.totalRounds > 0 ? pd.totalRounds : Math.max(1, roundsPlayed)) * maxPerRound;
+  const validDistRounds = history.filter((r) => Number.isFinite(Number(r.distanceKm)) && r.distanceKm !== null);
   const avgDist =
-    roundsPlayed > 0
-      ? history.reduce((acc, r) => acc + Number(r.distanceKm || 0), 0) / roundsPlayed
+    validDistRounds.length > 0
+      ? validDistRounds.reduce((acc, r) => acc + Number(r.distanceKm || 0), 0) / validDistRounds.length
       : 0;
   let bestRound = null;
   for (let i = 0; i < history.length; i++) {
@@ -973,7 +1125,9 @@ function computePinDropSummaryStats() {
     if (
       !bestRound ||
       r.score > bestRound.score ||
-      (r.score === bestRound.score && r.distanceKm < bestRound.distanceKm)
+      (r.score === bestRound.score &&
+        Number.isFinite(r.distanceKm) &&
+        (!Number.isFinite(bestRound.distanceKm) || r.distanceKm < bestRound.distanceKm))
     ) {
       bestRound = r;
     }
@@ -981,6 +1135,8 @@ function computePinDropSummaryStats() {
   return {
     roundsPlayed,
     totalScore,
+    totalSpeedBonus,
+    maxPerRound,
     maxPossibleScore,
     averageDistanceKm: avgDist,
     bestRound,
@@ -989,6 +1145,8 @@ function computePinDropSummaryStats() {
 }
 
 function finishPinDropGame() {
+  cancelPinDropAutoNext();
+  if (typeof stopQuestionCountdown === "function") stopQuestionCountdown();
   if (typeof state === "undefined" || !state.pinDrop) return false;
   if (typeof stopTimer === "function") stopTimer();
   state.pinDrop.phase = "finished";
@@ -1002,11 +1160,14 @@ function finishPinDropGame() {
   const listEl = document.getElementById("pindrop-summary-list");
 
   if (scoreEl) scoreEl.textContent = stats.totalScore.toLocaleString();
-  if (maxEl) maxEl.textContent = `/ ${stats.maxPossibleScore.toLocaleString()} 分`;
+  if (maxEl) {
+    const bonusNote = stats.totalSpeedBonus > 0 ? `（含⚡+${stats.totalSpeedBonus.toLocaleString()}）` : "";
+    maxEl.textContent = `/ ${stats.maxPossibleScore.toLocaleString()} 分${bonusNote}`;
+  }
   if (avgEl) avgEl.textContent = `${stats.averageDistanceKm.toFixed(1)} km`;
   if (bestEl) {
     bestEl.textContent = stats.bestRound
-      ? `${stats.bestRound.title} (${stats.bestRound.distanceKm.toFixed(1)} km · +${stats.bestRound.score.toLocaleString()} 分)`
+      ? `${stats.bestRound.title} (${stats.bestRound.distanceKm === null ? "超時" : `${Number(stats.bestRound.distanceKm).toFixed(1)} km`} · +${stats.bestRound.score.toLocaleString()} 分)`
       : "尚無紀錄";
   }
 
@@ -1014,6 +1175,16 @@ function finishPinDropGame() {
     listEl.replaceChildren();
     const tpl = document.getElementById("tpl-pindrop-history-row");
     stats.history.forEach((item) => {
+      const distLabel =
+        item.distanceKm === null
+          ? "⌛ 超時"
+          : item.inside
+          ? "🎯 0.0 km (境內)"
+          : `${Number(item.distanceKm).toFixed(1)} km`;
+      const scoreLabel =
+        Number(item.speedBonus) > 0
+          ? `+${item.score.toLocaleString()} (⚡+${item.speedBonus})`
+          : `+${item.score.toLocaleString()} 分`;
       let row;
       if (tpl && tpl.content && tpl.content.firstElementChild) {
         row = tpl.content.firstElementChild.cloneNode(true);
@@ -1023,11 +1194,11 @@ function finishPinDropGame() {
         const rScore = row.querySelector(".pindrop-row-score");
         if (rNum) rNum.textContent = `#${item.round}`;
         if (rTitle) rTitle.textContent = item.title;
-        if (rDist) rDist.textContent = item.inside ? "🎯 0.0 km (境內)" : `${item.distanceKm.toFixed(1)} km`;
-        if (rScore) rScore.textContent = `+${item.score.toLocaleString()} 分`;
+        if (rDist) rDist.textContent = distLabel;
+        if (rScore) rScore.textContent = scoreLabel;
       } else {
         row = document.createElement("div");
-        row.textContent = `#${item.round} ${item.title} · ${item.distanceKm.toFixed(1)} km · +${item.score} 分`;
+        row.textContent = `#${item.round} ${item.title} · ${distLabel} · ${scoreLabel}`;
       }
       listEl.appendChild(row);
     });
@@ -1100,6 +1271,15 @@ function setPinDropShowBorders(visible) {
   }
 }
 
+function setPinDropCountdownBonus(enabled) {
+  state.pinDropCountdownBonus = Boolean(enabled);
+  if (typeof syncConfigButtonsUI === "function") syncConfigButtonsUI();
+  if (state.playMode === "pin_drop") {
+    updatePinDropBannerAndDockUI();
+    if (typeof updateScoreAndProgressUI === "function") updateScoreAndProgressUI();
+  }
+}
+
 // -------------------------------------------------------------------------
 // 5. UI SYNCHRONIZATION (Target Banner, Bottom Control Bar & Dashboard)
 // -------------------------------------------------------------------------
@@ -1137,6 +1317,7 @@ function updatePinDropBannerAndDockUI() {
   if (banner) {
     banner.classList.remove("hidden");
     document.getElementById("target-dir-group")?.classList.add("hidden");
+    document.getElementById("btn-target-pass")?.classList.add("hidden");
     document.getElementById("btn-target-next")?.classList.add("hidden");
     document.getElementById("btn-target-hint")?.classList.add("hidden");
     document.getElementById("btn-target-reveal-outline")?.classList.add("hidden");
@@ -1156,13 +1337,16 @@ function updatePinDropBannerAndDockUI() {
       } else if (pd.phase === "revealed" && pd.lastReveal) {
         const r = pd.lastReveal;
         const isPolyReveal = r.kind === "town" || r.kind === "county";
-        descEl.textContent = r.inside
+        const bonusTxt = Number(r.speedBonus) > 0 ? ` (含⚡+${r.speedBonus.toLocaleString()})` : "";
+        descEl.textContent = r.distanceKm === null && r.timedOut
+          ? `⌛ 搶答時間到！未標記【${r.title}】· +0 分`
+          : r.inside
           ? isPolyReveal
-            ? `🎯 命中【${r.title}】境內！距離 0.0 km · 本題獲得滿分 +5,000 分`
-            : `🎯 精準命中【${r.title}】！距離 ${r.distanceKm.toFixed(2)} km · 本題獲得滿分 +5,000 分`
+            ? `🎯 命中【${r.title}】境內！距離 0.0 km · 本題獲得 +${r.score.toLocaleString()} 分${bonusTxt}`
+            : `🎯 精準命中【${r.title}】！距離 ${r.distanceKm.toFixed(2)} km · 本題獲得 +${r.score.toLocaleString()} 分${bonusTxt}`
           : isPolyReveal
-          ? `📏 距離【${r.title}】最近邊界 ${r.distanceKm.toFixed(1)} km · 本題獲得 +${r.score.toLocaleString()} 分`
-          : `📏 距離【${r.title}】${r.distanceKm.toFixed(1)} km · 本題獲得 +${r.score.toLocaleString()} 分`;
+          ? `📏 距離【${r.title}】最近邊界 ${r.distanceKm.toFixed(1)} km · 本題獲得 +${r.score.toLocaleString()} 分${bonusTxt}`
+          : `📏 距離【${r.title}】${r.distanceKm.toFixed(1)} km · 本題獲得 +${r.score.toLocaleString()} 分${bonusTxt}`;
       } else {
         descEl.textContent = "本局標座標挑戰已結束，可查看結算明細或再玩一局！";
       }
@@ -1179,12 +1363,15 @@ function updatePinDropBannerAndDockUI() {
     if (pd.phase === "placing") {
       statusEl.textContent = pd.guessLatLng
         ? `📍 預覽座標：${pd.guessLatLng.lat.toFixed(4)}°N, ${pd.guessLatLng.lng.toFixed(4)}°E`
-        : "👆 請先在地圖上點擊放置預覽圖釘";
+        : "👆 點擊放預覽圖釘，或雙擊地圖直接送出";
     } else if (pd.phase === "revealed" && pd.lastReveal) {
       const r = pd.lastReveal;
-      statusEl.textContent = r.inside
-        ? `🎯 命中境內！0.0 km · +5,000 分`
-        : `📏 誤差 ${r.distanceKm.toFixed(1)} km · +${r.score.toLocaleString()} 分`;
+      const bonusTxt = Number(r.speedBonus) > 0 ? ` (⚡+${r.speedBonus.toLocaleString()})` : "";
+      statusEl.textContent = r.distanceKm === null && r.timedOut
+        ? `⌛ 搶答超時 · +0 分`
+        : r.inside
+        ? `🎯 命中境內！0.0 km · +${r.score.toLocaleString()} 分${bonusTxt}`
+        : `📏 誤差 ${r.distanceKm.toFixed(1)} km · +${r.score.toLocaleString()} 分${bonusTxt}`;
     } else {
       statusEl.textContent = `🏁 挑戰結束 · 總分 ${(pd.totalScore || 0).toLocaleString()} 分`;
     }
@@ -1214,12 +1401,16 @@ function renderPinDropDashboardUI() {
   const pd = state.pinDrop;
   const completed = Array.isArray(pd.history) ? pd.history.length : 0;
   const totalRounds = pd.totalRounds || 0;
-  const maxScore = (totalRounds > 0 ? totalRounds : Math.max(1, completed)) * 5000;
+  const maxPerRound = getPinDropMaxRoundScore(pd.history);
+  const maxScore = (totalRounds > 0 ? totalRounds : Math.max(1, completed)) * maxPerRound;
   const scorePct = maxScore > 0 ? ((pd.totalScore / maxScore) * 100).toFixed(1) : "0.0";
   const roundPct = totalRounds > 0 ? ((completed / totalRounds) * 100).toFixed(1) : "100.0";
+  const validDistHistory = Array.isArray(pd.history)
+    ? pd.history.filter((r) => r.distanceKm !== null && Number.isFinite(Number(r.distanceKm)))
+    : [];
   const avgDist =
-    completed > 0
-      ? (pd.history.reduce((s, r) => s + r.distanceKm, 0) / completed).toFixed(1)
+    validDistHistory.length > 0
+      ? (validDistHistory.reduce((s, r) => s + Number(r.distanceKm || 0), 0) / validDistHistory.length).toFixed(1)
       : "0.0";
 
   // Top Header
@@ -1230,7 +1421,7 @@ function renderPinDropDashboardUI() {
   if (topLabel) topLabel.textContent = "標座標得分";
   if (topScore) {
     topScore.textContent = totalRounds > 0
-      ? `${pd.totalScore.toLocaleString()} / ${(totalRounds * 5000).toLocaleString()}`
+      ? `${pd.totalScore.toLocaleString()} / ${(totalRounds * maxPerRound).toLocaleString()}`
       : `${pd.totalScore.toLocaleString()} 分`;
   }
   if (topPct) {
@@ -1296,12 +1487,19 @@ function renderPinDropDashboardUI() {
           const rScore = row.querySelector(".pindrop-row-score");
           if (rNum) rNum.textContent = `#${item.round}`;
           if (rTitle) rTitle.textContent = item.title;
-          if (rDist) rDist.textContent = item.inside ? "🎯 0.0 km" : `${item.distanceKm.toFixed(1)} km`;
-          if (rScore) rScore.textContent = `+${item.score.toLocaleString()} 分`;
+          if (rDist) {
+            rDist.textContent = item.distanceKm === null ? "⌛ 超時" : item.inside ? "🎯 0.0 km" : `${Number(item.distanceKm).toFixed(1)} km`;
+          }
+          if (rScore) {
+            rScore.textContent = Number(item.speedBonus) > 0
+              ? `+${item.score.toLocaleString()} (⚡+${item.speedBonus})`
+              : `+${item.score.toLocaleString()} 分`;
+          }
         } else {
           row = document.createElement("div");
           row.className = "flex items-center justify-between px-2.5 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800 text-xs";
-          row.textContent = `#${item.round} ${item.title} · ${item.distanceKm.toFixed(1)} km · +${item.score} 分`;
+          const distStr = item.distanceKm === null ? "⌛ 超時" : `${Number(item.distanceKm).toFixed(1)} km`;
+          row.textContent = `#${item.round} ${item.title} · ${distStr} · +${item.score} 分`;
         }
         container.appendChild(row);
       });

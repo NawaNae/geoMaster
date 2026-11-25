@@ -542,8 +542,10 @@ runSection("3.PinDropGameplayAndAntiSpoiler", () => {
   sb.setMapBaseLayer("street");
   check(s.mapLayer === "satellite", "3c.AntiSpoiler.BlockStreetBasemap", "setMapBaseLayer('street') must be blocked during pin_drop");
 
-  // 2. District borders hidden by default
-  check(s.showDistrictBorders === false, "3c.AntiSpoiler.DistrictBordersHiddenByDefault", `Expected showDistrictBorders === false by default in pin_drop, got ${s.showDistrictBorders}`);
+  // 2. District borders shown by default (預設都顯示區塊), and toggling off still hides strokes & seals seams
+  check(s.pinDropShowBorders === true && s.showDistrictBorders === true, "3c.DefaultBorders.DistrictBordersShownByDefault", `Expected showDistrictBorders === true by default in pin_drop, got ${s.showDistrictBorders}`);
+  sb.setPinDropShowBorders(false);
+  check(s.showDistrictBorders === false, "3c.AntiSpoiler.DistrictBordersToggleOff", `Expected showDistrictBorders === false after setPinDropShowBorders(false), got ${s.showDistrictBorders}`);
 
   // 3. Map labels & leader lines hidden
   sb.renderSmartLabelsAndLeaderLines();
