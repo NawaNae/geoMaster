@@ -151,6 +151,11 @@ if (typeof window.L === "undefined") {
         return layer;
       };
       layer.getLatLng = () => layer._latlng;
+      layer.setLatLng = (ll) => {
+        const parsed = toLatLngObj(ll);
+        if (parsed) layer._latlng = parsed;
+        return layer;
+      };
       return layer;
     },
     marker: (latlng, opts = {}) => {
@@ -273,6 +278,94 @@ let rafMovePending = false;
 const TAIWAN_MAX_BOUNDS = L.latLngBounds([20.2, 116.5], [27.4, 123.8]);
 const TAIWAN_FULL_VIEW_BOUNDS = L.latLngBounds([21.82, 119.25], [25.38, 122.08]);
 const WORLD_WRAP_OFFSETS = [-360, 360];
+let _activeWorldWrapBand = 0;
+
+function getActiveWorldWrapBand() {
+  const mv = typeof _mapActivePackView === "function" ? _mapActivePackView() : null;
+  if (!mv || !mv.worldCopyJump || !map || typeof map.getCenter !== "function") return 0;
+  const c = map.getCenter();
+  if (!c || !Number.isFinite(c.lng)) return 0;
+  const band = Math.round(c.lng / 360) * 360;
+  return Object.is(band, -0) ? 0 : band;
+}
+
+function getActiveWorldWrapOffsets() {
+  const mv = typeof _mapActivePackView === "function" ? _mapActivePackView() : null;
+  if (!mv || !mv.worldCopyJump) return [0];
+  const band = getActiveWorldWrapBand();
+  return [band - 360, band, band + 360];
+}
+
+function resolveWorldWrapSlotOffset(curOffset, targetBand) {
+  const minOff = targetBand - 360;
+  const mod = ((((curOffset - minOff) % 1080) + 1080) % 1080);
+  return minOff + mod;
+}
+
+function shiftLeafletLatLngsLng(latlngs, deltaLng) {
+  if (!Array.isArray(latlngs)) {
+    if (latlngs && Number.isFinite(latlngs.lat) && Number.isFinite(latlngs.lng)) {
+      return [latlngs.lat, latlngs.lng + deltaLng];
+    }
+    return latlngs;
+  }
+  if (latlngs.length >= 2 && typeof latlngs[0] === "number" && typeof latlngs[1] === "number") {
+    return [latlngs[0], latlngs[1] + deltaLng];
+  }
+  return latlngs.map((item) => shiftLeafletLatLngsLng(item, deltaLng));
+}
+
+function shiftLayerLng(layer, deltaLng) {
+  if (!layer || !deltaLng) return;
+  if (typeof layer.getLatLngs === "function" && typeof layer.setLatLngs === "function") {
+    layer.setLatLngs(shiftLeafletLatLngsLng(layer.getLatLngs(), deltaLng));
+    return;
+  }
+  if (typeof layer.getLatLng === "function" && typeof layer.setLatLng === "function") {
+    const ll = layer.getLatLng();
+    if (ll && Number.isFinite(ll.lat) && Number.isFinite(ll.lng)) {
+      layer.setLatLng([ll.lat, ll.lng + deltaLng]);
+    }
+    return;
+  }
+  if (typeof layer.eachLayer === "function") {
+    layer.eachLayer((sub) => {
+      if (sub && sub !== layer) shiftLayerLng(sub, deltaLng);
+    });
+  }
+}
+
+function syncWorldWrapBand() {
+  const mv = typeof _mapActivePackView === "function" ? _mapActivePackView() : null;
+  if (!mv || !mv.worldCopyJump || !map) return false;
+  const targetBand = getActiveWorldWrapBand();
+  if (targetBand === _activeWorldWrapBand) return false;
+
+  const recycleLayer = (layer) => {
+    if (!layer) return;
+    const curOff = Number.isFinite(layer._worldWrapOffset) ? layer._worldWrapOffset : 0;
+    const nextOff = resolveWorldWrapSlotOffset(curOff, targetBand);
+    const delta = nextOff - curOff;
+    if (delta !== 0) {
+      shiftLayerLng(layer, delta);
+      layer._worldWrapOffset = nextOff;
+    }
+  };
+
+  _itemLayersById.forEach((layers) => {
+    if (Array.isArray(layers)) layers.forEach(recycleLayer);
+  });
+  if (countyBorderLayerGroup && typeof countyBorderLayerGroup.eachLayer === "function") {
+    countyBorderLayerGroup.eachLayer((sub) => {
+      if (sub && sub !== countyBorderLayerGroup) recycleLayer(sub);
+    });
+  }
+  if (satelliteTargetMarker) recycleLayer(satelliteTargetMarker);
+  if (satelliteTargetWrapMarkers.length > 0) satelliteTargetWrapMarkers.forEach(recycleLayer);
+
+  _activeWorldWrapBand = targetBand;
+  return true;
+}
 
 function normalizeWorldLng(lng) {
   const n = Number(lng);
@@ -455,8 +548,8 @@ function initMap() {
     maxZoom: Number.isFinite(mv.maxZoom) ? mv.maxZoom : 18,
     maxBounds: initMaxBounds || undefined,
     maxBoundsViscosity: initMaxBounds ? 0.9 : 0.0,
-    // Always initialize Leaflet's Map.Drag worldCopyJump hooks once at startup so switching to world_countries enables seamless infinite horizontal wrapping.
-    worldCopyJump: true,
+    // Keep Leaflet's native worldCopyJump disabled so panning across ±180° never snaps/reloads tiles or flashes canvas/labels; syncWorldWrapBand() leapfrogs off-screen copies instead.
+    worldCopyJump: false,
     preferCanvas: true,
     renderer: canvasRenderer,
     zoomControl: false,
@@ -518,6 +611,7 @@ function initMap() {
 
   // Continuous pan / pinch-zoom / flyTo frame-by-frame hook
   map.on("move zoom", () => {
+    syncWorldWrapBand();
     if (state.dragSyncMode === "hide_on_move") return;
     if (isCssZoomAnimActive) return; // Let CSS transition handle standard zoomanim smoothly
     applyOverlayAffineTransform(map.getCenter(), map.getZoom(), false);
@@ -527,18 +621,7 @@ function initMap() {
     isCssZoomAnimActive = false;
     if (svgEl) svgEl.classList.remove("overlay-moving-hidden");
     if (domEl) domEl.classList.remove("overlay-moving-hidden");
-    // Ensure keyboard pan, touch inertia, or programmatic flyTo across ±180° wraps cleanly back to [-180, 180) on world packs
-    const mvEnd = _mapActivePackView();
-    if (mvEnd && mvEnd.worldCopyJump && typeof map.getCenter === "function" && typeof map.setView === "function") {
-      const curCenter = map.getCenter();
-      if (curCenter && Number.isFinite(curCenter.lng) && (curCenter.lng >= 180 || curCenter.lng < -180)) {
-        const wrappedLng = normalizeWorldLng(curCenter.lng);
-        if (Math.abs(wrappedLng - curCenter.lng) > 1e-6) {
-          map.setView([curCenter.lat, wrappedLng], map.getZoom(), { animate: false });
-          return;
-        }
-      }
-    }
+    syncWorldWrapBand();
     applyMapZoomVisualVars(map.getZoom());
     updateTransportZoomClass();
     if (typeof syncPoiViewportMarkers === "function") syncPoiViewportMarkers(false);
@@ -712,7 +795,7 @@ function applyMapPackViewport(pack, options = {}) {
   }
   if (map.options) {
     map.options.maxBoundsViscosity = maxB ? 0.9 : 0.0;
-    map.options.worldCopyJump = Boolean(mv.worldCopyJump);
+    map.options.worldCopyJump = false;
   }
 
   state.satelliteViewportLocked = false;
@@ -1251,22 +1334,26 @@ function updateSatelliteTargetMarker(pickObj) {
 
   state.satelliteTargetPoint = { lat: pt.lat, lng: pt.lng };
 
-  satelliteTargetMarker = L.marker([pt.lat, pt.lng], {
+  const mv = _mapActivePackView();
+  const baseBand = mv && mv.worldCopyJump ? getActiveWorldWrapBand() : 0;
+  satelliteTargetMarker = L.marker([pt.lat, pt.lng + baseBand], {
     icon: _buildSatelliteTargetDivIcon(),
     interactive: false,
     keyboard: false,
     zIndexOffset: 900
   }).addTo(map);
+  satelliteTargetMarker._worldWrapOffset = baseBand;
 
-  const mv = _mapActivePackView();
   if (mv && mv.worldCopyJump) {
     WORLD_WRAP_OFFSETS.forEach((offset) => {
-      const wrapM = L.marker([pt.lat, pt.lng + offset], {
+      const wrapOff = baseBand + offset;
+      const wrapM = L.marker([pt.lat, pt.lng + wrapOff], {
         icon: _buildSatelliteTargetDivIcon(),
         interactive: false,
         keyboard: false,
         zIndexOffset: 900
       }).addTo(map);
+      wrapM._worldWrapOffset = wrapOff;
       satelliteTargetWrapMarkers.push(wrapM);
     });
   }
@@ -1722,6 +1809,7 @@ function rebuildMapLayers(topoData) {
   const activeItems = _mapActiveItems();
   const activeGroups = _mapActiveGroups();
   const packMv = _mapActivePackView();
+  _activeWorldWrapBand = 0;
   const wrapOffsets = packMv && packMv.worldCopyJump ? WORLD_WRAP_OFFSETS : [];
   activeItems.forEach((t) => {
     t.layers = [];
@@ -1861,11 +1949,13 @@ function rebuildMapLayers(topoData) {
         style: borderStyle
       }).addTo(countyBorderLayerGroup);
       wrapOffsets.forEach((lngOffset) => {
-        L.geoJSON(shiftGeoJsonFeatureLng(loadedTopoData.countiesGeo, lngOffset), {
+        const cWrap = L.geoJSON(shiftGeoJsonFeatureLng(loadedTopoData.countiesGeo, lngOffset), {
           renderer: canvasRenderer,
           interactive: false,
           style: borderStyle
-        }).addTo(countyBorderLayerGroup);
+        });
+        cWrap._worldWrapOffset = lngOffset;
+        cWrap.addTo(countyBorderLayerGroup);
       });
     }
     if (countyBorderLayerGroup && map) {

@@ -42,7 +42,10 @@ function renderSmartLabelsAndLeaderLines() {
   const mv = typeof getActivePackMapView === "function" ? getActivePackMapView() : { defaultZoom: 8, targetFocusZoom: 11, center: [23.75, 120.95] };
   const baseZoom = Number.isFinite(mv.defaultZoom) ? mv.defaultZoom : 8;
   const isSingleLayer = typeof isActivePackSingleLayer === "function" ? isActivePackSingleLayer() : false;
-  const lngOffsets = mv && mv.worldCopyJump ? [-360, 0, 360] : [0];
+  const lngOffsets =
+    mv && mv.worldCopyJump
+      ? (typeof getActiveWorldWrapOffsets === "function" ? getActiveWorldWrapOffsets() : [-360, 0, 360])
+      : [0];
 
   if (state.difficulty === "county_only") {
     activeGroups.forEach((c) => {

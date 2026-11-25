@@ -823,9 +823,14 @@ async function main() {
     const pack = vm.runInContext(`getActiveMapPack()`, sandbox);
     const maxB = vm.runInContext(`map.getMaxBounds()`, sandbox);
     check(
-      vm.runInContext(`map.options.worldCopyJump === true`, sandbox),
+      vm.runInContext(`map.options.worldCopyJump === false`, sandbox),
       "7.WorldWrap",
-      "map.options.worldCopyJump is true on world_countries"
+      "Leaflet native worldCopyJump stays false on world_countries to prevent ±180° jump/flash"
+    );
+    check(
+      vm.runInContext(`getActivePackMapView().worldCopyJump === true`, sandbox),
+      "7.WorldWrap",
+      "world_countries pack mapView.worldCopyJump capability flag remains true"
     );
     check(
       maxB && maxB.isValid() && maxB.getWest() <= -1800 && maxB.getEast() >= 1800 && maxB.getSouth() === -85 && maxB.getNorth() === 85,
@@ -915,6 +920,33 @@ async function main() {
       "7.WorldWrap",
       `Both Australia (offset 0) and right-wrapped USA (+360°) labels render when viewing Pacific (center 175°), got: ${JSON.stringify(renderedTexts)}`
     );
+
+    // 4b. Seamless multi-lap panning across ±180° leapfrogs only the off-screen copy without snapping camera
+    const bandAfterCross = vm.runInContext(`
+      map.panTo([20, 210]);
+      const shifted = syncWorldWrapBand();
+      const usaNow = getActiveItems().find((x) => x.code === "USA");
+      const offs = usaNow.layers.map((l) => Number.isFinite(l._worldWrapOffset) ? l._worldWrapOffset : 0).sort((a, b) => a - b);
+      const sgpNow = getActiveItems().find((x) => x.code === "SGP");
+      const sgpLngs = sgpNow.layers.filter((l) => l._isHotspotMarker).map((l) => Math.round(l.getLatLng().lng)).sort((a, b) => a - b);
+      ({ shifted, centerLng: map.getCenter().lng, offs, sgpLngs, lblOffs: getActiveWorldWrapOffsets() });
+    `, sandbox);
+    check(
+      bandAfterCross.shifted === true && bandAfterCross.centerLng === 210,
+      "7.WorldWrap",
+      `Crossing +180° to lng=210° keeps camera continuous (no snap back) and updates wrap band, got ${JSON.stringify(bandAfterCross)}`
+    );
+    check(
+      JSON.stringify(bandAfterCross.offs) === "[0,360,720]" && JSON.stringify(bandAfterCross.lblOffs) === "[0,360,720]",
+      "7.WorldWrap",
+      `Crossing +180° leapfrogs only off-screen -360° copy to +720° (active copies [0,360,720]), got offs=${JSON.stringify(bandAfterCross.offs)} lblOffs=${JSON.stringify(bandAfterCross.lblOffs)}`
+    );
+    check(
+      bandAfterCross.sgpLngs.length === 3 && (bandAfterCross.sgpLngs[2] - bandAfterCross.sgpLngs[1] === 360) && (bandAfterCross.sgpLngs[1] - bandAfterCross.sgpLngs[0] === 360),
+      "7.WorldWrap",
+      `Microstate hotspot dots shift cleanly with wrap band, got lngs=${JSON.stringify(bandAfterCross.sgpLngs)}`
+    );
+    vm.runInContext(`map.panTo([20, 15]); syncWorldWrapBand();`, sandbox);
 
     // 5. Single-country packs do NOT duplicate layers
     await vm.runInContext(`switchActiveMapPack("tw_modern")`, sandbox);
