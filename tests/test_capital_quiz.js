@@ -242,7 +242,9 @@ sandbox.renderSmartLabelsAndLeaderLines = () => {};
   check(!getEl("topic-selector-card").classList.contains("hidden"), "2.CN", "#topic-selector-card visible on cn_prov");
   check(!topicChips.capital.classList.contains("hidden"), "2.CN", "capital chip visible on cn_prov");
   check(topicChips.airport.classList.contains("hidden"), "2.CN", "Taiwan airport chip hidden on cn_prov");
-  check(topicChips.capital.querySelector(".capital-topic-label").textContent === "🏛️ 省會", "2.CN", "capital chip labeled 🏛️ 省會 on cn_prov");
+  check(topicChips.capital.querySelector(".capital-topic-label").textContent === "● 省會", "2.CN", "capital chip labeled ● 省會 on cn_prov");
+  const cnPinEl = sandbox.createPoiPinElement(sandbox.getCapitalPoisForPack("cn_prov")[0], "locked");
+  check(cnPinEl.className.includes("tw-poi-cap-prov"), "2.CN.Pin", "CN provincial capital uses dot symbol class tw-poi-cap-prov");
 
   // Enable pure capital quiz on cn_prov
   sandbox.state.regionQuizEnabled = false;
@@ -342,7 +344,9 @@ sandbox.renderSmartLabelsAndLeaderLines = () => {};
   sandbox.applyActivePackFeatureGatingUI();
   check(!getEl("topic-selector-card").classList.contains("hidden"), "4.World", "#topic-selector-card visible on world_countries");
   check(!topicChips.capital.classList.contains("hidden"), "4.World", "capital chip visible on world_countries");
-  check(topicChips.capital.querySelector(".capital-topic-label").textContent === "🏛️ 首都", "4.World", "capital chip labeled 🏛️ 首都 on world_countries");
+  check(topicChips.capital.querySelector(".capital-topic-label").textContent === "◎ 首都", "4.World", "capital chip labeled ◎ 首都 on world_countries");
+  const worldPinEl = sandbox.createPoiPinElement(sandbox.getCapitalPoisForPack("world_countries")[0], "locked");
+  check(worldPinEl.className.includes("tw-poi-cap-national"), "4.World.Pin", "World national capital uses double-circle class tw-poi-cap-national");
   check(topicChips.region.querySelector(".geo-solo-btn span").textContent === "🌍 國家", "4.World", "region chip labeled 🌍 國家 on world_countries");
 
   sandbox.state.regionQuizEnabled = false;
@@ -430,7 +434,9 @@ sandbox.renderSmartLabelsAndLeaderLines = () => {};
   sandbox.applyActivePackFeatureGatingUI();
   check(sandbox.getActivePackFeatures().supportsCapitalQuiz === true, "5b.JP", "jp_pref supportsCapitalQuiz is true");
   check(!topicChips.capital.classList.contains("hidden"), "5b.JP", "capital chip visible on jp_pref");
-  check(topicChips.capital.querySelector(".capital-topic-label").textContent === "🏛️ 縣廳", "5b.JP", "capital chip labeled 🏛️ 縣廳 on jp_pref");
+  check(topicChips.capital.querySelector(".capital-topic-label").textContent === "● 縣廳", "5b.JP", "capital chip labeled ● 縣廳 on jp_pref");
+  const jpPinEl = sandbox.createPoiPinElement(sandbox.getCapitalPoisForPack("jp_pref")[0], "locked");
+  check(jpPinEl.className.includes("tw-poi-cap-prov"), "5b.JP.Pin", "JP prefectural capital uses dot symbol class tw-poi-cap-prov");
 
   sandbox.state.playMode = "free";
   sandbox.state.targetPoiId = null;

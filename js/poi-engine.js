@@ -43,6 +43,22 @@ function getPoiById(poiId) {
   return null;
 }
 
+function getPoiCategoryIcon(category, poi = null) {
+  if (category === "capital") {
+    if (poi && Array.isArray(poi.subTypes)) {
+      return poi.subTypes.includes("national_capital") ? "◎" : "●";
+    }
+    if (typeof getCapitalTopicIconForPack === "function" && typeof getActiveMapPack === "function") {
+      return getCapitalTopicIconForPack(getActiveMapPack());
+    }
+    return "◎";
+  }
+  if (typeof POI_CATEGORY_META !== "undefined" && POI_CATEGORY_META[category]) {
+    return POI_CATEGORY_META[category].icon;
+  }
+  return "📍";
+}
+
 function getPoiCategoryLabel(category) {
   if (category === "capital") {
     if (typeof getCapitalTopicLabelForPack === "function" && typeof getActiveMapPack === "function") {
@@ -500,19 +516,28 @@ function getPoiGlyphForCategory(cat) {
   if (cat === "reservoir") return "💧";
   if (cat === "lake") return "🏞";
   if (cat === "settlement") return "🪧";
-  if (cat === "capital") return "🏛";
+  if (cat === "capital") return "◎";
   return "📍";
 }
 
 function createPoiPinElement(poi, status) {
   const displayCat = getPoiDisplayCategory(poi);
   const wrap = document.createElement("div");
-  wrap.className = `tw-poi-pin tw-poi-${displayCat} tw-poi-state-${status}`;
-
-  const glyph = document.createElement("span");
-  glyph.className = "tw-poi-glyph";
-  glyph.textContent = getPoiGlyphForCategory(displayCat);
-  wrap.appendChild(glyph);
+  if (displayCat === "capital") {
+    const isNational = Array.isArray(poi.subTypes) && poi.subTypes.includes("national_capital");
+    const capSubClass = isNational ? "tw-poi-cap-national" : "tw-poi-cap-prov";
+    wrap.className = `tw-poi-pin tw-poi-capital ${capSubClass} tw-poi-state-${status}`;
+    const sym = document.createElement("span");
+    sym.className = "tw-poi-cap-symbol";
+    sym.setAttribute("aria-hidden", "true");
+    wrap.appendChild(sym);
+  } else {
+    wrap.className = `tw-poi-pin tw-poi-${displayCat} tw-poi-state-${status}`;
+    const glyph = document.createElement("span");
+    glyph.className = "tw-poi-glyph";
+    glyph.textContent = getPoiGlyphForCategory(displayCat);
+    wrap.appendChild(glyph);
+  }
 
   if (status === "unlocked" || status === "missed") {
     const lbl = document.createElement("span");
@@ -658,13 +683,14 @@ function handlePoiMarkerClick(poi) {
   const unlockedSet = viewState.unlockedPois || state.unlockedPois;
   const displayCat = getPoiDisplayCategory(poi);
   const catMeta = POI_CATEGORY_META[displayCat] || { icon: "📍", label: "地標" };
+  const catIcon = getPoiCategoryIcon(displayCat, poi);
   const catLabel = getPoiCategoryLabel(displayCat);
   const locText = formatPoiLocationText(poi);
 
   if (state.role === "spectator" || state.isGameOver) {
     if (typeof setFeedback === "function") {
       const subTxt = poi.category === "capital" ? catLabel : getPoiSubTypeLabelList(poi);
-      setFeedback(`${catMeta.icon} ${poi.name}（${locText} · ${subTxt}）`, "info");
+      setFeedback(`${catIcon} ${poi.name}（${locText} · ${subTxt}）`, "info");
     }
     return;
   }
@@ -702,10 +728,10 @@ function handlePoiMarkerClick(poi) {
       const hideLoc = poi.category !== "capital" && typeof shouldHidePoiAdminLocationHint === "function" && shouldHidePoiAdminLocationHint();
       const locPrefix = hideLoc ? "" : `${locText} · `;
       const subTxt = poi.category === "capital" ? catLabel : getPoiSubTypeLabelList(poi);
-      setFeedback(`${catMeta.icon} ${poi.name}（${locPrefix}${subTxt}）`, "info");
+      setFeedback(`${catIcon} ${poi.name}（${locPrefix}${subTxt}）`, "info");
     } else {
       const subTxt = poi.category === "capital" ? catLabel : getPoiSubTypeLabelList(poi);
-      setFeedback(`${catMeta.icon} 尚未解鎖的${catLabel}（分類：${subTxt}）`, "info");
+      setFeedback(`${catIcon} 尚未解鎖的${catLabel}（分類：${subTxt}）`, "info");
     }
   }
 }
@@ -739,8 +765,9 @@ function getConcisePoiSummaryParts() {
   }
   if (isPoiCategoryActive("capital")) {
     const cnt = getActiveQuizPois("capital").length;
+    const capIcon = getPoiCategoryIcon("capital");
     const capLbl = getPoiCategoryLabel("capital");
-    parts.push(`🏛️ ${capLbl}(${cnt}處)`);
+    parts.push(`${capIcon} ${capLbl}(${cnt}處)`);
   }
   return parts;
 }

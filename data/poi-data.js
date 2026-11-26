@@ -48,7 +48,7 @@ const POI_CATEGORY_META = {
   capital: {
     id: "capital",
     label: "首都／省會",
-    icon: "🏛️",
+    icon: "◎",
     accent: "#f59e0b",
     badgeClass: "bg-amber-500/20 text-amber-300 border-amber-400/40"
   }

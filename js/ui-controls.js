@@ -585,6 +585,7 @@ function applyActivePackFeatureGatingUI() {
   const supportsPoi = Boolean(features.supportsPoiQuiz);
   const supportsCapital = Boolean(features.supportsCapitalQuiz);
   const capTopicLabel = typeof getCapitalTopicLabelForPack === "function" ? getCapitalTopicLabelForPack(pack) : (features.capitalLabel || "首都／省會");
+  const capTopicIcon = typeof getCapitalTopicIconForPack === "function" ? getCapitalTopicIconForPack(pack) : "◎";
 
   document.querySelectorAll('.topic-chip-btn[data-topic="station"]').forEach((el) => {
     el.classList.toggle("hidden", !supportsTransport);
@@ -601,11 +602,11 @@ function applyActivePackFeatureGatingUI() {
   document.querySelectorAll('.topic-chip-btn[data-topic="capital"]').forEach((el) => {
     el.classList.toggle("hidden", !supportsCapital);
     const lblSpan = el.querySelector(".capital-topic-label");
-    if (lblSpan) lblSpan.textContent = `🏛️ ${capTopicLabel}`;
+    if (lblSpan) lblSpan.textContent = `${capTopicIcon} ${capTopicLabel}`;
     const soloBtn = el.querySelector(".geo-solo-btn");
-    if (soloBtn) soloBtn.setAttribute("aria-label", `單選🏛️ ${capTopicLabel}`);
+    if (soloBtn) soloBtn.setAttribute("aria-label", `單選${capTopicIcon} ${capTopicLabel}`);
     const unionBtn = el.querySelector(".geo-union-btn");
-    if (unionBtn) unionBtn.setAttribute("aria-label", `複選切換🏛️ ${capTopicLabel}`);
+    if (unionBtn) unionBtn.setAttribute("aria-label", `複選切換${capTopicIcon} ${capTopicLabel}`);
     const tipText =
       pack && pack.id === "world_countries"
         ? "猜世界各國首都（點左單選純猜首都 / 點右複選搭配國家）"
@@ -1901,8 +1902,9 @@ function renderScopeModalGrid() {
   }
   if (features.supportsCapitalQuiz && typeof isPoiCategoryActive === "function" && isPoiCategoryActive("capital")) {
     const capCnt = getActiveQuizPois("capital").length;
+    const capIcon = typeof getPoiCategoryIcon === "function" ? getPoiCategoryIcon("capital") : "◎";
     const capLbl = typeof getPoiCategoryLabel === "function" ? getPoiCategoryLabel("capital") : "首都／省會";
-    counterParts.push(`🏛️ ${capLbl} (${capCnt} 處)`);
+    counterParts.push(`${capIcon} ${capLbl} (${capCnt} 處)`);
   }
   const fullCounterText = counterParts.length > 0 ? `題庫：${counterParts.join(" ＋ ")}` : "請至少選擇一項題庫";
   if (counterEl) {

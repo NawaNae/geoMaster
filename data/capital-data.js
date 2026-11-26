@@ -8,9 +8,9 @@
 // - world_countries: 196 national capitals (respects worldIncludeMicrostates)
 
 const CAPITAL_SUBTYPES = [
-  { id: "pref_capital", label: "縣廳所在地", shortLabel: "縣廳", icon: "🏛️", tier: "simple", isDefault: true },
-  { id: "prov_capital", label: "省會／首府", shortLabel: "省會", icon: "🏛️", tier: "simple", isDefault: true },
-  { id: "national_capital", label: "國家首都", shortLabel: "首都", icon: "🏛️", tier: "simple", isDefault: true }
+  { id: "pref_capital", label: "縣廳所在地", shortLabel: "縣廳", icon: "●", tier: "simple", isDefault: true },
+  { id: "prov_capital", label: "省會／首府", shortLabel: "省會", icon: "●", tier: "simple", isDefault: true },
+  { id: "national_capital", label: "國家首都", shortLabel: "首都", icon: "◎", tier: "simple", isDefault: true }
 ];
 
 const CAPITAL_POI_DATA = [
@@ -6213,6 +6213,13 @@ const CAPITAL_POIS_BY_PACK = CAPITAL_POI_DATA.reduce((acc, p) => {
 
 function getCapitalPoisForPack(packId) {
   return CAPITAL_POIS_BY_PACK[packId] || [];
+}
+
+function getCapitalTopicIconForPack(pack) {
+  if (!pack) return '◎';
+  if (pack.id === 'world_countries') return '◎';
+  if (Array.isArray(pack.memberPackIds) && pack.memberPackIds.includes('world_countries')) return '◎';
+  return '●';
 }
 
 function getCapitalTopicLabelForPack(pack) {

@@ -803,6 +803,7 @@ function evaluateGuess(rawInput, isAutoCheck = false) {
         const p = poiRes.poi;
         const displayCat = typeof getPoiDisplayCategory === "function" ? getPoiDisplayCategory(p) : p.category;
         const catMeta = POI_CATEGORY_META[displayCat] || { icon: "📍", label: "地標" };
+        const catIcon = typeof getPoiCategoryIcon === "function" ? getPoiCategoryIcon(displayCat, p) : catMeta.icon;
         const catLabel = typeof getPoiCategoryLabel === "function" ? getPoiCategoryLabel(displayCat) : catMeta.label;
         state.lastTargetLat = p.lat;
         state.lastTargetLng = p.lng;
@@ -841,8 +842,8 @@ function evaluateGuess(rawInput, isAutoCheck = false) {
         const locStr = typeof formatPoiLocationText === "function" ? formatPoiLocationText(p) : `${p.countyName || ""}${p.townName || ""}`;
         const locHint = (p.category !== "capital" && shouldHidePoiAdminLocationHint()) || !locStr ? "" : `（${locStr}）`;
         const unlockMsg = unlockedList
-          ? `${catMeta.icon} 同時解鎖 ${unlockedList.length} 處${catLabel}：${unlockedList.map((x) => x.name).join("、")}${bonusText}`
-          : `${catMeta.icon} 解鎖${catLabel}：${p.name}${locHint}${bonusText}`;
+          ? `${catIcon} 同時解鎖 ${unlockedList.length} 處${catLabel}：${unlockedList.map((x) => x.name).join("、")}${bonusText}`
+          : `${catIcon} 解鎖${catLabel}：${p.name}${locHint}${bonusText}`;
         onSuccessfulUnlock(unlockMsg, p.shortName, Boolean(isTargetingPoi));
         if (isTargetingPoi) {
           if (state.playMode === "target_random" || state.playMode === "satellite_quiz") {
@@ -2460,10 +2461,11 @@ function updateTargetBannerUI() {
   if (!vState.targetId && vState.targetPoiId) {
     const targetPoi = typeof getPoiById === "function" ? getPoiById(vState.targetPoiId) : null;
     const displayCat = targetPoi && typeof getPoiDisplayCategory === "function" ? getPoiDisplayCategory(targetPoi) : (targetPoi && targetPoi.category) || "capital";
+    const catIcon = typeof getPoiCategoryIcon === "function" ? getPoiCategoryIcon(displayCat, targetPoi) : "◎";
     const catLbl = typeof getPoiCategoryLabel === "function" ? getPoiCategoryLabel(displayCat) : "地標";
     hintBadge.textContent = isSatellite
       ? (state.satelliteOutlineRevealed ? "👁️ 已顯示輪廓" : state.satelliteViewportLocked ? "🔒 視野已鎖定" : "🛰️ 衛星盲猜中")
-      : `🏛️ ${catLbl}高亮目標`;
+      : `${catIcon} ${catLbl}高亮目標`;
     descEl.textContent = `請輸入高亮標記的${catLbl}名稱`;
   } else if (!vState.targetId && !vState.targetStationKey) {
     hintBadge.textContent = "等待點選目標";

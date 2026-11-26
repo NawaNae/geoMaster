@@ -424,6 +424,7 @@ function buildPinDropTargetFromPoi(p, dupPoiNames = null) {
       icon: "📍",
       label: "地標"
     };
+  const catIcon = typeof getPoiCategoryIcon === "function" ? getPoiCategoryIcon(displayCat, p) : catMeta.icon;
   const catLabel = typeof getPoiCategoryLabel === "function" ? getPoiCategoryLabel(displayCat) : catMeta.label;
   const dups = dupPoiNames instanceof Set ? dupPoiNames : getDuplicatePoiNameSet();
   const isDup = dups.has(String(p.name || "").trim());
@@ -435,10 +436,10 @@ function buildPinDropTargetFromPoi(p, dupPoiNames = null) {
     poiCategory: displayCat,
     id: `poi:${p.id}`,
     rawId: p.id,
-    promptTitle: `${catMeta.icon} 請在地圖上標出：${displayName}`,
+    promptTitle: `${catIcon} 請在地圖上標出：${displayName}`,
     shortLabel: isDup ? displayName : (p.shortName || p.name),
     categoryLabel: catLabel,
-    badgeText: `${catMeta.icon} ${catLabel}`,
+    badgeText: `${catIcon} ${catLabel}`,
     lat: Number(p.lat),
     lng: Number(p.lng),
     ref: p

@@ -832,7 +832,50 @@ input, select {
 }
 .tw-poi-capital {
   --poi-accent: #f59e0b;
-  color: #fde68a;
+  color: #fbbf24;
+}
+.tw-poi-capital.tw-poi-state-unlocked {
+  color: #34d399;
+}
+.tw-poi-capital.tw-poi-state-missed {
+  color: #fb7185;
+}
+.tw-poi-capital.tw-poi-state-target {
+  color: #fde047;
+}
+.tw-poi-cap-symbol {
+  display: inline-block;
+  position: relative;
+  border-radius: 9999px;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+/* National Capital: classic atlas double concentric circles ◎ */
+.tw-poi-cap-national .tw-poi-cap-symbol {
+  width: 11px;
+  height: 11px;
+  border: 1.6px solid currentColor;
+  background: rgba(2, 6, 23, 0.52);
+  box-shadow: 0 0 0 1px rgba(2, 6, 23, 0.85);
+}
+.tw-poi-cap-national .tw-poi-cap-symbol::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4.5px;
+  height: 4.5px;
+  transform: translate(-50%, -50%);
+  border-radius: 9999px;
+  background: currentColor;
+}
+/* Provincial / Prefectural Capital: classic atlas solid dot ● */
+.tw-poi-cap-prov .tw-poi-cap-symbol {
+  width: 7px;
+  height: 7px;
+  background: currentColor;
+  border: 1.2px solid rgba(2, 6, 23, 0.9);
+  box-shadow: 0 0 2px rgba(2, 6, 23, 0.78);
 }
 
 /* States: Translucent Luminous Halo (lightweight border + tint, zero CSS filter blur) */
