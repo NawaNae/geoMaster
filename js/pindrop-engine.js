@@ -4,6 +4,7 @@
 // =========================================================================
 
 let pinDropLayerGroup = null;
+let pinDropHistoryLayerGroup = null;
 let pinPreviewMarker = null;
 let pinTargetRevealLayer = null;
 let pinDashPolyline = null;
@@ -280,18 +281,81 @@ function getPinDropPerfectRadiusKm(target) {
 // -------------------------------------------------------------------------
 // 2. CANDIDATE POOL & QUEUE GENERATION
 // -------------------------------------------------------------------------
-function buildPinDropTargetFromTown(t) {
+function getDuplicateTownNameSet() {
+  const items =
+    typeof getActiveItems === "function"
+      ? getActiveItems()
+      : typeof ALL_TOWNS !== "undefined" && Array.isArray(ALL_TOWNS)
+      ? ALL_TOWNS
+      : [];
+  const counts = new Map();
+  for (let i = 0; i < items.length; i++) {
+    const n = String((items[i] && items[i].townName) || "").trim();
+    if (!n) continue;
+    counts.set(n, (counts.get(n) || 0) + 1);
+  }
+  const dups = new Set();
+  counts.forEach((cnt, name) => {
+    if (cnt > 1) dups.add(name);
+  });
+  return dups;
+}
+
+function getDuplicatePoiNameSet() {
+  const pois =
+    typeof TAIWAN_POI_DATA !== "undefined" && Array.isArray(TAIWAN_POI_DATA)
+      ? TAIWAN_POI_DATA
+      : [];
+  const counts = new Map();
+  for (let i = 0; i < pois.length; i++) {
+    const n = String((pois[i] && pois[i].name) || "").trim();
+    if (!n) continue;
+    counts.set(n, (counts.get(n) || 0) + 1);
+  }
+  const dups = new Set();
+  counts.forEach((cnt, name) => {
+    if (cnt > 1) dups.add(name);
+  });
+  return dups;
+}
+
+function formatPinDropTownPrompt(countyName, townName, isSingle, hideCounty, dupTownNames) {
+  if (isSingle || !countyName) return `📍 請在地圖上標出：${townName}`;
+  if (hideCounty) {
+    const isDup = dupTownNames instanceof Set && dupTownNames.has(townName);
+    return isDup
+      ? `📍 請在地圖上標出：${countyName} ${townName}（重名指定）`
+      : `📍 請在地圖上標出：${townName}`;
+  }
+  return `📍 請在地圖上標出：${countyName} ${townName}`;
+}
+
+function getPinDropDisplayPromptTitle(target) {
+  if (!target) return "📍 給地名標座標挑戰";
+  if (target.kind === "town") {
+    const isSingle = typeof isActivePackSingleLayer === "function" && isActivePackSingleLayer();
+    const hideCounty = typeof state !== "undefined" && Boolean(state.pinDropHideCounty);
+    const dups = target._isDuplicateTownName ? new Set([target.townName]) : getDuplicateTownNameSet();
+    return formatPinDropTownPrompt(target.countyName, target.townName, isSingle, hideCounty, dups);
+  }
+  return target.promptTitle || "📍 給地名標座標挑戰";
+}
+
+function buildPinDropTargetFromTown(t, dupTownNames = null) {
   if (!t) return null;
   const pt = t.mainPoint && Number.isFinite(t.mainPoint.lat) ? t.mainPoint : { lat: t.lat, lng: t.lng };
   const isSingle = typeof isActivePackSingleLayer === "function" && isActivePackSingleLayer();
   const uLabels = typeof getActivePackUnitLabels === "function" ? getActivePackUnitLabels() : { item: "鄉鎮市區" };
+  const dups = dupTownNames instanceof Set ? dupTownNames : getDuplicateTownNameSet();
+  const hideCounty = typeof state !== "undefined" && Boolean(state.pinDropHideCounty);
   return {
     kind: "town",
     id: `town:${t.id}`,
     rawId: t.id,
     countyName: t.countyName,
     townName: t.townName,
-    promptTitle: isSingle ? `📍 請在地圖上標出：${t.townName}` : `📍 請在地圖上標出：${t.countyName} ${t.townName}`,
+    _isDuplicateTownName: dups.has(t.townName),
+    promptTitle: formatPinDropTownPrompt(t.countyName, t.townName, isSingle, hideCounty, dups),
     shortLabel: isSingle ? t.townName : `${t.countyName}${t.townName}`,
     categoryLabel: uLabels.item || "鄉鎮市區",
     badgeText: t.countyName,
@@ -340,7 +404,7 @@ function buildPinDropTargetFromStation(st) {
   };
 }
 
-function buildPinDropTargetFromPoi(p) {
+function buildPinDropTargetFromPoi(p, dupPoiNames = null) {
   if (!p) return null;
   const displayCat = typeof getPoiDisplayCategory === "function" ? getPoiDisplayCategory(p) : p.category;
   const catMeta =
@@ -348,13 +412,17 @@ function buildPinDropTargetFromPoi(p) {
       icon: "📍",
       label: "地標"
     };
+  const dups = dupPoiNames instanceof Set ? dupPoiNames : getDuplicatePoiNameSet();
+  const isDup = dups.has(String(p.name || "").trim());
+  const locPrefix = isDup && (p.countyName || p.townName) ? `${p.countyName || ""}${p.townName || ""} · ` : "";
+  const displayName = `${locPrefix}${p.name}`;
   return {
     kind: "poi",
     poiCategory: displayCat,
     id: `poi:${p.id}`,
     rawId: p.id,
-    promptTitle: `${catMeta.icon} 請在地圖上標出：${p.name}`,
-    shortLabel: p.shortName || p.name,
+    promptTitle: `${catMeta.icon} 請在地圖上標出：${displayName}`,
+    shortLabel: isDup ? displayName : (p.shortName || p.name),
     categoryLabel: catMeta.label,
     badgeText: `${catMeta.icon} ${catMeta.label}`,
     lat: Number(p.lat),
@@ -377,8 +445,9 @@ function buildPinDropCandidatePool() {
       });
     } else {
       const towns = typeof getScopeTowns === "function" ? getScopeTowns() : [];
+      const dupTowns = getDuplicateTownNameSet();
       towns.forEach((t) => {
-        const item = buildPinDropTargetFromTown(t);
+        const item = buildPinDropTargetFromTown(t, dupTowns);
         if (item) pool.push(item);
       });
     }
@@ -392,8 +461,9 @@ function buildPinDropCandidatePool() {
   }
 
   if (typeof hasAnyPoiQuizActive === "function" && hasAnyPoiQuizActive() && typeof getActiveQuizPois === "function") {
+    const dupPois = getDuplicatePoiNameSet();
     getActiveQuizPois().forEach((p) => {
-      const item = buildPinDropTargetFromPoi(p);
+      const item = buildPinDropTargetFromPoi(p, dupPois);
       if (item) pool.push(item);
     });
   }
@@ -483,6 +553,61 @@ function renderPinDropPreviewPin(lat, lng) {
   return pinPreviewMarker;
 }
 
+function ensurePinDropHistoryLayerGroup() {
+  if (typeof map === "undefined" || !map || typeof L === "undefined") return null;
+  if (!pinDropHistoryLayerGroup) {
+    pinDropHistoryLayerGroup = L.layerGroup().addTo(map);
+  } else if (typeof map.hasLayer === "function" && !map.hasLayer(pinDropHistoryLayerGroup)) {
+    pinDropHistoryLayerGroup.addTo(map);
+  }
+  return pinDropHistoryLayerGroup;
+}
+
+function clearPinDropHistoryLayers() {
+  if (pinDropHistoryLayerGroup && typeof pinDropHistoryLayerGroup.clearLayers === "function") {
+    pinDropHistoryLayerGroup.clearLayers();
+  }
+}
+
+function renderPinDropGuessedHistoryMarkers() {
+  clearPinDropHistoryLayers();
+  if (
+    typeof state === "undefined" ||
+    state.playMode !== "pin_drop" ||
+    state.pinDropHideGuessed !== false ||
+    !state.pinDrop ||
+    !Array.isArray(state.pinDrop.history)
+  ) {
+    return;
+  }
+  const group = ensurePinDropHistoryLayerGroup();
+  if (!group || typeof L === "undefined") return;
+  const curTargetId =
+    state.pinDrop.phase === "revealed" && state.pinDrop.currentTarget
+      ? state.pinDrop.currentTarget.id
+      : null;
+  state.pinDrop.history.forEach((rec) => {
+    if (!rec || (rec.kind !== "poi" && rec.kind !== "station")) return;
+    if (curTargetId && rec.targetId === curTargetId) return;
+    if (!Number.isFinite(rec.nearestLat) || !Number.isFinite(rec.nearestLng)) return;
+    const dot = document.createElement("div");
+    dot.className = "w-2.5 h-2.5 rounded-full bg-sky-400/80 border border-sky-200 shadow";
+    dot.title = rec.title || "";
+    const icon = L.divIcon({
+      className: "pindrop-history-dot-wrapper",
+      html: dot,
+      iconSize: [10, 10],
+      iconAnchor: [5, 5]
+    });
+    L.marker([rec.nearestLat, rec.nearestLng], {
+      icon,
+      interactive: false,
+      keyboard: false,
+      zIndexOffset: 900
+    }).addTo(group);
+  });
+}
+
 function isPinDropTargetPolygon(townObj) {
   if (
     typeof state === "undefined" ||
@@ -502,6 +627,125 @@ function isPinDropTargetPolygon(townObj) {
     return townObj.countyName === target.rawId;
   }
   return false;
+}
+
+function isPinDropGuessedPolygon(townObj) {
+  if (
+    typeof state === "undefined" ||
+    state.playMode !== "pin_drop" ||
+    state.pinDropHideGuessed !== false ||
+    !state.pinDrop ||
+    !Array.isArray(state.pinDrop.history) ||
+    !townObj
+  ) {
+    return false;
+  }
+  const curTargetId =
+    state.pinDrop.phase === "revealed" && state.pinDrop.currentTarget
+      ? state.pinDrop.currentTarget.id
+      : null;
+  for (let i = 0; i < state.pinDrop.history.length; i++) {
+    const rec = state.pinDrop.history[i];
+    if (!rec || (curTargetId && rec.targetId === curTargetId)) continue;
+    if (rec.kind === "town" && rec.rawId === townObj.id) return true;
+    if (rec.kind === "county" && rec.rawId === townObj.countyName) return true;
+  }
+  return false;
+}
+
+function renderPinDropTargetOutlinePreview(target) {
+  const host = document.getElementById("pindrop-target-outline-preview");
+  if (!host) return false;
+  const shouldShow = Boolean(
+    typeof state !== "undefined" &&
+      state.playMode === "pin_drop" &&
+      state.pinDropShowTargetOutline !== false &&
+      target &&
+      (target.kind === "town" || target.kind === "county") &&
+      target.ref &&
+      target.ref.geojsonGeometry
+  );
+  if (!shouldShow) {
+    host.classList.add("hidden");
+    host.replaceChildren();
+    return false;
+  }
+  const rings = collectGeoJsonRings(target.ref.geojsonGeometry, []);
+  if (!rings.length) {
+    host.classList.add("hidden");
+    host.replaceChildren();
+    return false;
+  }
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  let latSum = 0, latCnt = 0;
+  for (let r = 0; r < rings.length; r++) {
+    const ring = rings[r];
+    for (let i = 0; i < ring.length; i++) {
+      const x = Number(ring[i][0]);
+      const y = Number(ring[i][1]);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      latSum += y;
+      latCnt++;
+    }
+  }
+  if (latCnt === 0) {
+    host.classList.add("hidden");
+    host.replaceChildren();
+    return false;
+  }
+  const cosLat = Math.cos(((latSum / latCnt) * Math.PI) / 180);
+  for (let r = 0; r < rings.length; r++) {
+    const ring = rings[r];
+    for (let i = 0; i < ring.length; i++) {
+      const px = Number(ring[i][0]) * cosLat;
+      const py = Number(ring[i][1]);
+      if (!Number.isFinite(px) || !Number.isFinite(py)) continue;
+      if (px < minX) minX = px;
+      if (px > maxX) maxX = px;
+      if (py < minY) minY = py;
+      if (py > maxY) maxY = py;
+    }
+  }
+  const spanX = Math.max(1e-6, maxX - minX);
+  const spanY = Math.max(1e-6, maxY - minY);
+  const pad = 4;
+  const box = 48;
+  const scale = (box - pad * 2) / Math.max(spanX, spanY);
+  const offX = (box - spanX * scale) / 2;
+  const offY = (box - spanY * scale) / 2;
+  const pathParts = [];
+  for (let r = 0; r < rings.length; r++) {
+    const ring = rings[r];
+    if (ring.length < 3) continue;
+    let seg = "";
+    for (let i = 0; i < ring.length; i++) {
+      const sx = offX + (Number(ring[i][0]) * cosLat - minX) * scale;
+      const sy = box - (offY + (Number(ring[i][1]) - minY) * scale);
+      if (!Number.isFinite(sx) || !Number.isFinite(sy)) continue;
+      seg += `${i === 0 ? "M" : "L"}${sx.toFixed(1)},${sy.toFixed(1)}`;
+    }
+    if (seg) pathParts.push(`${seg}Z`);
+  }
+  if (!pathParts.length) {
+    host.classList.add("hidden");
+    host.replaceChildren();
+    return false;
+  }
+  const svgNS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${box} ${box}`);
+  svg.setAttribute("class", "w-full h-full");
+  svg.setAttribute("aria-hidden", "true");
+  const pathEl = document.createElementNS(svgNS, "path");
+  pathEl.setAttribute("d", pathParts.join(" "));
+  pathEl.setAttribute("fill", "rgba(251, 191, 36, 0.22)");
+  pathEl.setAttribute("stroke", "#fcd34d");
+  pathEl.setAttribute("stroke-width", "1.6");
+  pathEl.setAttribute("stroke-linejoin", "round");
+  svg.appendChild(pathEl);
+  host.replaceChildren(svg);
+  host.classList.remove("hidden");
+  return true;
 }
 
 function renderPinDropRevealLayers(target, record) {
@@ -725,6 +969,7 @@ function ensurePinDropEnvironment() {
   if (typeof refreshPoiMapLayer === "function") {
     refreshPoiMapLayer();
   }
+  renderPinDropGuessedHistoryMarkers();
   if (typeof refreshAllPolygonStyles === "function") {
     refreshAllPolygonStyles();
   }
@@ -734,6 +979,8 @@ function restorePinDropEnvironment() {
   cancelPinDropAutoNext();
   if (typeof stopQuestionCountdown === "function") stopQuestionCountdown();
   clearPinDropLayers();
+  clearPinDropHistoryLayers();
+  document.getElementById("pindrop-target-outline-preview")?.classList.add("hidden");
   if (typeof state === "undefined") return;
 
   if (state.pinDrop) {
@@ -830,6 +1077,7 @@ function startPinDropGame() {
   const totalRounds = cfgRounds === 0 ? 0 : Math.min(Math.max(1, cfgRounds), Math.max(1, shuffled.length));
   const queue = totalRounds > 0 ? shuffled.slice(0, totalRounds) : shuffled;
 
+  clearPinDropHistoryLayers();
   state.pinDrop = {
     active: true,
     totalRounds,
@@ -1175,11 +1423,14 @@ function finishPinDropGame() {
     listEl.replaceChildren();
     const tpl = document.getElementById("tpl-pindrop-history-row");
     stats.history.forEach((item) => {
+      const isPolyItem = item.kind === "town" || item.kind === "county";
       const distLabel =
         item.distanceKm === null
           ? "⌛ 超時"
           : item.inside
-          ? "🎯 0.0 km (境內)"
+          ? isPolyItem
+            ? "🎯 0.0 km (境內)"
+            : `🎯 ${Number(item.distanceKm).toFixed(2)} km (精準)`
           : `${Number(item.distanceKm).toFixed(1)} km`;
       const scoreLabel =
         Number(item.speedBonus) > 0
@@ -1257,6 +1508,14 @@ function setPinDropLockBaseLayer(locked) {
   }
 }
 
+function setPinDropShowTargetOutline(visible) {
+  state.pinDropShowTargetOutline = Boolean(visible);
+  if (typeof syncConfigButtonsUI === "function") syncConfigButtonsUI();
+  if (state.playMode === "pin_drop") {
+    updatePinDropBannerAndDockUI();
+  }
+}
+
 function setPinDropShowBorders(visible) {
   const nextVal = Boolean(visible);
   state.pinDropShowBorders = nextVal;
@@ -1268,6 +1527,23 @@ function setPinDropShowBorders(visible) {
       state.showDistrictBorders = nextVal;
       if (typeof refreshAllPolygonStyles === "function") refreshAllPolygonStyles();
     }
+  }
+}
+
+function setPinDropHideGuessed(hidden) {
+  state.pinDropHideGuessed = Boolean(hidden);
+  if (typeof syncConfigButtonsUI === "function") syncConfigButtonsUI();
+  if (state.playMode === "pin_drop") {
+    renderPinDropGuessedHistoryMarkers();
+    if (typeof refreshAllPolygonStyles === "function") refreshAllPolygonStyles();
+  }
+}
+
+function setPinDropHideCounty(hidden) {
+  state.pinDropHideCounty = Boolean(hidden);
+  if (typeof syncConfigButtonsUI === "function") syncConfigButtonsUI();
+  if (state.playMode === "pin_drop") {
+    updatePinDropBannerAndDockUI();
   }
 }
 
@@ -1294,6 +1570,7 @@ function updatePinDropBannerAndDockUI() {
     if (pinBar) pinBar.classList.add("hidden");
     if (ansForm) ansForm.classList.remove("hidden");
     if (footerEl) footerEl.classList.remove("hidden");
+    renderPinDropTargetOutlinePreview(null);
     return;
   }
 
@@ -1323,8 +1600,9 @@ function updatePinDropBannerAndDockUI() {
     document.getElementById("btn-target-reveal-outline")?.classList.add("hidden");
     document.getElementById("btn-target-exit")?.classList.remove("hidden");
 
+    renderPinDropTargetOutlinePreview(target);
     if (titleEl) {
-      titleEl.textContent = target ? target.promptTitle : "📍 給地名標座標挑戰";
+      titleEl.textContent = target ? getPinDropDisplayPromptTitle(target) : "📍 給地名標座標挑戰";
     }
     if (badgeEl) {
       badgeEl.textContent = `${roundLabel} · 總分 ${(pd.totalScore || 0).toLocaleString()}`;
@@ -1366,11 +1644,14 @@ function updatePinDropBannerAndDockUI() {
         : "👆 點擊放預覽圖釘，或雙擊地圖直接送出";
     } else if (pd.phase === "revealed" && pd.lastReveal) {
       const r = pd.lastReveal;
+      const isPolyReveal = r.kind === "town" || r.kind === "county";
       const bonusTxt = Number(r.speedBonus) > 0 ? ` (⚡+${r.speedBonus.toLocaleString()})` : "";
       statusEl.textContent = r.distanceKm === null && r.timedOut
         ? `⌛ 搶答超時 · +0 分`
         : r.inside
-        ? `🎯 命中境內！0.0 km · +${r.score.toLocaleString()} 分${bonusTxt}`
+        ? isPolyReveal
+          ? `🎯 命中境內！0.0 km · +${r.score.toLocaleString()} 分${bonusTxt}`
+          : `🎯 精準命中！${Number(r.distanceKm).toFixed(2)} km · +${r.score.toLocaleString()} 分${bonusTxt}`
         : `📏 誤差 ${r.distanceKm.toFixed(1)} km · +${r.score.toLocaleString()} 分${bonusTxt}`;
     } else {
       statusEl.textContent = `🏁 挑戰結束 · 總分 ${(pd.totalScore || 0).toLocaleString()} 分`;
@@ -1488,7 +1769,12 @@ function renderPinDropDashboardUI() {
           if (rNum) rNum.textContent = `#${item.round}`;
           if (rTitle) rTitle.textContent = item.title;
           if (rDist) {
-            rDist.textContent = item.distanceKm === null ? "⌛ 超時" : item.inside ? "🎯 0.0 km" : `${Number(item.distanceKm).toFixed(1)} km`;
+            const isPolyItem = item.kind === "town" || item.kind === "county";
+            rDist.textContent = item.distanceKm === null
+              ? "⌛ 超時"
+              : item.inside
+              ? isPolyItem ? "🎯 0.0 km" : `🎯 ${Number(item.distanceKm).toFixed(2)} km`
+              : `${Number(item.distanceKm).toFixed(1)} km`;
           }
           if (rScore) {
             rScore.textContent = Number(item.speedBonus) > 0

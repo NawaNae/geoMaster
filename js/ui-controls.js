@@ -791,13 +791,21 @@ function syncConfigButtonsUI() {
   if (chkPinLockLayer) {
     chkPinLockLayer.checked = Boolean(state.pinDropLockBaseLayer);
   }
+  const chkPinTargetOutline = document.getElementById("chk-pindrop-show-target-outline");
+  if (chkPinTargetOutline) {
+    chkPinTargetOutline.checked = state.pinDropShowTargetOutline !== false;
+  }
   const chkPinBorders = document.getElementById("chk-pindrop-show-borders");
   if (chkPinBorders) {
     chkPinBorders.checked = Boolean(state.pinDropShowBorders);
   }
   const chkPinHide = document.getElementById("chk-pindrop-hide-guessed");
   if (chkPinHide) {
-    chkPinHide.checked = Boolean(state.hideGuessedOthers);
+    chkPinHide.checked = state.pinDropHideGuessed !== false;
+  }
+  const chkPinHideCounty = document.getElementById("chk-pindrop-hide-county");
+  if (chkPinHideCounty) {
+    chkPinHideCounty.checked = Boolean(state.pinDropHideCounty);
   }
   const chkPinRush = document.getElementById("chk-pindrop-countdown-rush");
   if (chkPinRush) {
@@ -2378,9 +2386,19 @@ function bindAllUIEvents() {
       setPinDropLockBaseLayer(e.target.checked);
     }
   });
+  document.getElementById("chk-pindrop-show-target-outline")?.addEventListener("change", (e) => {
+    if (typeof setPinDropShowTargetOutline === "function") {
+      setPinDropShowTargetOutline(e.target.checked);
+    }
+  });
   document.getElementById("chk-pindrop-show-borders")?.addEventListener("change", (e) => {
     if (typeof setPinDropShowBorders === "function") {
       setPinDropShowBorders(e.target.checked);
+    }
+  });
+  document.getElementById("chk-pindrop-hide-county")?.addEventListener("change", (e) => {
+    if (typeof setPinDropHideCounty === "function") {
+      setPinDropHideCounty(e.target.checked);
     }
   });
   document.getElementById("btn-pindrop-confirm")?.addEventListener("click", () => {
@@ -2438,7 +2456,9 @@ function bindAllUIEvents() {
     setHideGuessedOthers(e.target.checked);
   });
   document.getElementById("chk-pindrop-hide-guessed")?.addEventListener("change", (e) => {
-    setHideGuessedOthers(e.target.checked);
+    if (typeof setPinDropHideGuessed === "function") {
+      setPinDropHideGuessed(e.target.checked);
+    }
   });
   document.getElementById("chk-target-countdown-rush")?.addEventListener("change", (e) => {
     setQuestionCountdownEnabled(e.target.checked);

@@ -197,7 +197,7 @@ function check(cond, label) {
 // 1. DEFAULT STATES: Show blocks by default, countdown options, bonus default
 // =========================================================================
 check(sandbox.state.showDistrictBorders === true, "showDistrictBorders defaults to true");
-check(sandbox.state.pinDropShowBorders === true, "pinDropShowBorders defaults to true (預設都顯示區塊)");
+check(sandbox.state.pinDropShowBorders === false, "pinDropShowBorders defaults to false (預設關閉顯示所有區塊)");
 check(sandbox.state.questionCountdownEnabled === false, "questionCountdownEnabled defaults to false (選項)");
 check(sandbox.state.questionCountdownSec === 15, "questionCountdownSec defaults to 15s");
 check(sandbox.state.pinDropCountdownBonus === true, "pinDropCountdownBonus defaults to true (選項, 預設)");

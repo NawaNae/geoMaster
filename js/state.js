@@ -128,7 +128,10 @@ const state = {
   pinDropRounds: 10,          // 5 | 10 | 20 | 0 (0 = endless)
   pinDropBaseLayer: "satellite", // 'satellite' | 'terrain' | 'vector'
   pinDropLockBaseLayer: false,
-  pinDropShowBorders: true,   // 預設都顯示區塊（可手動關閉進入無界挑戰）
+  pinDropShowTargetOutline: true, // 預設開啟：只顯示目前要猜目標的形狀輪廓（不含座標位置）
+  pinDropShowBorders: false,  // 預設關閉：不顯示所有行政區區塊邊界
+  pinDropHideGuessed: true,   // 預設開啟：隱藏先前已猜過的地區與地標
+  pinDropHideCounty: false,   // 困難模式：隱藏縣市只顯示鄉鎮市區（重名自動指定縣市）
   pinDropSavedBaseLayer: null,
   pinDropSavedDistrictBorders: null,
   pinDrop: {

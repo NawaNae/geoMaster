@@ -230,6 +230,7 @@
           <div class="flex flex-col gap-1.5">
             <div class="flex items-start gap-2 min-w-0">
               <span class="w-2.5 h-2.5 rounded-full bg-amber-400 shrink-0 mt-1"></span>
+              <div id="pindrop-target-outline-preview" class="hidden shrink-0 w-12 h-12 rounded-xl bg-slate-950/85 border border-amber-400/45 flex items-center justify-center p-1 shadow-inner" title="目前題目形狀輪廓（不含座標位置）"></div>
               <div class="min-w-0 flex-1">
                 <div class="text-xs font-bold text-amber-300 uppercase tracking-wider flex flex-wrap items-center gap-1.5">
                   <span id="target-banner-title" class="whitespace-nowrap">指定區塊挑戰</span>
@@ -939,13 +940,21 @@
                     <input id="chk-pindrop-lock-layer" type="checkbox" class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-rose-500 accent-rose-400 cursor-pointer" />
                     <span class="font-bold text-rose-200">🔒 鎖定底圖</span>
                   </label>
-                  <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="預設顯示行政區區塊邊界，取消勾選可隱藏區界增加挑戰難度">
-                    <input id="chk-pindrop-show-borders" type="checkbox" checked class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-amber-500 accent-amber-400 cursor-pointer" />
-                    <span class="font-bold text-amber-200">📐 顯示區塊</span>
+                  <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="預設開啟：只顯示目前要猜目標的形狀輪廓（不含地圖座標位置）">
+                    <input id="chk-pindrop-show-target-outline" type="checkbox" checked class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-cyan-500 accent-cyan-400 cursor-pointer" />
+                    <span class="font-bold text-cyan-200">🧭 顯示目標輪廓</span>
                   </label>
-                  <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="開啟後隱藏其他已猜過的地區，無法利用已猜過區域推估位置（更難）">
-                    <input id="chk-pindrop-hide-guessed" type="checkbox" class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-purple-500 accent-purple-400 cursor-pointer" />
+                  <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="預設關閉：勾選後顯示所有行政區區塊邊界">
+                    <input id="chk-pindrop-show-borders" type="checkbox" class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-amber-500 accent-amber-400 cursor-pointer" />
+                    <span class="font-bold text-amber-200">📐 顯示區塊（所有）</span>
+                  </label>
+                  <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="預設開啟：隱藏其他已猜過的地區與地標；取消勾選可保留已猜標記">
+                    <input id="chk-pindrop-hide-guessed" type="checkbox" checked class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-purple-500 accent-purple-400 cursor-pointer" />
                     <span class="font-bold text-purple-200">🙈 隱藏已猜地區</span>
+                  </label>
+                  <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="困難模式：關閉縣市名稱、只顯示鄉鎮市區；若重名（如中正區、東區）會自動指定縣市">
+                    <input id="chk-pindrop-hide-county" type="checkbox" class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-fuchsia-500 accent-fuchsia-400 cursor-pointer" />
+                    <span class="font-bold text-fuchsia-200">🔥 隱藏縣市（困難）</span>
                   </label>
                   <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="開啟後每題限時倒數搶答，時間到自動送出預覽圖釘或記為超時 0 分">
                     <input id="chk-pindrop-countdown-rush" type="checkbox" class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-emerald-500 accent-emerald-400 cursor-pointer" />

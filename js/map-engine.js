@@ -1394,6 +1394,11 @@ function lockMapViewportToBounds(bounds, options = {}) {
   if (typeof map.setMaxBounds === "function") {
     map.setMaxBounds(padded);
   }
+  if (map.options) {
+    // Eliminate mobile pinch-zoom rubber-band peeking below minZoom & elastic drag peeking past maxBounds
+    map.options.bounceAtZoomLimits = false;
+    map.options.maxBoundsViscosity = 1.0;
+  }
 
   const mv = _mapActivePackView();
   const packMinFloor = Number.isFinite(mv.minZoom) ? Math.max(2, mv.minZoom) : 7;
@@ -1442,6 +1447,10 @@ function unlockMapViewportToPack(options = {}) {
   if (map) {
     if (typeof map.setMaxBounds === "function") {
       map.setMaxBounds(maxB || null);
+    }
+    if (map.options) {
+      map.options.bounceAtZoomLimits = true;
+      map.options.maxBoundsViscosity = maxB ? 0.9 : 0.0;
     }
     if (typeof map.setMinZoom === "function") {
       map.setMinZoom(minZ);
@@ -2123,6 +2132,15 @@ function computePolygonStyle(townObj) {
         fillOpacity: 0.48
       };
     }
+    if (typeof isPinDropGuessedPolygon === "function" && isPinDropGuessedPolygon(townObj)) {
+      return {
+        stroke: true,
+        color: "#7dd3fc",
+        weight: 1.5,
+        fillColor: "#38bdf8",
+        fillOpacity: 0.24
+      };
+    }
     const isTile = state.mapLayer !== "vector";
     if (!state.showDistrictBorders && !isTile) {
       // Seal sub-pixel HTML5 Canvas seams between adjacent townships with matching stroke+fill so zero district shapes leak at any zoom
@@ -2346,6 +2364,17 @@ function computeHotspotStyle(item) {
         fillColor: "#10b981",
         fillOpacity: 0.92,
         radius: baseRadius + 2
+      };
+    }
+    if (typeof isPinDropGuessedPolygon === "function" && isPinDropGuessedPolygon(item)) {
+      return {
+        stroke: true,
+        color: "#bae6fd",
+        weight: 1.5,
+        opacity: 0.85,
+        fillColor: "#38bdf8",
+        fillOpacity: 0.55,
+        radius: Math.max(4, baseRadius)
       };
     }
     if (!state.showDistrictBorders) {
