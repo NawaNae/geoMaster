@@ -3443,7 +3443,7 @@ function updateOpponentUI() {
     const isTw = _p2pIsTwModern();
     const stationMacroKeys = new Set(["台鐵", "高鐵", "捷運", "輕軌", "纜車", "林鐵", "糖鐵"]);
     const poiMacroKeys = new Set(["機場", "港口", "水庫", "湖泊", "傳統聚落"]);
-    const capMacroKeys = new Set(["首都", "省會", "首都／省會"]);
+    const capMacroKeys = new Set(["首都", "省會", "縣廳", "首都／省會", "省會／縣廳", "縣廳／省會"]);
     const mp = state.opponent.macroProgress || {};
     const macroKeys = Object.keys(mp).filter((k) => {
       if (stationMacroKeys.has(k) && !features.supportsTransportQuiz) return false;

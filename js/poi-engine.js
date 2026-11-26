@@ -277,9 +277,10 @@ const EXACT_TOWN_BASE_NAMES = new Set(
 function buildPoiMatchKeys(poi, allowBareStem, requireSuffix = false) {
   const keys = new Set();
   if (poi && poi.category === "capital") {
+    const minLen = poi.allowSingleChar ? 1 : 2;
     const addCapKey = (s) => {
       const n = normalizeCapitalText(s);
-      if (n && n.length >= 2) keys.add(n);
+      if (n && n.length >= minLen) keys.add(n);
     };
     addCapKey(poi.name);
     addCapKey(poi.shortName);
@@ -289,8 +290,8 @@ function buildPoiMatchKeys(poi, allowBareStem, requireSuffix = false) {
     const normName = normalizeCapitalText(poi.name);
     if (normName.endsWith("市") || normName.endsWith("城")) {
       const stem = normName.slice(0, -1);
-      if (stem.length >= 2) keys.add(stem);
-    } else if (Array.isArray(poi.subTypes) && poi.subTypes.includes("prov_capital")) {
+      if (stem.length >= minLen) keys.add(stem);
+    } else if (Array.isArray(poi.subTypes) && (poi.subTypes.includes("prov_capital") || poi.subTypes.includes("pref_capital"))) {
       keys.add(`${normName}市`);
     }
     return keys;
@@ -387,9 +388,10 @@ function matchSinglePoi(poi, normInput, allowBareStem, requireSuffix = false, no
 function isActiveCapitalInput(rawInput) {
   if (!isPoiCategoryActive("capital")) return false;
   const normCap = normalizeCapitalText(rawInput);
-  if (!normCap || normCap.length < 2) return false;
+  if (!normCap || normCap.length < 1) return false;
   const activeCaps = getActiveQuizPois("capital");
   for (let i = 0; i < activeCaps.length; i++) {
+    if (normCap.length < 2 && !activeCaps[i].allowSingleChar) continue;
     if (matchSinglePoi(activeCaps[i], normCap, true, false, normCap)) return true;
   }
   return false;
@@ -403,7 +405,8 @@ function tryMatchAndUnlockPoi(rawInput, isAutoCheck = false) {
 
   const normInput = normalizePoiText(rawInput);
   const normCapInput = normalizeCapitalText(rawInput);
-  if ((!normInput || normInput.length < 2) && (!normCapInput || normCapInput.length < 2)) {
+  const allowShortCap = normCapInput && normCapInput.length === 1 && isActiveCapitalInput(rawInput);
+  if ((!normInput || normInput.length < 2) && (!normCapInput || normCapInput.length < 2) && !allowShortCap) {
     return { matched: false };
   }
 

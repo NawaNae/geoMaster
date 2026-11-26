@@ -692,7 +692,7 @@ async function main() {
     await vm.runInContext(`switchActiveMapPack("jp_pref")`, sandbox);
     check(!elements["difficulty-selector-card"].classList.contains("hidden"), "5.MinimalistUI", "#difficulty-selector-card visible on jp_pref");
     check(elements["difficulty-buttons-grid"].className.includes("grid-cols-2"), "5.MinimalistUI", "jp_pref difficulty grid uses 2 columns");
-    check(elements["topic-selector-card"].classList.contains("hidden"), "5.MinimalistUI", "#topic-selector-card hidden on jp_pref");
+    check(!elements["topic-selector-card"].classList.contains("hidden"), "5.MinimalistUI", "#topic-selector-card visible on jp_pref (supports prefectural capital quiz)");
     check(elements["pack-options-bar"].classList.contains("hidden"), "5.MinimalistUI", "#pack-options-bar hidden on jp_pref");
 
     // 3. On cn_prov:

@@ -374,7 +374,10 @@ function buildCompositeMapPack(rawPackIds) {
       supportsTransportQuiz: memberIds.includes("tw_modern"),
       supportsPoiQuiz: memberIds.includes("tw_modern"),
       supportsCapitalQuiz: members.some((m) => Boolean(m.features && m.features.supportsCapitalQuiz)),
-      capitalLabel: (members.find((m) => m.features && m.features.capitalLabel)?.features.capitalLabel) || "",
+      capitalLabel: (() => {
+        const lbls = [...new Set(members.map((m) => m.features && m.features.capitalLabel).filter(Boolean))];
+        return lbls.length > 1 ? lbls.join("／") : (lbls[0] || "");
+      })(),
       supportsMasterHierarchy: false,
       supportsSuffixDifficulty: true,
       supportsHistoricalBasemap: memberIds.includes("roc_1949"),
@@ -1100,6 +1103,8 @@ const BUILT_IN_LAZY_MAP_PACK_STUBS = [
     features: {
       supportsTransportQuiz: false,
       supportsPoiQuiz: false,
+      supportsCapitalQuiz: true,
+      capitalLabel: "縣廳",
       supportsMasterHierarchy: false,
       supportsSuffixDifficulty: true,
       quickSuffixes: ["都", "道", "府", "縣"],

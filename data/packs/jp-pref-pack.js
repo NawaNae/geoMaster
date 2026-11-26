@@ -1529,6 +1529,8 @@
     features: {
       supportsTransportQuiz: false,
       supportsPoiQuiz: false,
+      supportsCapitalQuiz: true,
+      capitalLabel: "縣廳",
       supportsMasterHierarchy: false,
       supportsSuffixDifficulty: true,
       quickSuffixes: ["都", "道", "府", "縣"],

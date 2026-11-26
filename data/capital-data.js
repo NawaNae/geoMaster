@@ -1,17 +1,997 @@
 // ================================================================
-// CAPITAL POI DATA — China, ROC 1949 & World Capitals
+// CAPITAL POI DATA — Japan, China, ROC 1949 & World Capitals
 // ================================================================
 // Modular, file:// compatible. Loaded after data/poi-data.js.
+// - jp_pref: 47 prefectural capitals (縣廳所在地／縣治)
 // - cn_prov: 27 provincial capitals & autonomous region capitals
 // - roc_1949: 38 provincial / area / SAR capitals (1949 announced territory)
 // - world_countries: 196 national capitals (respects worldIncludeMicrostates)
 
 const CAPITAL_SUBTYPES = [
+  { id: "pref_capital", label: "縣廳所在地", shortLabel: "縣廳", icon: "🏛️", tier: "simple", isDefault: true },
   { id: "prov_capital", label: "省會／首府", shortLabel: "省會", icon: "🏛️", tier: "simple", isDefault: true },
   { id: "national_capital", label: "國家首都", shortLabel: "首都", icon: "🏛️", tier: "simple", isDefault: true }
 ];
 
 const CAPITAL_POI_DATA = [
+  {
+    "id": "cap_jp_pref_jp_01",
+    "packId": "jp_pref",
+    "parentItemId": "jp_01",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "札幌",
+    "shortName": "札幌",
+    "countyName": "北海道",
+    "townName": "北海道",
+    "lat": 43.0642,
+    "lng": 141.3469,
+    "aliases": [
+      "札幌市",
+      "さっぽろ",
+      "さっぽろし",
+      "Sapporo"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_02",
+    "packId": "jp_pref",
+    "parentItemId": "jp_02",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "青森",
+    "shortName": "青森",
+    "countyName": "東北",
+    "townName": "青森縣",
+    "lat": 40.8244,
+    "lng": 140.74,
+    "aliases": [
+      "青森市",
+      "あおもり",
+      "Aomori"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_03",
+    "packId": "jp_pref",
+    "parentItemId": "jp_03",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "盛岡",
+    "shortName": "盛岡",
+    "countyName": "東北",
+    "townName": "岩手縣",
+    "lat": 39.7036,
+    "lng": 141.1527,
+    "aliases": [
+      "盛岡市",
+      "もりおか",
+      "Morioka"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_04",
+    "packId": "jp_pref",
+    "parentItemId": "jp_04",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "仙台",
+    "shortName": "仙台",
+    "countyName": "東北",
+    "townName": "宮城縣",
+    "lat": 38.2688,
+    "lng": 140.8721,
+    "aliases": [
+      "仙台市",
+      "せんだい",
+      "Sendai"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_05",
+    "packId": "jp_pref",
+    "parentItemId": "jp_05",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "秋田",
+    "shortName": "秋田",
+    "countyName": "東北",
+    "townName": "秋田縣",
+    "lat": 39.7186,
+    "lng": 140.1024,
+    "aliases": [
+      "秋田市",
+      "あきた",
+      "Akita"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_06",
+    "packId": "jp_pref",
+    "parentItemId": "jp_06",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "山形",
+    "shortName": "山形",
+    "countyName": "東北",
+    "townName": "山形縣",
+    "lat": 38.2404,
+    "lng": 140.3633,
+    "aliases": [
+      "山形市",
+      "やまがた",
+      "Yamagata"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_07",
+    "packId": "jp_pref",
+    "parentItemId": "jp_07",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "福島",
+    "shortName": "福島",
+    "countyName": "東北",
+    "townName": "福島縣",
+    "lat": 37.7503,
+    "lng": 140.4676,
+    "aliases": [
+      "福島市",
+      "ふくしま",
+      "Fukushima"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_08",
+    "packId": "jp_pref",
+    "parentItemId": "jp_08",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "水戶",
+    "shortName": "水戶",
+    "countyName": "關東",
+    "townName": "茨城縣",
+    "lat": 36.3418,
+    "lng": 140.4468,
+    "aliases": [
+      "水戶市",
+      "水戸",
+      "水戸市",
+      "みと",
+      "Mito"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_09",
+    "packId": "jp_pref",
+    "parentItemId": "jp_09",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "宇都宮",
+    "shortName": "宇都宮",
+    "countyName": "關東",
+    "townName": "栃木縣",
+    "lat": 36.5657,
+    "lng": 139.8836,
+    "aliases": [
+      "宇都宮市",
+      "うつのみや",
+      "Utsunomiya"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_10",
+    "packId": "jp_pref",
+    "parentItemId": "jp_10",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "前橋",
+    "shortName": "前橋",
+    "countyName": "關東",
+    "townName": "群馬縣",
+    "lat": 36.3911,
+    "lng": 139.0608,
+    "aliases": [
+      "前橋市",
+      "まえばし",
+      "Maebashi"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_11",
+    "packId": "jp_pref",
+    "parentItemId": "jp_11",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "埼玉",
+    "shortName": "埼玉",
+    "countyName": "關東",
+    "townName": "埼玉縣",
+    "lat": 35.8569,
+    "lng": 139.6489,
+    "aliases": [
+      "埼玉市",
+      "さいたま",
+      "さいたま市",
+      "Saitama"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_12",
+    "packId": "jp_pref",
+    "parentItemId": "jp_12",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "千葉",
+    "shortName": "千葉",
+    "countyName": "關東",
+    "townName": "千葉縣",
+    "lat": 35.6047,
+    "lng": 140.1233,
+    "aliases": [
+      "千葉市",
+      "ちば",
+      "Chiba"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_13",
+    "packId": "jp_pref",
+    "parentItemId": "jp_13",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "新宿",
+    "shortName": "新宿",
+    "countyName": "關東",
+    "townName": "東京都",
+    "lat": 35.6895,
+    "lng": 139.6917,
+    "aliases": [
+      "新宿區",
+      "新宿区",
+      "しんじゅく",
+      "東京",
+      "东京",
+      "とうきょう",
+      "Shinjuku",
+      "Tokyo"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_14",
+    "packId": "jp_pref",
+    "parentItemId": "jp_14",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "橫濱",
+    "shortName": "橫濱",
+    "countyName": "關東",
+    "townName": "神奈川縣",
+    "lat": 35.4478,
+    "lng": 139.6425,
+    "aliases": [
+      "橫濱市",
+      "横浜",
+      "横浜市",
+      "横滨",
+      "横滨市",
+      "よこはま",
+      "Yokohama"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_15",
+    "packId": "jp_pref",
+    "parentItemId": "jp_15",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "新潟",
+    "shortName": "新潟",
+    "countyName": "中部",
+    "townName": "新潟縣",
+    "lat": 37.9026,
+    "lng": 139.0236,
+    "aliases": [
+      "新潟市",
+      "新瀉",
+      "にいがた",
+      "Niigata"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_16",
+    "packId": "jp_pref",
+    "parentItemId": "jp_16",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "富山",
+    "shortName": "富山",
+    "countyName": "中部",
+    "townName": "富山縣",
+    "lat": 36.6953,
+    "lng": 137.2113,
+    "aliases": [
+      "富山市",
+      "とやま",
+      "Toyama"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_17",
+    "packId": "jp_pref",
+    "parentItemId": "jp_17",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "金澤",
+    "shortName": "金澤",
+    "countyName": "中部",
+    "townName": "石川縣",
+    "lat": 36.5947,
+    "lng": 136.6256,
+    "aliases": [
+      "金澤市",
+      "金沢",
+      "金沢市",
+      "かなざわ",
+      "Kanazawa"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_18",
+    "packId": "jp_pref",
+    "parentItemId": "jp_18",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "福井",
+    "shortName": "福井",
+    "countyName": "中部",
+    "townName": "福井縣",
+    "lat": 36.0652,
+    "lng": 136.2216,
+    "aliases": [
+      "福井市",
+      "ふくい",
+      "Fukui"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_19",
+    "packId": "jp_pref",
+    "parentItemId": "jp_19",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "甲府",
+    "shortName": "甲府",
+    "countyName": "中部",
+    "townName": "山梨縣",
+    "lat": 35.6642,
+    "lng": 138.5684,
+    "aliases": [
+      "甲府市",
+      "こうふ",
+      "Kofu",
+      "Kōfu"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_20",
+    "packId": "jp_pref",
+    "parentItemId": "jp_20",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "長野",
+    "shortName": "長野",
+    "countyName": "中部",
+    "townName": "長野縣",
+    "lat": 36.6513,
+    "lng": 138.181,
+    "aliases": [
+      "長野市",
+      "ながの",
+      "Nagano"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_21",
+    "packId": "jp_pref",
+    "parentItemId": "jp_21",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "岐阜",
+    "shortName": "岐阜",
+    "countyName": "中部",
+    "townName": "岐阜縣",
+    "lat": 35.3912,
+    "lng": 136.7223,
+    "aliases": [
+      "岐阜市",
+      "ぎふ",
+      "Gifu"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_22",
+    "packId": "jp_pref",
+    "parentItemId": "jp_22",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "靜岡",
+    "shortName": "靜岡",
+    "countyName": "中部",
+    "townName": "靜岡縣",
+    "lat": 34.9769,
+    "lng": 138.3831,
+    "aliases": [
+      "靜岡市",
+      "静岡",
+      "静岡市",
+      "しずおか",
+      "Shizuoka"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_23",
+    "packId": "jp_pref",
+    "parentItemId": "jp_23",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "名古屋",
+    "shortName": "名古屋",
+    "countyName": "中部",
+    "townName": "愛知縣",
+    "lat": 35.1802,
+    "lng": 136.9066,
+    "aliases": [
+      "名古屋市",
+      "なごや",
+      "Nagoya"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_24",
+    "packId": "jp_pref",
+    "parentItemId": "jp_24",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "津市",
+    "shortName": "津市",
+    "countyName": "近畿",
+    "townName": "三重縣",
+    "lat": 34.7303,
+    "lng": 136.5086,
+    "aliases": [
+      "津",
+      "つ",
+      "つし",
+      "Tsu",
+      "Tsu City"
+    ],
+    "allowSingleChar": true
+  },
+  {
+    "id": "cap_jp_pref_jp_25",
+    "packId": "jp_pref",
+    "parentItemId": "jp_25",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "大津",
+    "shortName": "大津",
+    "countyName": "近畿",
+    "townName": "滋賀縣",
+    "lat": 35.0045,
+    "lng": 135.8686,
+    "aliases": [
+      "大津市",
+      "おおつ",
+      "Otsu",
+      "Ōtsu"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_26",
+    "packId": "jp_pref",
+    "parentItemId": "jp_26",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "京都",
+    "shortName": "京都",
+    "countyName": "近畿",
+    "townName": "京都府",
+    "lat": 35.0211,
+    "lng": 135.7556,
+    "aliases": [
+      "京都市",
+      "きょうと",
+      "Kyoto",
+      "Kyōto"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_27",
+    "packId": "jp_pref",
+    "parentItemId": "jp_27",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "大阪",
+    "shortName": "大阪",
+    "countyName": "近畿",
+    "townName": "大阪府",
+    "lat": 34.6863,
+    "lng": 135.52,
+    "aliases": [
+      "大阪市",
+      "おおさか",
+      "Osaka",
+      "Ōsaka"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_28",
+    "packId": "jp_pref",
+    "parentItemId": "jp_28",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "神戶",
+    "shortName": "神戶",
+    "countyName": "近畿",
+    "townName": "兵庫縣",
+    "lat": 34.6913,
+    "lng": 135.183,
+    "aliases": [
+      "神戶市",
+      "神戸",
+      "神戸市",
+      "こうべ",
+      "Kobe",
+      "Kōbe"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_29",
+    "packId": "jp_pref",
+    "parentItemId": "jp_29",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "奈良",
+    "shortName": "奈良",
+    "countyName": "近畿",
+    "townName": "奈良縣",
+    "lat": 34.6851,
+    "lng": 135.8327,
+    "aliases": [
+      "奈良市",
+      "なら",
+      "Nara"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_30",
+    "packId": "jp_pref",
+    "parentItemId": "jp_30",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "和歌山",
+    "shortName": "和歌山",
+    "countyName": "近畿",
+    "townName": "和歌山縣",
+    "lat": 34.226,
+    "lng": 135.1675,
+    "aliases": [
+      "和歌山市",
+      "わかやま",
+      "Wakayama"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_31",
+    "packId": "jp_pref",
+    "parentItemId": "jp_31",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "鳥取",
+    "shortName": "鳥取",
+    "countyName": "中國地方",
+    "townName": "鳥取縣",
+    "lat": 35.5039,
+    "lng": 134.2377,
+    "aliases": [
+      "鳥取市",
+      "とっとり",
+      "Tottori"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_32",
+    "packId": "jp_pref",
+    "parentItemId": "jp_32",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "松江",
+    "shortName": "松江",
+    "countyName": "中國地方",
+    "townName": "島根縣",
+    "lat": 35.4723,
+    "lng": 133.0505,
+    "aliases": [
+      "松江市",
+      "まつえ",
+      "Matsue"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_33",
+    "packId": "jp_pref",
+    "parentItemId": "jp_33",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "岡山",
+    "shortName": "岡山",
+    "countyName": "中國地方",
+    "townName": "岡山縣",
+    "lat": 34.6618,
+    "lng": 133.9344,
+    "aliases": [
+      "岡山市",
+      "おかやま",
+      "Okayama"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_34",
+    "packId": "jp_pref",
+    "parentItemId": "jp_34",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "廣島",
+    "shortName": "廣島",
+    "countyName": "中國地方",
+    "townName": "廣島縣",
+    "lat": 34.3966,
+    "lng": 132.4596,
+    "aliases": [
+      "廣島市",
+      "広島",
+      "広島市",
+      "ひろしま",
+      "Hiroshima"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_35",
+    "packId": "jp_pref",
+    "parentItemId": "jp_35",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "山口",
+    "shortName": "山口",
+    "countyName": "中國地方",
+    "townName": "山口縣",
+    "lat": 34.1859,
+    "lng": 131.4706,
+    "aliases": [
+      "山口市",
+      "やまぐち",
+      "Yamaguchi"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_36",
+    "packId": "jp_pref",
+    "parentItemId": "jp_36",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "德島",
+    "shortName": "德島",
+    "countyName": "四國",
+    "townName": "德島縣",
+    "lat": 34.0658,
+    "lng": 134.5593,
+    "aliases": [
+      "德島市",
+      "徳島",
+      "徳島市",
+      "とくしま",
+      "Tokushima"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_37",
+    "packId": "jp_pref",
+    "parentItemId": "jp_37",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "高松",
+    "shortName": "高松",
+    "countyName": "四國",
+    "townName": "香川縣",
+    "lat": 34.3401,
+    "lng": 134.0434,
+    "aliases": [
+      "高松市",
+      "たかまつ",
+      "Takamatsu"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_38",
+    "packId": "jp_pref",
+    "parentItemId": "jp_38",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "松山",
+    "shortName": "松山",
+    "countyName": "四國",
+    "townName": "愛媛縣",
+    "lat": 33.8416,
+    "lng": 132.7657,
+    "aliases": [
+      "松山市",
+      "まつやま",
+      "Matsuyama"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_39",
+    "packId": "jp_pref",
+    "parentItemId": "jp_39",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "高知",
+    "shortName": "高知",
+    "countyName": "四國",
+    "townName": "高知縣",
+    "lat": 33.5597,
+    "lng": 133.5311,
+    "aliases": [
+      "高知市",
+      "こうち",
+      "Kochi",
+      "Kōchi"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_40",
+    "packId": "jp_pref",
+    "parentItemId": "jp_40",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "福岡",
+    "shortName": "福岡",
+    "countyName": "九州・沖繩",
+    "townName": "福岡縣",
+    "lat": 33.6064,
+    "lng": 130.4183,
+    "aliases": [
+      "福岡市",
+      "ふくおか",
+      "Fukuoka"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_41",
+    "packId": "jp_pref",
+    "parentItemId": "jp_41",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "佐賀",
+    "shortName": "佐賀",
+    "countyName": "九州・沖繩",
+    "townName": "佐賀縣",
+    "lat": 33.2494,
+    "lng": 130.2988,
+    "aliases": [
+      "佐賀市",
+      "さが",
+      "Saga"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_42",
+    "packId": "jp_pref",
+    "parentItemId": "jp_42",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "長崎",
+    "shortName": "長崎",
+    "countyName": "九州・沖繩",
+    "townName": "長崎縣",
+    "lat": 32.7448,
+    "lng": 129.8737,
+    "aliases": [
+      "長崎市",
+      "ながさき",
+      "Nagasaki"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_43",
+    "packId": "jp_pref",
+    "parentItemId": "jp_43",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "熊本",
+    "shortName": "熊本",
+    "countyName": "九州・沖繩",
+    "townName": "熊本縣",
+    "lat": 32.7898,
+    "lng": 130.7417,
+    "aliases": [
+      "熊本市",
+      "くまもと",
+      "Kumamoto"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_44",
+    "packId": "jp_pref",
+    "parentItemId": "jp_44",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "大分",
+    "shortName": "大分",
+    "countyName": "九州・沖繩",
+    "townName": "大分縣",
+    "lat": 33.2382,
+    "lng": 131.6126,
+    "aliases": [
+      "大分市",
+      "おおいた",
+      "Oita",
+      "Ōita"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_45",
+    "packId": "jp_pref",
+    "parentItemId": "jp_45",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "宮崎",
+    "shortName": "宮崎",
+    "countyName": "九州・沖繩",
+    "townName": "宮崎縣",
+    "lat": 31.9111,
+    "lng": 131.4239,
+    "aliases": [
+      "宮崎市",
+      "みやざき",
+      "Miyazaki"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_46",
+    "packId": "jp_pref",
+    "parentItemId": "jp_46",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "鹿兒島",
+    "shortName": "鹿兒島",
+    "countyName": "九州・沖繩",
+    "townName": "鹿兒島縣",
+    "lat": 31.5602,
+    "lng": 130.5581,
+    "aliases": [
+      "鹿兒島市",
+      "鹿児島",
+      "鹿児島市",
+      "かごしま",
+      "Kagoshima"
+    ]
+  },
+  {
+    "id": "cap_jp_pref_jp_47",
+    "packId": "jp_pref",
+    "parentItemId": "jp_47",
+    "category": "capital",
+    "subTypes": [
+      "pref_capital"
+    ],
+    "name": "那霸",
+    "shortName": "那霸",
+    "countyName": "九州・沖繩",
+    "townName": "沖繩縣",
+    "lat": 26.2124,
+    "lng": 127.6809,
+    "aliases": [
+      "那霸市",
+      "那覇",
+      "那覇市",
+      "なは",
+      "Naha"
+    ]
+  },
   {
     "id": "cap_cn_prov_cn_130000",
     "packId": "cn_prov",
@@ -5239,10 +6219,15 @@ function getCapitalTopicLabelForPack(pack) {
   if (!pack) return '首都／省會';
   if (pack.features && pack.features.capitalLabel) return pack.features.capitalLabel;
   if (pack.id === 'world_countries') return '首都';
+  if (pack.id === 'jp_pref') return '縣廳';
   if (pack.id === 'cn_prov' || pack.id === 'roc_1949') return '省會';
   if (Array.isArray(pack.memberPackIds)) {
     if (pack.memberPackIds.includes('world_countries')) return '首都';
-    if (pack.memberPackIds.includes('cn_prov') || pack.memberPackIds.includes('roc_1949')) return '省會';
+    const hasJp = pack.memberPackIds.includes('jp_pref');
+    const hasCn = pack.memberPackIds.includes('cn_prov') || pack.memberPackIds.includes('roc_1949');
+    if (hasJp && hasCn) return '省會／縣廳';
+    if (hasJp) return '縣廳';
+    if (hasCn) return '省會';
   }
   return '首都／省會';
 }

@@ -609,6 +609,8 @@ function applyActivePackFeatureGatingUI() {
     const tipText =
       pack && pack.id === "world_countries"
         ? "猜世界各國首都（點左單選純猜首都 / 點右複選搭配國家）"
+        : pack && pack.id === "jp_pref"
+        ? "猜日本 47 都道府縣廳所在地／縣治（點左單選 / 點右複選）"
         : pack && pack.id === "roc_1949"
         ? "猜中華民國1945各省省會與蒙藏特區首府（點左單選 / 點右複選）"
         : "猜中國各省省會與自治區首府（點左單選 / 點右複選）";

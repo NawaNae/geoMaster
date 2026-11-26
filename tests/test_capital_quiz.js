@@ -217,7 +217,8 @@ sandbox.renderSmartLabelsAndLeaderLines = () => {};
   // 1. DATASET INTEGRITY
   // =========================================================================
   const allCaps = sandbox.CAPITAL_POI_DATA;
-  check(Array.isArray(allCaps) && allCaps.length === 261, "1.Data", `Expected 261 capitals, got ${allCaps && allCaps.length}`);
+  check(Array.isArray(allCaps) && allCaps.length === 308, "1.Data", `Expected 308 capitals, got ${allCaps && allCaps.length}`);
+  check(sandbox.getCapitalPoisForPack("jp_pref").length === 47, "1.Data", "jp_pref has 47 prefectural capitals");
   check(sandbox.getCapitalPoisForPack("cn_prov").length === 27, "1.Data", "cn_prov has 27 provincial/AR capitals");
   check(sandbox.getCapitalPoisForPack("roc_1949").length === 38, "1.Data", "roc_1949 has 38 provincial/area/SAR capitals");
   check(sandbox.getCapitalPoisForPack("world_countries").length === 196, "1.Data", "world_countries has 196 national capitals");
@@ -419,12 +420,69 @@ sandbox.renderSmartLabelsAndLeaderLines = () => {};
   const q = sandbox.buildTargetQuizQueue(10);
   check(q.length === 10 && q.every((e) => e.kind === "poi" && e.id.startsWith("cap_world_countries_")), "5.Modes.TargetRandom", "Shuffled target pool contains 10 world capital POIs");
 
-  // P2P config snapshot & switching to unsupported pack (jp_pref) disables capitalQuizEnabled
+  // =========================================================================
+  // 5b. JAPAN 47 PREFECTURAL CAPITALS (jp_pref)
+  // =========================================================================
   const snap = sandbox.getHostSyncConfig();
-  check(snap.capitalQuizEnabled === true, "5.P2P", "buildRoomConfigSnapshot includes capitalQuizEnabled=true");
+  check(snap.capitalQuizEnabled === true, "5.P2P", "getHostSyncConfig includes capitalQuizEnabled=true");
+
   await sandbox.switchActiveMapPack("jp_pref", { skipPaintYield: true });
-  check(sandbox.state.capitalQuizEnabled === false, "5.Switch.JP", "Switching to jp_pref resets capitalQuizEnabled to false");
-  check(sandbox.state.regionQuizEnabled === true, "5.Switch.JP", "Switching to jp_pref restores regionQuizEnabled to true");
+  sandbox.applyActivePackFeatureGatingUI();
+  check(sandbox.getActivePackFeatures().supportsCapitalQuiz === true, "5b.JP", "jp_pref supportsCapitalQuiz is true");
+  check(!topicChips.capital.classList.contains("hidden"), "5b.JP", "capital chip visible on jp_pref");
+  check(topicChips.capital.querySelector(".capital-topic-label").textContent === "🏛️ 縣廳", "5b.JP", "capital chip labeled 🏛️ 縣廳 on jp_pref");
+
+  sandbox.state.playMode = "free";
+  sandbox.state.targetPoiId = null;
+  sandbox.state.regionQuizEnabled = false;
+  sandbox.state.capitalQuizEnabled = true;
+  sandbox.state.unlockedPois.clear();
+  check(sandbox.getActiveQuizPois("capital").length === 47, "5b.JP", "Active JP prefectural capital pool has 47 items");
+
+  const jpTests = [
+    ["札幌", "cap_jp_pref_jp_01"],
+    ["さっぽろ", "cap_jp_pref_jp_01"],
+    ["盛岡", "cap_jp_pref_jp_03"],
+    ["仙台", "cap_jp_pref_jp_04"],
+    ["水戸", "cap_jp_pref_jp_08"],
+    ["宇都宮", "cap_jp_pref_jp_09"],
+    ["新宿", "cap_jp_pref_jp_13"],
+    ["東京", "cap_jp_pref_jp_13"],
+    ["横浜", "cap_jp_pref_jp_14"],
+    ["橫濱市", "cap_jp_pref_jp_14"],
+    ["金沢", "cap_jp_pref_jp_17"],
+    ["名古屋", "cap_jp_pref_jp_23"],
+    ["津", "cap_jp_pref_jp_24"],
+    ["津市", "cap_jp_pref_jp_24"],
+    ["Tsu", "cap_jp_pref_jp_24"],
+    ["神戸", "cap_jp_pref_jp_28"],
+    ["那覇", "cap_jp_pref_jp_47"],
+    ["那霸", "cap_jp_pref_jp_47"]
+  ];
+  for (const [inp, expectedId] of jpTests) {
+    sandbox.state.unlockedPois.clear();
+    const res = sandbox.tryMatchAndUnlockPoi(inp, false);
+    check(res.matched && res.poi && res.poi.id === expectedId, "5b.JP.Match", `Input "${inp}" -> ${expectedId} (got ${res.poi && res.poi.id})`);
+  }
+
+  // Regional filter on 四國 (4 prefectural capitals: 德島/高松/松山/高知)
+  sandbox.state.regionQuizEnabled = true;
+  sandbox.state.filterStationsByRegion = true;
+  const shikokuIds = sandbox.getActiveItems().filter((it) => it.countyName === "四國").map((it) => it.id);
+  sandbox.state.selectedTownIds = new Set(shikokuIds);
+  sandbox.state.selectedCounties = new Set(["四國"]);
+  check(sandbox.getActiveQuizPois("capital").length === 4, "5b.JP.RegionFilter", `四國 should have 4 prefectural capitals, got ${sandbox.getActiveQuizPois("capital").length}`);
+
+  // Grading title on JP capital mode
+  sandbox.state.regionQuizEnabled = false;
+  sandbox.state.filterStationsByRegion = false;
+  const jpTheme = sandbox.detectPoiThemeProfile();
+  check(jpTheme && jpTheme.scopeLabel === "日本47縣廳所在地", "5b.JP.Grading", `Expected 日本47縣廳所在地, got ${jpTheme && jpTheme.scopeLabel}`);
+
+  // Switching to unsupported solo pack (tw_modern) resets capitalQuizEnabled to false
+  await sandbox.switchActiveMapPack("tw_modern", { skipPaintYield: true });
+  check(sandbox.state.capitalQuizEnabled === false, "5c.Switch.TW", "Switching to tw_modern resets capitalQuizEnabled to false");
+  check(sandbox.state.regionQuizEnabled === true, "5c.Switch.TW", "Switching to tw_modern restores regionQuizEnabled to true");
 
   // Security check: zero .innerHTML in data/capital-data.js or newly added lines
   const capSrc = fs.readFileSync(path.join(rootDir, "data/capital-data.js"), "utf8");
