@@ -891,16 +891,21 @@
         <div id="unified-settings-panel" class="space-y-2.5">
           <fieldset id="unified-settings-fieldset" class="space-y-2.5">
 
-            <!-- Section 1: 🗺️ 地圖 (Single clean row of 4 compact pack cards) -->
+            <!-- Section 1: 🗺️ 地圖 (Supports East Asia multi-pack combinations; World & CN/ROC mutually exclusive) -->
             <div id="mappack-selector-section" class="hidden p-2.5 sm:p-3 rounded-2xl bg-slate-900/90 border border-indigo-500/30">
-              <div class="flex items-center justify-between gap-2 mb-2">
-                <label class="text-xs font-extrabold text-indigo-300">🗺️ 地圖</label>
+              <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <label class="text-xs font-extrabold text-indigo-300">🗺️ 地圖</label>
+                  <button id="mappack-combo-twjpcn" type="button" class="px-2 py-0.5 rounded-lg text-[10px] font-bold border border-slate-700 bg-slate-950/80 hover:bg-slate-800 text-slate-300 transition" data-tip="同時啟動現代臺灣 368 區 ＋ 日本 47 都道府縣 ＋ 中國 33 省級區（共 448 區）">🇹🇼🇯🇵🇨🇳 台日中</button>
+                  <button id="mappack-combo-twjproc" type="button" class="px-2 py-0.5 rounded-lg text-[10px] font-bold border border-slate-700 bg-slate-950/80 hover:bg-slate-800 text-slate-300 transition" data-tip="同時啟動現代臺灣 368 區 ＋ 日本 47 都道府縣 ＋ 中華民國1945（共 464 區，自動取代重複臺灣省）">🇹🇼🇯🇵🇹🇼 台日民國</button>
+                  <span class="text-[10px] text-slate-400">點右側 + 可複選（世界互斥 · 中與民國互斥）</span>
+                </div>
                 <div id="mappack-loading-status" role="status" aria-live="polite" class="hidden inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-sky-500/15 border border-sky-400/40 text-[11px] font-bold text-sky-200">
                   <span class="mappack-spinner" aria-hidden="true"></span>
                   <span id="mappack-loading-text">切換地圖中…</span>
                 </div>
               </div>
-              <div id="mappack-selector-grid" class="grid grid-cols-2 sm:grid-cols-4 gap-2"></div>
+              <div id="mappack-selector-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2"></div>
             </div>
 
             <!-- Section 2: 🎯 玩法與計時 (Contextual sub-panels only appear when relevant!) -->

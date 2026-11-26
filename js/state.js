@@ -89,6 +89,7 @@ const TAB_INSTANCE_ID = getOrCreateTabInstanceId(STABLE_DEVICE_ID);
 
 const state = {
   activeMapPackId: typeof DEFAULT_MAP_PACK_ID !== "undefined" ? DEFAULT_MAP_PACK_ID : "tw_modern",
+  activeMapPackIds: [typeof DEFAULT_MAP_PACK_ID !== "undefined" ? DEFAULT_MAP_PACK_ID : "tw_modern"],
   packOptions: {
     worldIncludeMicrostates: true,
     cnAllowSingleCharAlias: false,

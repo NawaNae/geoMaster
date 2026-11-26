@@ -8,6 +8,508 @@ window.GEOMASTER_PACKS = window.GEOMASTER_PACKS || {};
 
 const DEFAULT_MAP_PACK_ID = "tw_modern";
 
+const MULTI_PACK_CANONICAL_ORDER = [
+  "tw_modern",
+  "jp_pref",
+  "cn_prov",
+  "roc_1949",
+  "world_countries"
+];
+const MULTI_PACK_COMBINABLE_IDS = new Set(["tw_modern", "jp_pref", "cn_prov", "roc_1949"]);
+const MULTI_PACK_EXCLUSIVE_SOLO_IDS = new Set(["world_countries"]);
+const MULTI_PACK_CONFLICT_PAIRS = [["cn_prov", "roc_1949"]];
+const MULTI_PACK_DISAMBIG_PREFIX = {
+  tw_modern: "臺灣",
+  jp_pref: "日本",
+  cn_prov: "中國",
+  roc_1949: "民國"
+};
+const _compositePackCache = new Map();
+
+function isCompositeMapPackId(packId) {
+  return typeof packId === "string" && packId.indexOf("+") !== -1;
+}
+
+function isMapPackCombinable(packId) {
+  return MULTI_PACK_COMBINABLE_IDS.has(packId);
+}
+
+function _canonicalSortPackIds(ids) {
+  return [...ids].sort((a, b) => {
+    const ia = MULTI_PACK_CANONICAL_ORDER.indexOf(a);
+    const ib = MULTI_PACK_CANONICAL_ORDER.indexOf(b);
+    const oa = ia >= 0 ? ia : 999;
+    const ob = ib >= 0 ? ib : 999;
+    if (oa !== ob) return oa - ob;
+    return String(a).localeCompare(String(b));
+  });
+}
+
+function parseMapPackIds(packIdOrArray) {
+  let rawList = [];
+  if (Array.isArray(packIdOrArray)) {
+    rawList = packIdOrArray.map((x) => String(x || "").trim()).filter(Boolean);
+  } else if (typeof packIdOrArray === "string") {
+    rawList = packIdOrArray.split("+").map((x) => x.trim()).filter(Boolean);
+  }
+  if (rawList.length === 0) return [DEFAULT_MAP_PACK_ID];
+
+  // Deduplicate keeping last occurrence order so conflict resolution prefers the latest choice
+  const ordered = [];
+  rawList.forEach((id) => {
+    const idx = ordered.indexOf(id);
+    if (idx !== -1) ordered.splice(idx, 1);
+    ordered.push(id);
+  });
+
+  // Exclusive solo packs (world_countries) cannot coexist with any other pack
+  const lastId = ordered[ordered.length - 1];
+  if (MULTI_PACK_EXCLUSIVE_SOLO_IDS.has(lastId)) {
+    return [lastId];
+  }
+  const filtered = ordered.filter((id) => !MULTI_PACK_EXCLUSIVE_SOLO_IDS.has(id));
+  if (filtered.length === 0) return [DEFAULT_MAP_PACK_ID];
+
+  // Enforce mutual-exclusion conflict pairs (cn_prov <-> roc_1949), keeping whichever appeared later
+  let resolved = [...filtered];
+  MULTI_PACK_CONFLICT_PAIRS.forEach(([a, b]) => {
+    const ia = resolved.indexOf(a);
+    const ib = resolved.indexOf(b);
+    if (ia !== -1 && ib !== -1) {
+      if (ia < ib) resolved.splice(ia, 1);
+      else resolved.splice(ib, 1);
+    }
+  });
+
+  return _canonicalSortPackIds(resolved);
+}
+
+function formatCompositeMapPackId(packIds) {
+  const ids = parseMapPackIds(packIds);
+  return ids.length === 1 ? ids[0] : ids.join("+");
+}
+
+function resolveToggleMapPackIds(currentIds, targetPackId) {
+  const target = String(targetPackId || "").trim();
+  const cur = parseMapPackIds(currentIds);
+  if (!target) return cur;
+
+  // Clicking an exclusive solo pack (world_countries) always switches exclusively to it
+  if (MULTI_PACK_EXCLUSIVE_SOLO_IDS.has(target)) {
+    return [target];
+  }
+
+  // If currently on an exclusive solo pack (or non-combinable pack), switch to target
+  if (cur.some((id) => !isMapPackCombinable(id)) || !isMapPackCombinable(target)) {
+    return [target];
+  }
+
+  // If already active: toggle OFF only if >1 packs remain active
+  if (cur.includes(target)) {
+    if (cur.length <= 1) return cur;
+    return _canonicalSortPackIds(cur.filter((id) => id !== target));
+  }
+
+  // Adding target: strip any mutually-exclusive conflict partner (cn_prov <-> roc_1949)
+  let next = [...cur];
+  MULTI_PACK_CONFLICT_PAIRS.forEach(([a, b]) => {
+    if (target === a) next = next.filter((id) => id !== b);
+    else if (target === b) next = next.filter((id) => id !== a);
+  });
+  next.push(target);
+  return _canonicalSortPackIds(next);
+}
+
+function getActiveMapPackIds() {
+  try {
+    if (typeof state !== "undefined" && state) {
+      if (Array.isArray(state.activeMapPackIds) && state.activeMapPackIds.length > 0) {
+        return parseMapPackIds(state.activeMapPackIds);
+      }
+      if (state.activeMapPackId) {
+        return parseMapPackIds(state.activeMapPackId);
+      }
+    }
+  } catch (_) {}
+  return [DEFAULT_MAP_PACK_ID];
+}
+
+function hasActiveMapPack(packId) {
+  if (!packId) return false;
+  return getActiveMapPackIds().includes(packId);
+}
+
+function _unionLatLngBoundsPair(boundsList) {
+  let minLat = Infinity;
+  let minLng = Infinity;
+  let maxLat = -Infinity;
+  let maxLng = -Infinity;
+  boundsList.forEach((b) => {
+    if (!Array.isArray(b) || b.length < 2 || !Array.isArray(b[0]) || !Array.isArray(b[1])) return;
+    minLat = Math.min(minLat, Number(b[0][0]), Number(b[1][0]));
+    minLng = Math.min(minLng, Number(b[0][1]), Number(b[1][1]));
+    maxLat = Math.max(maxLat, Number(b[0][0]), Number(b[1][0]));
+    maxLng = Math.max(maxLng, Number(b[0][1]), Number(b[1][1]));
+  });
+  if (!Number.isFinite(minLat) || !Number.isFinite(maxLat)) return null;
+  return [[minLat, minLng], [maxLat, maxLng]];
+}
+
+function _getCompositeShortLabel(memberIds, members) {
+  const key = memberIds.join("+");
+  if (key === "tw_modern+jp_pref+cn_prov") return "🇹🇼🇯🇵🇨🇳 台日中";
+  if (key === "tw_modern+jp_pref+roc_1949") return "🇹🇼🇯🇵🇹🇼 台日民國";
+  const compactMap = {
+    tw_modern: "🇹🇼台",
+    jp_pref: "🇯🇵日",
+    cn_prov: "🇨🇳中",
+    roc_1949: "🇹🇼民國"
+  };
+  return memberIds.map((id, i) => compactMap[id] || (members[i] && members[i].shortLabel) || id).join("＋");
+}
+
+function buildCompositeMapPack(rawPackIds) {
+  const memberIds = parseMapPackIds(rawPackIds);
+  if (memberIds.length <= 1) {
+    return window.GEOMASTER_PACKS[memberIds[0]] || null;
+  }
+  const members = memberIds.map((id) => window.GEOMASTER_PACKS[id]);
+  if (members.some((m) => !m)) return null;
+
+  const canonicalId = memberIds.join("+");
+  const cacheKey = `${canonicalId}|${members.map((m) => (m._isFullPack ? "1" : "0")).join("")}`;
+  if (_compositePackCache.has(cacheKey)) {
+    return _compositePackCache.get(cacheKey);
+  }
+
+  const excludeRocTaiwan = memberIds.includes("tw_modern") && memberIds.includes("roc_1949");
+
+  // Detect group name collisions across constituent packs (e.g. '東北' in jp_pref & cn_prov/roc_1949)
+  const groupNameCounts = new Map();
+  members.forEach((m) => {
+    const gs = typeof m.getGroups === "function" ? m.getGroups() : [];
+    const seenInPack = new Set();
+    gs.forEach((g) => {
+      if (!g || !g.name || seenInPack.has(g.name)) return;
+      seenInPack.add(g.name);
+      groupNameCounts.set(g.name, (groupNameCounts.get(g.name) || 0) + 1);
+    });
+  });
+
+  const mergedGroups = [];
+  const mergedItems = [];
+  const mergedGroupColors = {};
+  const groupByName = new Map();
+  const itemBySourceKey = new Map();
+  const memberItemIdsMap = new Map();
+
+  members.forEach((m) => {
+    const rawGroups = typeof m.getGroups === "function" ? m.getGroups() : [];
+    const rawItems = typeof m.getItems === "function" ? m.getItems() : [];
+    const groupRenameMap = new Map();
+    const prefix = MULTI_PACK_DISAMBIG_PREFIX[m.id] || m.shortLabel || m.id;
+
+    rawGroups.forEach((g) => {
+      if (!g || !g.name) return;
+      const collides = (groupNameCounts.get(g.name) || 0) > 1;
+      const nextName = collides ? `${prefix}${g.name}` : g.name;
+      const nextShort = collides ? `${prefix}${g.short || g.name}` : (g.short || g.name);
+      groupRenameMap.set(g.name, nextName);
+      const clonedGroup = {
+        ...g,
+        name: nextName,
+        short: nextShort,
+        _sourcePackId: m.id,
+        _sourceGroupName: g.name
+      };
+      mergedGroups.push(clonedGroup);
+      groupByName.set(nextName, clonedGroup);
+      const col = typeof m.getGroupColor === "function" ? m.getGroupColor(g.name) : "#38bdf8";
+      mergedGroupColors[nextName] = col;
+    });
+
+    const packItemIds = [];
+    const srcScaleKm = m.mapView && Number.isFinite(m.mapView.pinDropScaleKm) ? m.mapView.pinDropScaleKm : 25;
+    const isSubLayer = Number.isFinite(m.hierarchyDepth) && m.hierarchyDepth > 1;
+
+    rawItems.forEach((it) => {
+      if (!it || !it.id) return;
+      if (excludeRocTaiwan && m.id === "roc_1949" && it.id === "roc_taiwan") {
+        return;
+      }
+      const mappedCounty = groupRenameMap.get(it.countyName) || it.countyName;
+      const clonedItem = {
+        ...it,
+        countyName: mappedCounty,
+        layers: [],
+        bounds: null,
+        mainBounds: null,
+        mainPoint: null,
+        geojsonGeometry: null,
+        _sourcePackId: m.id,
+        _sourceItemId: it.id,
+        _sourceCountyName: it.countyName,
+        _pinDropScaleKm: srcScaleKm,
+        _isSubLayerItem: isSubLayer
+      };
+      mergedItems.push(clonedItem);
+      itemBySourceKey.set(`${m.id}::${it.id}`, clonedItem);
+      packItemIds.push(clonedItem.id);
+    });
+    memberItemIdsMap.set(m.id, packItemIds);
+  });
+
+  // Deduplicated quick suffixes across members
+  const quickSuffixes = [];
+  members.forEach((m) => {
+    const sufs = m.features && Array.isArray(m.features.quickSuffixes) ? m.features.quickSuffixes : [];
+    sufs.forEach((s) => {
+      if (s && !quickSuffixes.includes(s)) quickSuffixes.push(s);
+    });
+  });
+
+  // Region filters: All + one quick card per active pack
+  const packShortNames = {
+    tw_modern: { label: "全台灣", shortLabel: "台灣", emoji: "🇹🇼" },
+    jp_pref: { label: "全日本", shortLabel: "日本", emoji: "🇯🇵" },
+    cn_prov: { label: "全中國", shortLabel: "中國", emoji: "🇨🇳" },
+    roc_1949: { label: "中華民國1945", shortLabel: "民國1945", emoji: "🇹🇼" }
+  };
+  const regionFilters = [
+    {
+      id: "all",
+      label: "全部組合",
+      shortLabel: `全部 ${mergedItems.length} 區`,
+      emoji: "🌏",
+      itemIds: mergedItems.map((it) => it.id)
+    }
+  ];
+  members.forEach((m) => {
+    const meta = packShortNames[m.id] || { label: m.displayName, shortLabel: m.shortLabel, emoji: "🗺️" };
+    regionFilters.push({
+      id: `pack_${m.id}`,
+      label: meta.label,
+      shortLabel: meta.shortLabel,
+      emoji: meta.emoji,
+      itemIds: memberItemIdsMap.get(m.id) || []
+    });
+  });
+
+  // Union mapView bounds & zoom ranges
+  const fullViewBounds = _unionLatLngBoundsPair(
+    members.map((m) => m.mapView && m.mapView.fullViewBounds)
+  ) || [[18.0, 73.5], [53.6, 145.9]];
+  const maxBounds = _unionLatLngBoundsPair(
+    members.map((m) => m.mapView && m.mapView.maxBounds)
+  ) || [[2.0, 65.0], [60.0, 152.0]];
+  const center = [
+    (fullViewBounds[0][0] + fullViewBounds[1][0]) / 2,
+    (fullViewBounds[0][1] + fullViewBounds[1][1]) / 2
+  ];
+  const minZoom = Math.min(...members.map((m) => (m.mapView && Number.isFinite(m.mapView.minZoom) ? m.mapView.minZoom : 4)));
+  const maxZoom = Math.max(...members.map((m) => (m.mapView && Number.isFinite(m.mapView.maxZoom) ? m.mapView.maxZoom : 18)));
+  const hasChinaScale = memberIds.includes("cn_prov") || memberIds.includes("roc_1949");
+  const defaultZoom = hasChinaScale ? 4 : 5;
+  const quickJumps = members.map((m) => ({
+    id: `jump_${m.id}`,
+    label: m.shortLabel || m.displayName || m.id,
+    center: (m.mapView && m.mapView.center) || center,
+    zoom: (m.mapView && m.mapView.defaultZoom) || 5
+  }));
+
+  const rocMember = memberIds.includes("roc_1949") ? window.GEOMASTER_PACKS["roc_1949"] : null;
+  const memberDisplayNames = {
+    tw_modern: "台灣",
+    jp_pref: "日本",
+    cn_prov: "中國",
+    roc_1949: "中華民國1945"
+  };
+  const comboTitle = memberIds.map((id) => memberDisplayNames[id] || id).join(" ＋ ");
+  const shortLabel = _getCompositeShortLabel(memberIds, members);
+  const attributions = [...new Set(members.map((m) => m.attribution).filter(Boolean))];
+  const dataNotes = members.map((m) => m.dataNote).filter(Boolean);
+  if (excludeRocTaiwan) {
+    dataNotes.push("已自動以現代臺灣 368 鄉鎮市區取代中華民國1945 臺灣省（避免重疊）。");
+  }
+
+  // Deterministic input normalizer chain: JP (Shinjitai/kana/macrons) -> CN/ROC (S2T) -> TW (台->臺)
+  const normChainOrder = ["jp_pref", "cn_prov", "roc_1949", "tw_modern"].filter((id) => memberIds.includes(id));
+
+  const compositePack = normalizeMapPackDefinition({
+    id: canonicalId,
+    _isCompositePack: true,
+    _isFullPack: members.every((m) => Boolean(m._isFullPack)),
+    memberPackIds: [...memberIds],
+    displayName: `${comboTitle}（${mergedItems.length} 區）`,
+    shortLabel,
+    badgeText: `${mergedItems.length}區`,
+    attribution: attributions.join(" · "),
+    dataNote: dataNotes.join(" "),
+    version: "1.0",
+    hierarchyDepth: 1,
+    unitLabels: {
+      group: "分區",
+      item: "行政區",
+      itemShort: "區",
+      fullScopeLabel: `${shortLabel} 共 ${mergedItems.length} 區`
+    },
+    mapView: {
+      center,
+      defaultZoom,
+      minZoom,
+      maxZoom,
+      maxBounds,
+      fullViewBounds,
+      pinDropScaleKm: hasChinaScale ? 200 : 80,
+      targetFocusZoom: 8,
+      groupFocusZoom: 6,
+      targetMaxZoom: 12,
+      satelliteFallbackDelta: { group: 0.5, item: 0.25 },
+      mainPolygonDistThresholdDeg: hasChinaScale ? 1.5 : 0.6,
+      groupMainDistThresholdDeg: hasChinaScale ? 1.5 : 0.6,
+      worldCopyJump: false,
+      quickJumps
+    },
+    features: {
+      supportsTransportQuiz: memberIds.includes("tw_modern"),
+      supportsPoiQuiz: memberIds.includes("tw_modern"),
+      supportsMasterHierarchy: false,
+      supportsSuffixDifficulty: true,
+      supportsHistoricalBasemap: memberIds.includes("roc_1949"),
+      quickSuffixes,
+      supportedDifficulties: ["casual", "hard_suffix"]
+    },
+    disputedBordersGeo: rocMember && rocMember.disputedBordersGeo ? rocMember.disputedBordersGeo : null,
+    regionFilters,
+    normalizeInput(rawStr) {
+      if (!rawStr) return "";
+      let s = String(rawStr);
+      for (let i = 0; i < normChainOrder.length; i++) {
+        const mp = window.GEOMASTER_PACKS[normChainOrder[i]];
+        if (mp && typeof mp.normalizeInput === "function") {
+          s = mp.normalizeInput(s);
+        }
+      }
+      return s;
+    },
+    isItemEnabledByOptions(item, st) {
+      if (!item) return false;
+      const srcPack = item._sourcePackId ? window.GEOMASTER_PACKS[item._sourcePackId] : null;
+      if (srcPack && typeof srcPack.isItemEnabledByOptions === "function") {
+        return Boolean(srcPack.isItemEnabledByOptions(item, st));
+      }
+      return true;
+    },
+    getItemAliases(item, st) {
+      if (!item) return [];
+      const srcPack = item._sourcePackId ? window.GEOMASTER_PACKS[item._sourcePackId] : null;
+      if (srcPack && typeof srcPack.getItemAliases === "function") {
+        const res = srcPack.getItemAliases(item, st);
+        if (Array.isArray(res)) return res;
+      }
+      return Array.isArray(item.aliases) ? item.aliases : [];
+    },
+    async ensureLoaded() {
+      await Promise.all(
+        memberIds.map((id) => {
+          const mp = window.GEOMASTER_PACKS[id];
+          return mp && typeof mp.ensureLoaded === "function" ? Promise.resolve(mp.ensureLoaded()) : Promise.resolve();
+        })
+      );
+      return buildCompositeMapPack(memberIds);
+    },
+    getGroups() {
+      return mergedGroups;
+    },
+    getItems() {
+      return mergedItems;
+    },
+    getGroupByName(name) {
+      return groupByName.get(name) || null;
+    },
+    getGroupColor(groupName) {
+      return mergedGroupColors[groupName] || "#38bdf8";
+    },
+    matchFeatureToItem(props, feat) {
+      const p = props || (feat && feat.properties) || {};
+      const srcId = p.__sourcePackId;
+      if (srcId) {
+        const srcPack = window.GEOMASTER_PACKS[srcId];
+        if (srcPack && typeof srcPack.matchFeatureToItem === "function") {
+          const matched = srcPack.matchFeatureToItem(p, feat);
+          if (matched && matched.id) {
+            return itemBySourceKey.get(`${srcId}::${matched.id}`) || null;
+          }
+        }
+      }
+      return null;
+    },
+    async loadTopoData() {
+      // Draw larger mainland packs first, JP second, TW last so Taiwan & Kinmen/Matsu render on top
+      const drawOrder = [...memberIds].sort((a, b) => {
+        const rank = (id) => (id === "tw_modern" ? 3 : id === "jp_pref" ? 2 : 1);
+        return rank(a) - rank(b);
+      });
+
+      const mergedTownFeatures = [];
+      const mergedCountyFeatures = [];
+
+      for (let i = 0; i < drawOrder.length; i++) {
+        const id = drawOrder[i];
+        const mp = window.GEOMASTER_PACKS[id];
+        if (!mp) continue;
+        let rawTopo = mp.topoData || null;
+        if (!rawTopo && typeof getCachedPackTopoData === "function") {
+          rawTopo = getCachedPackTopoData(id);
+        }
+        if (!rawTopo && typeof mp.loadTopoData === "function") {
+          try {
+            rawTopo = await mp.loadTopoData();
+          } catch (_) {
+            rawTopo = null;
+          }
+        }
+        if (!rawTopo) continue;
+        const norm =
+          typeof _normalizePackTopoInput === "function"
+            ? _normalizePackTopoInput(rawTopo, mp)
+            : (rawTopo.townsGeo ? rawTopo : null);
+        if (norm && norm.townsGeo && Array.isArray(norm.townsGeo.features)) {
+          norm.townsGeo.features.forEach((f) => {
+            if (!f) return;
+            const fp = f.properties || {};
+            const fid = fp.id || f.id;
+            if (excludeRocTaiwan && id === "roc_1949" && String(fid) === "roc_taiwan") {
+              return;
+            }
+            mergedTownFeatures.push({
+              ...f,
+              properties: { ...fp, __sourcePackId: id }
+            });
+          });
+        }
+        if (norm && norm.countiesGeo && Array.isArray(norm.countiesGeo.features)) {
+          norm.countiesGeo.features.forEach((cf) => {
+            if (!cf) return;
+            mergedCountyFeatures.push({
+              ...cf,
+              properties: { ...(cf.properties || {}), __sourcePackId: id }
+            });
+          });
+        }
+      }
+
+      return {
+        townsGeo: { type: "FeatureCollection", features: mergedTownFeatures },
+        countiesGeo: mergedCountyFeatures.length > 0 ? { type: "FeatureCollection", features: mergedCountyFeatures } : null
+      };
+    }
+  });
+
+  _compositePackCache.set(cacheKey, compositePack);
+  return compositePack;
+}
+
 const DEFAULT_PACK_COLORS = [
   "#38bdf8", "#60a5fa", "#818cf8", "#fb923c", "#f472b6", "#34d399",
   "#2dd4bf", "#a78bfa", "#c084fc", "#e879f9", "#facc15", "#4ade80",
@@ -91,6 +593,7 @@ function normalizeMapPackDefinition(raw) {
     supportsPoiQuiz: Boolean(rawFeatures.supportsPoiQuiz),
     supportsMasterHierarchy: Boolean(rawFeatures.supportsMasterHierarchy),
     supportsSuffixDifficulty: Boolean(rawFeatures.supportsSuffixDifficulty),
+    supportsHistoricalBasemap: Boolean(rawFeatures.supportsHistoricalBasemap),
     quickSuffixes: Array.isArray(rawFeatures.quickSuffixes) ? [...rawFeatures.quickSuffixes] : [],
     supportedDifficulties:
       Array.isArray(rawFeatures.supportedDifficulties) && rawFeatures.supportedDifficulties.length > 0
@@ -229,6 +732,7 @@ function registerMapPack(rawPack) {
       : rawPack;
   const pack = normalizeMapPackDefinition(mergedRaw);
   window.GEOMASTER_PACKS[pack.id] = pack;
+  _compositePackCache.clear();
   if (typeof renderMapPackSwitcherUI === "function") {
     try {
       renderMapPackSwitcherUI();
@@ -241,6 +745,7 @@ function unregisterMapPack(packId) {
   if (!packId || packId === DEFAULT_MAP_PACK_ID) return false;
   if (!window.GEOMASTER_PACKS[packId]) return false;
   delete window.GEOMASTER_PACKS[packId];
+  _compositePackCache.clear();
   if (typeof renderMapPackSwitcherUI === "function") {
     try {
       renderMapPackSwitcherUI();
@@ -255,7 +760,17 @@ function getRegisteredMapPacks() {
 
 function getMapPackById(packId) {
   if (!packId) return null;
-  return window.GEOMASTER_PACKS[packId] || null;
+  if (Array.isArray(packId)) {
+    const ids = parseMapPackIds(packId);
+    return ids.length > 1 ? buildCompositeMapPack(ids) : (window.GEOMASTER_PACKS[ids[0]] || null);
+  }
+  if (window.GEOMASTER_PACKS[packId]) return window.GEOMASTER_PACKS[packId];
+  if (isCompositeMapPackId(packId)) {
+    const ids = parseMapPackIds(packId);
+    if (ids.length > 1) return buildCompositeMapPack(ids);
+    if (ids.length === 1) return window.GEOMASTER_PACKS[ids[0]] || null;
+  }
+  return null;
 }
 
 function _getSafeActiveMapPackId() {
@@ -269,7 +784,7 @@ function _getSafeActiveMapPackId() {
 
 function getActiveMapPack() {
   const activeId = _getSafeActiveMapPackId();
-  return window.GEOMASTER_PACKS[activeId] || window.GEOMASTER_PACKS[DEFAULT_MAP_PACK_ID] || getRegisteredMapPacks()[0] || null;
+  return getMapPackById(activeId) || window.GEOMASTER_PACKS[DEFAULT_MAP_PACK_ID] || getRegisteredMapPacks()[0] || null;
 }
 
 function getActiveGroups() {
@@ -718,7 +1233,10 @@ BUILT_IN_LAZY_MAP_PACK_STUBS.forEach((stub) => {
 // =========================================================================
 // LIFECYCLE: switchActiveMapPack(packId, options)
 // =========================================================================
-async function switchActiveMapPack(packId, options = {}) {
+async function switchActiveMapPack(packIdInput, options = {}) {
+  const packId = Array.isArray(packIdInput)
+    ? formatCompositeMapPackId(packIdInput)
+    : (isCompositeMapPackId(packIdInput) ? formatCompositeMapPackId(packIdInput) : packIdInput);
   const initialPack = getMapPackById(packId);
   if (!initialPack) {
     return { ok: false, reason: "pack_not_found", packId };
@@ -766,9 +1284,12 @@ async function switchActiveMapPack(packId, options = {}) {
     clearActiveMapLayers(prevPack);
   }
 
-  // 3. Switch active pack ID
+  // 3. Switch active pack ID & member IDs
   if (typeof state !== "undefined" && state) {
     state.activeMapPackId = nextPack.id;
+    state.activeMapPackIds = Array.isArray(nextPack.memberPackIds) && nextPack.memberPackIds.length > 0
+      ? [...nextPack.memberPackIds]
+      : [nextPack.id];
   }
 
   // 4. Rebuild dynamic lookup tables in game-logic
@@ -897,12 +1418,14 @@ async function switchActiveMapPack(packId, options = {}) {
     }
   }
 
-  // Clear prefix/suffix inputs cleanly on pack switch
+  // Clear prefix/suffix/answer inputs cleanly on pack switch
   if (typeof document !== "undefined") {
     const pSel = document.getElementById("prefix-select");
     if (pSel) pSel.value = "";
     const sInp = document.getElementById("suffix-input");
     if (sInp) sInp.value = "";
+    const aInp = document.getElementById("answer-input");
+    if (aInp) aInp.value = "";
   }
 
   // 8. Update Leaflet viewport bounds & zoom limits

@@ -249,6 +249,9 @@ function schedulePinDropAutoNext(delayMs = 2000) {
 }
 
 function getPinDropScaleKm(target = null) {
+  const itemScale = target && target.ref && Number.isFinite(target.ref._pinDropScaleKm)
+    ? target.ref._pinDropScaleKm
+    : null;
   const packScale =
     typeof getActiveMapPack === "function"
       ? getActiveMapPack()?.mapView?.pinDropScaleKm
@@ -256,6 +259,9 @@ function getPinDropScaleKm(target = null) {
   const isCounty =
     (target && target.kind === "county") ||
     (!target && typeof state !== "undefined" && state.difficulty === "county_only");
+  if (Number.isFinite(itemScale) && itemScale > 0) {
+    return isCounty && itemScale === 25 ? 40 : itemScale;
+  }
   if (Number.isFinite(packScale) && packScale > 0) {
     return isCounty && packScale === 25 ? 40 : packScale;
   }
@@ -333,7 +339,8 @@ function formatPinDropTownPrompt(countyName, townName, isSingle, hideCounty, dup
 function getPinDropDisplayPromptTitle(target) {
   if (!target) return "📍 給地名標座標挑戰";
   if (target.kind === "town") {
-    const isSingle = typeof isActivePackSingleLayer === "function" && isActivePackSingleLayer();
+    const isSubLayer = Boolean(target.ref && target.ref._isSubLayerItem);
+    const isSingle = isSubLayer ? false : (typeof isActivePackSingleLayer === "function" && isActivePackSingleLayer());
     const hideCounty = typeof state !== "undefined" && Boolean(state.pinDropHideCounty);
     const dups = target._isDuplicateTownName ? new Set([target.townName]) : getDuplicateTownNameSet();
     return formatPinDropTownPrompt(target.countyName, target.townName, isSingle, hideCounty, dups);
@@ -344,7 +351,7 @@ function getPinDropDisplayPromptTitle(target) {
 function buildPinDropTargetFromTown(t, dupTownNames = null) {
   if (!t) return null;
   const pt = t.mainPoint && Number.isFinite(t.mainPoint.lat) ? t.mainPoint : { lat: t.lat, lng: t.lng };
-  const isSingle = typeof isActivePackSingleLayer === "function" && isActivePackSingleLayer();
+  const isSingle = t._isSubLayerItem ? false : (typeof isActivePackSingleLayer === "function" && isActivePackSingleLayer());
   const uLabels = typeof getActivePackUnitLabels === "function" ? getActivePackUnitLabels() : { item: "鄉鎮市區" };
   const dups = dupTownNames instanceof Set ? dupTownNames : getDuplicateTownNameSet();
   const hideCounty = typeof state !== "undefined" && Boolean(state.pinDropHideCounty);

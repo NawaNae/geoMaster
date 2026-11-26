@@ -649,16 +649,18 @@ function renderRoomConciseSettingsSummary() {
   const rows = [];
   // 0. Map Pack Line (when multiple packs registered or non-tw_modern)
   if (registeredCount > 1 || packId !== "tw_modern") {
+    const hasPack = (id) =>
+      typeof hasActiveMapPack === "function" ? hasActiveMapPack(id) : packId === id;
     let packLabel = (pack && (pack.displayName || pack.shortLabel)) || packId;
-    if (packId === "world_countries") {
+    if (hasPack("world_countries")) {
       const includeMicro = !state.packOptions || state.packOptions.worldIncludeMicrostates !== false;
       const eligLen = typeof getPackEligibleItems === "function" ? getPackEligibleItems(pack, state).length : _p2pItems().length;
       packLabel = includeMicro
         ? `${packLabel} · 含微型國 (${eligLen || 196} 國)`
         : `${packLabel} · 標準版 (排除微型國${eligLen ? ` · ${eligLen} 國` : ""})`;
-    } else if (packId === "cn_prov" && state.packOptions && state.packOptions.cnAllowSingleCharAlias) {
+    } else if (hasPack("cn_prov") && state.packOptions && state.packOptions.cnAllowSingleCharAlias) {
       packLabel = `${packLabel} · 含一字簡稱`;
-    } else if (packId === "roc_1949") {
+    } else if (hasPack("roc_1949")) {
       const noMng = state.packOptions && state.packOptions.rocTerritoryVariant === "no_mongolia";
       const noMuni = state.packOptions && state.packOptions.includeMunicipalities === false;
       const noDisp = state.packOptions && state.packOptions.showDisputedBorders === false;

@@ -114,20 +114,41 @@ function handleMapPackSelection(packId) {
     renderMapPackSwitcherUI();
     return;
   }
+  const normalizedId =
+    typeof isCompositeMapPackId === "function" && isCompositeMapPackId(packId) && typeof formatCompositeMapPackId === "function"
+      ? formatCompositeMapPackId(packId)
+      : packId;
   const loadingId = typeof getLoadingMapPackId === "function" ? getLoadingMapPackId() : null;
-  if (loadingId && packId === loadingId) return;
+  if (loadingId && normalizedId === loadingId) return;
   const activeId = state.activeMapPackId || ((_getActivePack() || {}).id) || "tw_modern";
-  if (!loadingId && packId === activeId) return;
+  if (!loadingId && normalizedId === activeId) return;
   if (state.isHost && state.roomCode && typeof requestOrApplyConfigChange === "function") {
-    requestOrApplyConfigChange({ mapPackId: packId }, "地圖包");
+    requestOrApplyConfigChange({ mapPackId: normalizedId }, "地圖包");
     return;
   }
   if (typeof switchActiveMapPack === "function") {
-    Promise.resolve(switchActiveMapPack(packId)).catch(() => {
+    Promise.resolve(switchActiveMapPack(normalizedId)).catch(() => {
       setFeedback("❌ 切換地圖包失敗，請稍後再試", "error");
       renderMapPackSwitcherUI();
     });
   }
+}
+
+function handleMapPackToggle(packId) {
+  if (!packId) return;
+  const curIds =
+    typeof getActiveMapPackIds === "function"
+      ? getActiveMapPackIds()
+      : [state.activeMapPackId || "tw_modern"];
+  const nextIds =
+    typeof resolveToggleMapPackIds === "function"
+      ? resolveToggleMapPackIds(curIds, packId)
+      : [packId];
+  const nextId =
+    typeof formatCompositeMapPackId === "function"
+      ? formatCompositeMapPackId(nextIds)
+      : nextIds[0];
+  handleMapPackSelection(nextId);
 }
 
 function _getActivePackEligibleItems() {
@@ -173,9 +194,10 @@ function syncPackOptionsUI() {
   const rocMuniWrap = document.getElementById("pack-opt-roc-municipalities-wrap");
   const rocDispWrap = document.getElementById("pack-opt-roc-disputed-wrap");
   const histLayerBtn = document.getElementById("btn-layer-historical");
-  const isWorld = packId === "world_countries";
-  const isCn = packId === "cn_prov";
-  const isRoc = packId === "roc_1949";
+  const hasPack = (id) => (typeof hasActiveMapPack === "function" ? hasActiveMapPack(id) : packId === id);
+  const isWorld = hasPack("world_countries");
+  const isCn = hasPack("cn_prov");
+  const isRoc = hasPack("roc_1949");
 
   if (bar) bar.classList.toggle("hidden", !isWorld && !isCn && !isRoc);
   if (worldWrap) worldWrap.classList.toggle("hidden", !isWorld);
@@ -364,15 +386,109 @@ function renderMapPackSwitcherUI() {
 
   section.classList.remove("hidden");
   const activeId = state.activeMapPackId || ((_getActivePack() || {}).id) || "tw_modern";
+  const activeIds =
+    typeof getActiveMapPackIds === "function" ? getActiveMapPackIds() : [activeId];
   const loadingId = typeof getLoadingMapPackId === "function" ? getLoadingMapPackId() : null;
+  const loadingIds =
+    loadingId && typeof isCompositeMapPackId === "function" && isCompositeMapPackId(loadingId) && typeof parseMapPackIds === "function"
+      ? parseMapPackIds(loadingId)
+      : (loadingId ? [loadingId] : []);
+
   const nodes = packs.map((pack) => {
-    const isLoading = Boolean(loadingId && pack.id === loadingId);
-    const isActive = !loadingId && pack.id === activeId;
+    const isCombinable = typeof isMapPackCombinable === "function" && isMapPackCombinable(pack.id);
+    const isLoading = Boolean(
+      loadingId &&
+        (pack.id === loadingId || (loadingIds.includes(pack.id) && !activeIds.includes(pack.id)))
+    );
+    const isActive = !loadingId && activeIds.includes(pack.id);
+
+    const buildBadgeOrSpinner = () => {
+      if (isLoading) {
+        const loadingBadge = document.createElement("span");
+        loadingBadge.className = "inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-sky-400/25 text-sky-100 shrink-0";
+        const spinner = document.createElement("span");
+        spinner.className = "mappack-spinner";
+        spinner.setAttribute("aria-hidden", "true");
+        const txt = document.createElement("span");
+        txt.textContent = "載入中";
+        loadingBadge.appendChild(spinner);
+        loadingBadge.appendChild(txt);
+        return loadingBadge;
+      }
+      const badgeEl = document.createElement("span");
+      badgeEl.className = isActive
+        ? "text-[10px] font-mono-num font-bold px-1.5 py-0.5 rounded-md bg-indigo-400/25 text-indigo-100 shrink-0"
+        : "text-[10px] font-mono-num font-bold px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-400 shrink-0";
+      let badgeStr = pack.badgeText || "";
+      if (!badgeStr) {
+        const pItems = typeof pack.getItems === "function" ? pack.getItems() : [];
+        const uShort = (pack.unitLabels && pack.unitLabels.itemShort) || "區";
+        badgeStr = pItems.length > 0 ? `${pItems.length}${uShort}` : "";
+      }
+      badgeEl.textContent = badgeStr;
+      return badgeStr ? badgeEl : null;
+    };
+
+    if (isCombinable) {
+      const card = document.createElement("div");
+      card.setAttribute("data-mappack-id", pack.id);
+      if (isLoading) card.setAttribute("aria-busy", "true");
+      if (pack.displayName) {
+        const mutexNote =
+          pack.id === "cn_prov"
+            ? "（與中華民國1945、世界互斥）"
+            : pack.id === "roc_1949"
+            ? "（與中國、世界互斥）"
+            : "（可點右側 + 與日／中／民國組合）";
+        card.setAttribute("data-tip", `${pack.displayName}${mutexNote}`);
+      }
+      card.className = isLoading
+        ? "rounded-xl border border-sky-400 bg-sky-500/20 text-white transition shadow flex items-stretch overflow-hidden mappack-card-loading"
+        : isActive
+        ? "rounded-xl border border-indigo-400 bg-indigo-500/25 text-white transition shadow flex items-stretch overflow-hidden"
+        : "rounded-xl border border-slate-700/80 bg-slate-950/70 hover:bg-slate-800 text-slate-300 transition flex items-stretch overflow-hidden";
+
+      const soloBtn = document.createElement("button");
+      soloBtn.type = "button";
+      soloBtn.className = "flex-1 min-w-0 px-2 py-2 text-left flex items-center justify-between gap-1 hover:bg-white/5 transition";
+      const titleEl = document.createElement("span");
+      titleEl.className = isLoading || isActive
+        ? "text-xs font-extrabold text-white truncate"
+        : "text-xs font-extrabold text-slate-200 truncate";
+      titleEl.textContent = pack.shortLabel || pack.displayName || pack.id;
+      soloBtn.appendChild(titleEl);
+      const badgeNode = buildBadgeOrSpinner();
+      if (badgeNode) soloBtn.appendChild(badgeNode);
+      soloBtn.addEventListener("click", () => handleMapPackSelection(pack.id));
+
+      const unionBtn = document.createElement("button");
+      unionBtn.type = "button";
+      unionBtn.setAttribute("data-mappack-toggle-id", pack.id);
+      unionBtn.setAttribute("role", "checkbox");
+      unionBtn.setAttribute("aria-checked", isActive ? "true" : "false");
+      unionBtn.setAttribute("aria-label", `複選切換 ${pack.shortLabel || pack.id}`);
+      unionBtn.className = isActive
+        ? "px-2 border-l border-indigo-400/40 bg-indigo-500/30 hover:bg-indigo-500/45 text-indigo-100 text-xs font-black flex items-center justify-center shrink-0 transition"
+        : "px-2 border-l border-slate-700/80 bg-slate-900/80 hover:bg-indigo-500/30 text-slate-400 hover:text-white text-xs font-black flex items-center justify-center shrink-0 transition";
+      unionBtn.textContent = isActive ? "✓" : "+";
+      unionBtn.addEventListener("click", (ev) => {
+        if (ev && typeof ev.stopPropagation === "function") ev.stopPropagation();
+        handleMapPackToggle(pack.id);
+      });
+
+      card.appendChild(soloBtn);
+      card.appendChild(unionBtn);
+      return card;
+    }
+
     const btn = document.createElement("button");
     btn.type = "button";
     btn.setAttribute("data-mappack-id", pack.id);
     if (isLoading) btn.setAttribute("aria-busy", "true");
-    if (pack.displayName) btn.setAttribute("data-tip", pack.displayName);
+    if (pack.displayName) {
+      const tip = pack.id === "world_countries" ? `${pack.displayName}（單獨模式，與其他地圖互斥）` : pack.displayName;
+      btn.setAttribute("data-tip", tip);
+    }
     btn.className = isLoading
       ? "px-2.5 py-2 rounded-xl border border-sky-400 bg-sky-500/20 text-white text-left transition shadow flex items-center justify-between gap-1.5 mappack-card-loading"
       : isActive
@@ -386,36 +502,43 @@ function renderMapPackSwitcherUI() {
     titleEl.textContent = pack.shortLabel || pack.displayName || pack.id;
 
     btn.appendChild(titleEl);
-    if (isLoading) {
-      const loadingBadge = document.createElement("span");
-      loadingBadge.className = "inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-sky-400/25 text-sky-100 shrink-0";
-      const spinner = document.createElement("span");
-      spinner.className = "mappack-spinner";
-      spinner.setAttribute("aria-hidden", "true");
-      const txt = document.createElement("span");
-      txt.textContent = "載入中";
-      loadingBadge.appendChild(spinner);
-      loadingBadge.appendChild(txt);
-      btn.appendChild(loadingBadge);
-    } else {
-      const badgeEl = document.createElement("span");
-      badgeEl.className = isActive
-        ? "text-[10px] font-mono-num font-bold px-1.5 py-0.5 rounded-md bg-indigo-400/25 text-indigo-100 shrink-0"
-        : "text-[10px] font-mono-num font-bold px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-400 shrink-0";
-      let badgeStr = pack.badgeText || "";
-      if (!badgeStr) {
-        const pItems = typeof pack.getItems === "function" ? pack.getItems() : [];
-        const uShort = (pack.unitLabels && pack.unitLabels.itemShort) || "區";
-        badgeStr = pItems.length > 0 ? `${pItems.length}${uShort}` : "";
-      }
-      badgeEl.textContent = badgeStr;
-      if (badgeStr) btn.appendChild(badgeEl);
-    }
+    const badgeNode = buildBadgeOrSpinner();
+    if (badgeNode) btn.appendChild(badgeNode);
     btn.addEventListener("click", () => handleMapPackSelection(pack.id));
     return btn;
   });
 
   grid.replaceChildren(...nodes);
+
+  // Sync 1-tap East Asia combo shortcut pills (台日中 / 台日民國)
+  const hasTwJpCn = Boolean(
+    typeof getMapPackById === "function" &&
+      getMapPackById("tw_modern") &&
+      getMapPackById("jp_pref") &&
+      getMapPackById("cn_prov")
+  );
+  const hasTwJpRoc = Boolean(
+    typeof getMapPackById === "function" &&
+      getMapPackById("tw_modern") &&
+      getMapPackById("jp_pref") &&
+      getMapPackById("roc_1949")
+  );
+  const btnTwJpCn = document.getElementById("mappack-combo-twjpcn");
+  if (btnTwJpCn) {
+    btnTwJpCn.classList.toggle("hidden", !hasTwJpCn);
+    const on = !loadingId && activeId === "tw_modern+jp_pref+cn_prov";
+    btnTwJpCn.className = on
+      ? "px-2 py-0.5 rounded-lg text-[10px] font-extrabold border border-indigo-400 bg-indigo-500/30 text-white transition"
+      : "px-2 py-0.5 rounded-lg text-[10px] font-bold border border-slate-700 bg-slate-950/80 hover:bg-slate-800 text-slate-300 transition";
+  }
+  const btnTwJpRoc = document.getElementById("mappack-combo-twjproc");
+  if (btnTwJpRoc) {
+    btnTwJpRoc.classList.toggle("hidden", !hasTwJpRoc);
+    const on = !loadingId && activeId === "tw_modern+jp_pref+roc_1949";
+    btnTwJpRoc.className = on
+      ? "px-2 py-0.5 rounded-lg text-[10px] font-extrabold border border-indigo-400 bg-indigo-500/30 text-white transition"
+      : "px-2 py-0.5 rounded-lg text-[10px] font-bold border border-slate-700 bg-slate-950/80 hover:bg-slate-800 text-slate-300 transition";
+  }
 }
 
 function applyActivePackFeatureGatingUI() {
@@ -2956,6 +3079,12 @@ function bindAllUIEvents() {
   });
   document.getElementById("chk-pack-roc-disputed")?.addEventListener("change", (e) => {
     applyPackOptionToggle("showDisputedBorders", e.target.checked);
+  });
+  document.getElementById("mappack-combo-twjpcn")?.addEventListener("click", () => {
+    handleMapPackSelection("tw_modern+jp_pref+cn_prov");
+  });
+  document.getElementById("mappack-combo-twjproc")?.addEventListener("click", () => {
+    handleMapPackSelection("tw_modern+jp_pref+roc_1949");
   });
   document.getElementById("btn-timer-mode-countdown")?.addEventListener("click", () => {
     if (!canLocalModifyGameConfig()) return;
