@@ -583,6 +583,8 @@ function applyActivePackFeatureGatingUI() {
 
   const supportsTransport = Boolean(features.supportsTransportQuiz);
   const supportsPoi = Boolean(features.supportsPoiQuiz);
+  const supportsCapital = Boolean(features.supportsCapitalQuiz);
+  const capTopicLabel = typeof getCapitalTopicLabelForPack === "function" ? getCapitalTopicLabelForPack(pack) : (features.capitalLabel || "首都／省會");
 
   document.querySelectorAll('.topic-chip-btn[data-topic="station"]').forEach((el) => {
     el.classList.toggle("hidden", !supportsTransport);
@@ -596,7 +598,31 @@ function applyActivePackFeatureGatingUI() {
     });
   });
 
-  document.getElementById("topic-selector-card")?.classList.toggle("hidden", !supportsTransport && !supportsPoi);
+  document.querySelectorAll('.topic-chip-btn[data-topic="capital"]').forEach((el) => {
+    el.classList.toggle("hidden", !supportsCapital);
+    const lblSpan = el.querySelector(".capital-topic-label");
+    if (lblSpan) lblSpan.textContent = `🏛️ ${capTopicLabel}`;
+    const soloBtn = el.querySelector(".geo-solo-btn");
+    if (soloBtn) soloBtn.setAttribute("aria-label", `單選🏛️ ${capTopicLabel}`);
+    const unionBtn = el.querySelector(".geo-union-btn");
+    if (unionBtn) unionBtn.setAttribute("aria-label", `複選切換🏛️ ${capTopicLabel}`);
+    const tipText =
+      pack && pack.id === "world_countries"
+        ? "猜世界各國首都（點左單選純猜首都 / 點右複選搭配國家）"
+        : pack && pack.id === "roc_1949"
+        ? "猜中華民國1945各省省會與蒙藏特區首府（點左單選 / 點右複選）"
+        : "猜中國各省省會與自治區首府（點左單選 / 點右複選）";
+    el.setAttribute("data-tip", tipText);
+  });
+
+  document.querySelectorAll('.topic-chip-btn[data-topic="region"]').forEach((el) => {
+    const regionLblSpan = el.querySelector(".geo-solo-btn span");
+    if (regionLblSpan) {
+      regionLblSpan.textContent = pack && pack.id === "world_countries" ? "🌍 國家" : "🗺️ 行政區";
+    }
+  });
+
+  document.getElementById("topic-selector-card")?.classList.toggle("hidden", !supportsTransport && !supportsPoi && !supportsCapital);
 
   const topicRegionMeta = document.getElementById("topic-region-meta");
   if (topicRegionMeta) {
@@ -697,6 +723,7 @@ function syncConfigButtonsUI() {
   const features = _getActivePackFeatures();
   const supportsTransport = Boolean(features.supportsTransportQuiz);
   const supportsPoi = Boolean(features.supportsPoiQuiz);
+  const supportsCapital = Boolean(features.supportsCapitalQuiz);
   const hasR = Boolean(state.regionQuizEnabled);
   const hasS = supportsTransport && Boolean(state.stationQuizEnabled);
   const hasA = supportsPoi && Boolean(state.airportQuizEnabled);
@@ -704,8 +731,9 @@ function syncConfigButtonsUI() {
   const hasRes = supportsPoi && Boolean(state.reservoirQuizEnabled);
   const hasLk = supportsPoi && Boolean(state.lakeQuizEnabled);
   const hasStl = supportsPoi && Boolean(state.settlementQuizEnabled);
+  const hasCap = supportsCapital && Boolean(state.capitalQuizEnabled);
 
-  const topicMap = { region: hasR, station: hasS, airport: hasA, port: hasP, reservoir: hasRes, lake: hasLk, settlement: hasStl };
+  const topicMap = { region: hasR, station: hasS, airport: hasA, port: hasP, reservoir: hasRes, lake: hasLk, settlement: hasStl, capital: hasCap };
 
   document.querySelectorAll(".topic-chip-btn").forEach((card) => {
     const t = card.getAttribute("data-topic");
@@ -747,7 +775,7 @@ function syncConfigButtonsUI() {
   if (simpleLkBox) simpleLkBox.classList.toggle("hidden", !hasLk);
   if (simpleStlBox) simpleStlBox.classList.toggle("hidden", !hasStl);
 
-  const showRegionFilterSwitch = hasR && (hasS || hasA || hasP || hasRes || hasLk || hasStl);
+  const showRegionFilterSwitch = hasR && (hasS || hasA || hasP || hasRes || hasLk || hasStl || hasCap);
   const mixedSwitchBar = document.getElementById("mixed-region-rail-switch-bar");
   const wrapSimpleFilter = document.getElementById("wrap-simple-filter-st-region");
   const wrapAdvFilter = document.getElementById("wrap-adv-filter-st-region");
@@ -1869,6 +1897,11 @@ function renderScopeModalGrid() {
       counterParts.push(`🪧 傳統聚落 (${stlCnt} 處)`);
     }
   }
+  if (features.supportsCapitalQuiz && typeof isPoiCategoryActive === "function" && isPoiCategoryActive("capital")) {
+    const capCnt = getActiveQuizPois("capital").length;
+    const capLbl = typeof getPoiCategoryLabel === "function" ? getPoiCategoryLabel("capital") : "首都／省會";
+    counterParts.push(`🏛️ ${capLbl} (${capCnt} 處)`);
+  }
   const fullCounterText = counterParts.length > 0 ? `題庫：${counterParts.join(" ＋ ")}` : "請至少選擇一項題庫";
   if (counterEl) {
     counterEl.textContent = fullCounterText;
@@ -2844,6 +2877,7 @@ function bindAllUIEvents() {
     const features = _getActivePackFeatures();
     if (topic === "station" && !features.supportsTransportQuiz) return;
     if (["airport", "port", "reservoir", "lake", "settlement"].includes(topic) && !features.supportsPoiQuiz) return;
+    if (topic === "capital" && !features.supportsCapitalQuiz) return;
     if (!canLocalModifyGameConfig()) {
       setFeedback("僅房主可調整挑戰題庫！", "warn");
       return;
@@ -2857,6 +2891,7 @@ function bindAllUIEvents() {
     let nextRes = Boolean(state.reservoirQuizEnabled);
     let nextLk = Boolean(state.lakeQuizEnabled);
     let nextStl = Boolean(state.settlementQuizEnabled);
+    let nextCap = Boolean(state.capitalQuizEnabled);
     let nextCounties = new Set(state.selectedCounties);
     let nextTownIds = new Set(state.selectedTownIds);
     let nextLines = new Set(state.quizStationLines);
@@ -2875,6 +2910,7 @@ function bindAllUIEvents() {
       else if (topic === "reservoir") nextRes = !nextRes;
       else if (topic === "lake") nextLk = !nextLk;
       else if (topic === "settlement") nextStl = !nextStl;
+      else if (topic === "capital") nextCap = !nextCap;
     } else {
       nextR = topic === "region";
       nextS = topic === "station";
@@ -2883,9 +2919,10 @@ function bindAllUIEvents() {
       nextRes = topic === "reservoir";
       nextLk = topic === "lake";
       nextStl = topic === "settlement";
+      nextCap = topic === "capital";
     }
 
-    if (!nextR && !nextS && !nextA && !nextP && !nextRes && !nextLk && !nextStl) {
+    if (!nextR && !nextS && !nextA && !nextP && !nextRes && !nextLk && !nextStl && !nextCap) {
       setFeedback("至少需保留 1 種挑戰題庫！", "warn");
       return;
     }
@@ -2929,6 +2966,7 @@ function bindAllUIEvents() {
           reservoirQuizEnabled: nextRes,
           lakeQuizEnabled: nextLk,
           settlementQuizEnabled: nextStl,
+          capitalQuizEnabled: nextCap,
           filterStationsByRegion: nextFilterByRegion,
           selectedCounties: nextR ? Array.from(nextCounties) : [],
           selectedTownIds: nextR ? Array.from(nextTownIds) : [],
@@ -2951,6 +2989,7 @@ function bindAllUIEvents() {
     state.reservoirQuizEnabled = nextRes;
     state.lakeQuizEnabled = nextLk;
     state.settlementQuizEnabled = nextStl;
+    state.capitalQuizEnabled = nextCap;
     state.filterStationsByRegion = nextFilterByRegion;
     state.selectedCounties = nextCounties;
     state.selectedTownIds = nextTownIds;
@@ -3303,7 +3342,7 @@ function bindAllUIEvents() {
     const pack = _getActivePack();
     const firstGroupName = activeGroups.length > 0 ? activeGroups[0].name : "臺北市";
 
-    const hasActivePoi = features.supportsPoiQuiz && typeof hasAnyPoiQuizActive === "function" && hasAnyPoiQuizActive();
+    const hasActivePoi = (features.supportsPoiQuiz || features.supportsCapitalQuiz) && typeof hasAnyPoiQuizActive === "function" && hasAnyPoiQuizActive();
     const hasActiveStation = features.supportsTransportQuiz && Boolean(state.stationQuizEnabled && state.quizStationLines.size > 0);
     const hasAnyRegionSelected = Boolean(state.regionQuizEnabled && state.selectedTownIds && state.selectedTownIds.size > 0);
     if (!hasAnyRegionSelected && !hasActiveStation && !hasActivePoi) {
@@ -3353,8 +3392,9 @@ function bindAllUIEvents() {
       );
     }
     if (activeSt.length > 0) sumParts.push(`${activeSt.length}站`);
-    if (features.supportsPoiQuiz && typeof isPoiCategoryActive === "function" && typeof getActiveQuizPois === "function") {
-      [["airport", "機場"], ["port", "港"], ["reservoir", "水庫"], ["lake", "湖"], ["settlement", "聚落"]].forEach(([cat, lbl]) => {
+    if ((features.supportsPoiQuiz || features.supportsCapitalQuiz) && typeof isPoiCategoryActive === "function" && typeof getActiveQuizPois === "function") {
+      const capShortLbl = typeof getPoiCategoryLabel === "function" ? getPoiCategoryLabel("capital") : "首都";
+      [["airport", "機場"], ["port", "港"], ["reservoir", "水庫"], ["lake", "湖"], ["settlement", "聚落"], ["capital", capShortLbl]].forEach(([cat, lbl]) => {
         if (isPoiCategoryActive(cat)) {
           const cnt = getActiveQuizPois(cat).length;
           if (cnt > 0) sumParts.push(`${cnt}${lbl}`);

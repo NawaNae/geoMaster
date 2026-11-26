@@ -89,7 +89,7 @@ function getLimitedRoundStats(vStateArg = null, fallbackRaw = null) {
     const uStations = vState.unlockedStations || new Set();
     const uPois = vState.unlockedPois || state.unlockedPois || new Set();
     const activePois =
-      _dashFeatures().supportsPoiQuiz && typeof getActiveQuizPois === "function"
+      (_dashFeatures().supportsPoiQuiz || _dashFeatures().supportsCapitalQuiz) && typeof getActiveQuizPois === "function"
         ? getActiveQuizPois()
         : [];
     const poiById = activePois.length > 0 ? new Map(activePois.map((p) => [p.id, p])) : null;
@@ -213,7 +213,7 @@ function updateScoreAndProgressUI() {
 
   const activeSt = features.supportsTransportQuiz && typeof getActiveQuizStations === "function" ? getActiveQuizStations() : [];
   const unlockedStCount = activeSt.filter((s) => vState.unlockedStations.has(s.key)).length;
-  const activePois = features.supportsPoiQuiz && typeof getActiveQuizPois === "function" ? getActiveQuizPois() : [];
+  const activePois = (features.supportsPoiQuiz || features.supportsCapitalQuiz) && typeof getActiveQuizPois === "function" ? getActiveQuizPois() : [];
   const vUnlockedPois = vState.unlockedPois || state.unlockedPois || new Set();
   const unlockedPoiCount = activePois.filter((p) => vUnlockedPois.has(p.id)).length;
   const stAndPoiCurrent = unlockedStCount + unlockedPoiCount;
@@ -262,8 +262,12 @@ function updateScoreAndProgressUI() {
     document.getElementById("stat-county-pct").textContent = `${regionPct}%`;
     document.getElementById("stat-county-bar").style.width = `${Math.min(100, parseFloat(regionPct))}%`;
 
+    const onlyCap = activePois.length > 0 && activePois.every((p) => p.category === "capital");
+    const capLbl = typeof getPoiCategoryLabel === "function" ? getPoiCategoryLabel("capital") : "首都／省會";
     const secLabel = activeSt.length > 0 && activePois.length > 0
       ? "🚉📍 車站與地標"
+      : onlyCap
+      ? `🏛️ ${capLbl}完成度`
       : activePois.length > 0
       ? "📍 地標完成度"
       : "🚉 車站完成度";
@@ -273,38 +277,44 @@ function updateScoreAndProgressUI() {
     document.getElementById("stat-town-pct").textContent = `${stPct}%`;
     document.getElementById("stat-town-bar").style.width = `${Math.min(100, parseFloat(stPct))}%`;
   } else if (regionTotal === 0 && activePois.length > 0 && activeSt.length === 0) {
-    // Pure POI Mode (Airport / Port / Reservoir / Lake)
-    const activeCats = ["airport", "port", "reservoir", "lake", "settlement"]
+    // Pure POI / Capital Mode
+    const activeCats = ["airport", "port", "reservoir", "lake", "settlement", "capital"]
       .map((cat) => ({ cat, items: typeof getActiveQuizPois === "function" ? getActiveQuizPois(cat) : [] }))
       .filter((entry) => entry.items.length > 0);
+    const poiUnitFor = (cat) => (cat === "capital" || cat === "settlement" ? "處" : "座");
 
     if (activeCats.length === 2) {
       const [c1, c2] = activeCats;
       const m1 = POI_CATEGORY_META[c1.cat] || { icon: "📍", label: c1.cat };
       const m2 = POI_CATEGORY_META[c2.cat] || { icon: "📍", label: c2.cat };
+      const l1 = typeof getPoiCategoryLabel === "function" ? getPoiCategoryLabel(c1.cat) : m1.label;
+      const l2 = typeof getPoiCategoryLabel === "function" ? getPoiCategoryLabel(c2.cat) : m2.label;
       const cur1 = c1.items.filter((p) => vUnlockedPois.has(p.id)).length;
       const cur2 = c2.items.filter((p) => vUnlockedPois.has(p.id)).length;
       const pct1 = ((cur1 / c1.items.length) * 100).toFixed(1);
       const pct2 = ((cur2 / c2.items.length) * 100).toFixed(1);
 
-      if (cLabelEl) cLabelEl.textContent = `${m1.icon} ${m1.label}進度`;
-      document.getElementById("stat-county-count").textContent = `${cur1} / ${c1.items.length} 座`;
+      if (cLabelEl) cLabelEl.textContent = `${m1.icon} ${l1}進度`;
+      document.getElementById("stat-county-count").textContent = `${cur1} / ${c1.items.length} ${poiUnitFor(c1.cat)}`;
       document.getElementById("stat-county-pct").textContent = `${pct1}%`;
       document.getElementById("stat-county-bar").style.width = `${Math.min(100, parseFloat(pct1))}%`;
 
-      document.getElementById("stat-town-label").textContent = `${m2.icon} ${m2.label}進度`;
-      document.getElementById("stat-town-count").textContent = `${cur2} / ${c2.items.length} 座`;
+      document.getElementById("stat-town-label").textContent = `${m2.icon} ${l2}進度`;
+      document.getElementById("stat-town-count").textContent = `${cur2} / ${c2.items.length} ${poiUnitFor(c2.cat)}`;
       document.getElementById("stat-town-pct").textContent = `${pct2}%`;
       document.getElementById("stat-town-bar").style.width = `${Math.min(100, parseFloat(pct2))}%`;
     } else {
-      const singleMeta = activeCats.length === 1 ? POI_CATEGORY_META[activeCats[0].cat] : null;
-      if (cLabelEl) cLabelEl.textContent = singleMeta ? `${singleMeta.icon} ${singleMeta.label}總進度` : "📍 地標總進度（去重）";
-      document.getElementById("stat-county-count").textContent = `${unlockedPoiCount} / ${activePois.length} 座`;
+      const singleCat = activeCats.length === 1 ? activeCats[0].cat : null;
+      const singleMeta = singleCat ? POI_CATEGORY_META[singleCat] : null;
+      const singleLbl = singleCat && typeof getPoiCategoryLabel === "function" ? getPoiCategoryLabel(singleCat) : (singleMeta ? singleMeta.label : "");
+      const unitStr = singleCat ? poiUnitFor(singleCat) : "處";
+      if (cLabelEl) cLabelEl.textContent = singleMeta ? `${singleMeta.icon} ${singleLbl}總進度` : "📍 地標總進度（去重）";
+      document.getElementById("stat-county-count").textContent = `${unlockedPoiCount} / ${activePois.length} ${unitStr}`;
       document.getElementById("stat-county-pct").textContent = `${grandPct}%`;
       document.getElementById("stat-county-bar").style.width = `${Math.min(100, parseFloat(grandPct))}%`;
 
       document.getElementById("stat-town-label").textContent = "🎯 剩餘待猜";
-      document.getElementById("stat-town-count").textContent = `${activePois.length - unlockedPoiCount} 座`;
+      document.getElementById("stat-town-count").textContent = `${activePois.length - unlockedPoiCount} ${unitStr}`;
       document.getElementById("stat-town-pct").textContent = `${grandPct}%`;
       document.getElementById("stat-town-bar").style.width = `${Math.min(100, parseFloat(grandPct))}%`;
     }
@@ -624,40 +634,46 @@ function renderCountyProgressSidebar() {
   const isTw = _dashIsTwModern();
   const singleLayer = _dashIsSingleLayer();
   const activeSt = features.supportsTransportQuiz && typeof getActiveQuizStations === "function" ? getActiveQuizStations() : [];
-  const activePois = features.supportsPoiQuiz && typeof getActiveQuizPois === "function" ? getActiveQuizPois() : [];
+  const activePois = (features.supportsPoiQuiz || features.supportsCapitalQuiz) && typeof getActiveQuizPois === "function" ? getActiveQuizPois() : [];
   const vUnlockedPois = vState.unlockedPois || state.unlockedPois || new Set();
   const scopeCounties = getScopeCounties();
 
   if (titleEl) {
     const parts = [];
-    if (activePois.length > 0) parts.push("地標");
+    const onlyCap = activePois.length > 0 && activePois.every((p) => p.category === "capital");
+    const capLbl = typeof getPoiCategoryLabel === "function" ? getPoiCategoryLabel("capital") : "首都／省會";
+    if (activePois.length > 0) parts.push(onlyCap ? capLbl : "地標");
     if (activeSt.length > 0) parts.push("車站路線");
     if (scopeCounties.length > 0) parts.push(isTw ? "各縣市" : `各${unitLabels.group}`);
     titleEl.textContent = parts.length > 0 ? `${parts.join("與")}完成度明細` : "挑戰進度明細";
   }
 
-  if (features.supportsPoiQuiz && activePois.length > 0) {
+  if ((features.supportsPoiQuiz || features.supportsCapitalQuiz) && activePois.length > 0) {
+    const onlyCap = activePois.every((p) => p.category === "capital");
+    const capLbl = typeof getPoiCategoryLabel === "function" ? getPoiCategoryLabel("capital") : "首都／省會";
     const poiHeader = document.createElement("div");
     poiHeader.className = "text-[11px] font-extrabold text-sky-300 uppercase tracking-wider px-1 pt-0.5";
-    poiHeader.textContent = "📍 地標完成度（自動去重統計）";
+    poiHeader.textContent = onlyCap ? `🏛️ ${capLbl}完成度` : "📍 地標完成度（自動去重統計）";
     container.appendChild(poiHeader);
 
-    ["airport", "port", "reservoir", "lake", "settlement"].forEach((cat) => {
+    ["airport", "port", "reservoir", "lake", "settlement", "capital"].forEach((cat) => {
       const catPois = typeof getActiveQuizPois === "function" ? getActiveQuizPois(cat) : activePois.filter((p) => p.category === cat);
       if (catPois.length === 0) return;
       const meta = POI_CATEGORY_META[cat];
+      const lbl = typeof getPoiCategoryLabel === "function" ? getPoiCategoryLabel(cat) : meta.label;
+      const unitStr = cat === "capital" || cat === "settlement" ? "處" : "座";
       const unlockedCnt = catPois.filter((p) => vUnlockedPois.has(p.id)).length;
       const pctP = ((unlockedCnt / catPois.length) * 100).toFixed(1);
       const isDone = unlockedCnt === catPois.length;
       container.appendChild(
         createSidebarProgressCard({
-          title: `${meta.icon} ${meta.label}總計`,
+          title: `${meta.icon} ${lbl}總計`,
           subTitle: "",
           badgeText: isDone ? "✅ 制霸" : "📍縮放",
           badgeClass: isDone
             ? "card-badge text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 shrink-0"
             : "card-badge text-[10px] px-1.5 py-0.2 rounded bg-sky-500/15 text-sky-300 shrink-0",
-          statText: `${unlockedCnt} / ${catPois.length} 座 · ${pctP}%`,
+          statText: `${unlockedCnt} / ${catPois.length} ${unitStr} · ${pctP}%`,
           isDone,
           pct: pctP,
           color: meta.accent,
@@ -867,7 +883,7 @@ function checkVictoryCondition() {
           return t && (typeof isTownInScope === "function" ? isTownInScope(t) : state.selectedCounties.has(t.countyName));
         }).length;
 
-  const activePois = features.supportsPoiQuiz && typeof getActiveQuizPois === "function" ? getActiveQuizPois() : [];
+  const activePois = (features.supportsPoiQuiz || features.supportsCapitalQuiz) && typeof getActiveQuizPois === "function" ? getActiveQuizPois() : [];
   const unlockedPoiCount = activePois.filter((p) => state.unlockedPois.has(p.id)).length;
   const total = adminTotal + activeSt.length + activePois.length;
   const current = adminCurrent + unlockedStCount + unlockedPoiCount;
@@ -930,7 +946,7 @@ function finishGame(reason = "victory") {
           }
         });
       }
-      if (features.supportsPoiQuiz && typeof getActiveQuizPois === "function") {
+      if ((features.supportsPoiQuiz || features.supportsCapitalQuiz) && typeof getActiveQuizPois === "function") {
         getActiveQuizPois().forEach((p) => {
           if (!state.unlockedPois.has(p.id)) {
             state.missedPois.add(p.id);
@@ -947,7 +963,7 @@ function finishGame(reason = "victory") {
 
   const activeSt = features.supportsTransportQuiz && typeof getActiveQuizStations === "function" ? getActiveQuizStations() : [];
   const rawUnlockedStCount = activeSt.filter((s) => state.unlockedStations.has(s.key)).length;
-  const activePois = features.supportsPoiQuiz && typeof getActiveQuizPois === "function" ? getActiveQuizPois() : [];
+  const activePois = (features.supportsPoiQuiz || features.supportsCapitalQuiz) && typeof getActiveQuizPois === "function" ? getActiveQuizPois() : [];
   const rawUnlockedPoiCount = activePois.filter((p) => state.unlockedPois.has(p.id)).length;
   const scopeCounties = getScopeCounties();
   const scopeTowns = getScopeTowns();
@@ -982,8 +998,8 @@ function finishGame(reason = "victory") {
   const maxStreak = (state.stats && state.stats.maxStreak) || 0;
   const poiBreakdown = limitedStats ? limitedStats.poiBreakdown : {};
   if (!limitedStats) {
-    ["airport", "port", "reservoir", "lake", "settlement"].forEach((cat) => {
-      if (features.supportsPoiQuiz && typeof isPoiCategoryActive === "function" && isPoiCategoryActive(cat) && typeof getActiveQuizPois === "function") {
+    ["airport", "port", "reservoir", "lake", "settlement", "capital"].forEach((cat) => {
+      if ((features.supportsPoiQuiz || features.supportsCapitalQuiz) && typeof isPoiCategoryActive === "function" && isPoiCategoryActive(cat) && typeof getActiveQuizPois === "function") {
         const list = getActiveQuizPois(cat);
         const unlocked = list.filter((p) => state.unlockedPois.has(p.id)).length;
         poiBreakdown[cat] = { current: unlocked, total: list.length };
@@ -1104,9 +1120,10 @@ function computeClearedBlocksStats(scopeCountiesArg, scopeTownsArg, activeStArg)
   let completedPoiCats = 0;
   let totalScopePoiCats = 0;
   const clearedPoiLabels = [];
-  const poiCatNames = { airport: "機場", port: "港口", reservoir: "水庫", lake: "湖泊", settlement: "傳統聚落" };
-  if (features.supportsPoiQuiz && typeof isPoiCategoryActive === "function" && typeof getActiveQuizPois === "function") {
-    ["airport", "port", "reservoir", "lake", "settlement"].forEach((cat) => {
+  const capCatName = typeof getPoiCategoryLabel === "function" ? getPoiCategoryLabel("capital") : "首都／省會";
+  const poiCatNames = { airport: "機場", port: "港口", reservoir: "水庫", lake: "湖泊", settlement: "傳統聚落", capital: capCatName };
+  if ((features.supportsPoiQuiz || features.supportsCapitalQuiz) && typeof isPoiCategoryActive === "function" && typeof getActiveQuizPois === "function") {
+    ["airport", "port", "reservoir", "lake", "settlement", "capital"].forEach((cat) => {
       if (!isPoiCategoryActive(cat)) return;
       const list = getActiveQuizPois(cat);
       if (list.length > 0) {
@@ -1655,10 +1672,23 @@ function formatBreakdownSummary(stats, verbose = false) {
 }
 
 function detectPoiThemeProfile() {
-  if (!_dashFeatures().supportsPoiQuiz) return null;
+  const feats = _dashFeatures();
+  if (!feats.supportsPoiQuiz && !feats.supportsCapitalQuiz) return null;
   if (typeof isPoiCategoryActive !== "function") return null;
-  const activeCats = ["airport", "port", "reservoir", "lake", "settlement"].filter((c) => isPoiCategoryActive(c));
+  const activeCats = ["airport", "port", "reservoir", "lake", "settlement", "capital"].filter((c) => isPoiCategoryActive(c));
   if (activeCats.length === 0) return null;
+
+  if (activeCats.length === 1 && activeCats[0] === "capital") {
+    const pack = typeof getActiveMapPack === "function" ? getActiveMapPack() : null;
+    const pid = pack ? pack.id : "";
+    if (pid === "world_countries") {
+      return makeTierTitles("世界各國首都", "🏛️ 世界首都最高大宗師", "🏛️ 全球首都極速制霸王", "🏛️ 世界首都通關大師", "🏛️ 世界首都地理專家", "🏛️ 世界首都達人", "🏛️ 首都見習外交官", "🏛️ 世界啟程旅人");
+    }
+    if (pid === "roc_1949") {
+      return makeTierTitles("中華民國1945省會", "🏛️ 民國省會最高大宗師", "🏛️ 秋海棠省會極速制霸王", "🏛️ 民國省會通關大師", "🏛️ 民國歷史省會專家", "🏛️ 民國省會達人", "🏛️ 史地見習學人", "🏛️ 省會啟程旅人");
+    }
+    return makeTierTitles("中國省會與首府", "🏛️ 中國省會最高大宗師", "🏛️ 神州省會極速制霸王", "🏛️ 中國省會通關大師", "🏛️ 中國省會地理專家", "🏛️ 中國省會達人", "🏛️ 省會見習學人", "🏛️ 神州啟程旅人");
+  }
 
   if (activeCats.length === 1) {
     const cat = activeCats[0];
@@ -2038,8 +2068,9 @@ function showSettlementModal() {
     }
   }
   if (activeSt.length > 0) scopeParts.push(`${activeSt.length}站`);
-  if (features.supportsPoiQuiz && typeof isPoiCategoryActive === "function" && typeof getActiveQuizPois === "function") {
-    [["airport", "機場"], ["port", "港"], ["reservoir", "水庫"], ["lake", "湖"], ["settlement", "聚落"]].forEach(([cat, lbl]) => {
+  if ((features.supportsPoiQuiz || features.supportsCapitalQuiz) && typeof isPoiCategoryActive === "function" && typeof getActiveQuizPois === "function") {
+    const capShortLbl = typeof getPoiCategoryLabel === "function" ? getPoiCategoryLabel("capital") : "首都";
+    [["airport", "機場"], ["port", "港"], ["reservoir", "水庫"], ["lake", "湖"], ["settlement", "聚落"], ["capital", capShortLbl]].forEach(([cat, lbl]) => {
       if (isPoiCategoryActive(cat)) {
         const cnt = getActiveQuizPois(cat).length;
         if (cnt > 0) scopeParts.push(`${cnt}${lbl}`);

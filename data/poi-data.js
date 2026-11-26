@@ -44,6 +44,13 @@ const POI_CATEGORY_META = {
     icon: "🪧",
     accent: "#84cc16",
     badgeClass: "bg-lime-500/20 text-lime-300 border-lime-400/40"
+  },
+  capital: {
+    id: "capital",
+    label: "首都／省會",
+    icon: "🏛️",
+    accent: "#f59e0b",
+    badgeClass: "bg-amber-500/20 text-amber-300 border-amber-400/40"
   }
 };
 

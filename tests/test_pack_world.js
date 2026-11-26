@@ -680,7 +680,7 @@ async function main() {
     // - #pack-options-bar visible with #pack-opt-world-micro-wrap visible & #pack-opt-cn-singlechar-wrap hidden
     await vm.runInContext(`switchActiveMapPack("world_countries")`, sandbox);
     check(elements["difficulty-selector-card"].classList.contains("hidden"), "5.MinimalistUI", "#difficulty-selector-card hidden on world_countries");
-    check(elements["topic-selector-card"].classList.contains("hidden"), "5.MinimalistUI", "#topic-selector-card hidden on world_countries");
+    check(!elements["topic-selector-card"].classList.contains("hidden"), "5.MinimalistUI", "#topic-selector-card visible on world_countries (supports capital quiz)");
     check(!elements["pack-options-bar"].classList.contains("hidden"), "5.MinimalistUI", "#pack-options-bar visible on world_countries");
     check(!elements["pack-opt-world-micro-wrap"].classList.contains("hidden"), "5.MinimalistUI", "#pack-opt-world-micro-wrap visible on world_countries");
     check(elements["pack-opt-cn-singlechar-wrap"].classList.contains("hidden"), "5.MinimalistUI", "#pack-opt-cn-singlechar-wrap hidden on world_countries");
@@ -701,7 +701,7 @@ async function main() {
     // - #pack-options-bar visible with #pack-opt-cn-singlechar-wrap visible & #pack-opt-world-micro-wrap hidden
     await vm.runInContext(`switchActiveMapPack("cn_prov")`, sandbox);
     check(!elements["difficulty-selector-card"].classList.contains("hidden"), "5.MinimalistUI", "#difficulty-selector-card visible on cn_prov");
-    check(elements["topic-selector-card"].classList.contains("hidden"), "5.MinimalistUI", "#topic-selector-card hidden on cn_prov");
+    check(!elements["topic-selector-card"].classList.contains("hidden"), "5.MinimalistUI", "#topic-selector-card visible on cn_prov (supports provincial capital quiz)");
     check(!elements["pack-options-bar"].classList.contains("hidden"), "5.MinimalistUI", "#pack-options-bar visible on cn_prov");
     check(!elements["pack-opt-cn-singlechar-wrap"].classList.contains("hidden"), "5.MinimalistUI", "#pack-opt-cn-singlechar-wrap visible on cn_prov");
     check(elements["pack-opt-world-micro-wrap"].classList.contains("hidden"), "5.MinimalistUI", "#pack-opt-world-micro-wrap hidden on cn_prov");

@@ -735,9 +735,9 @@ function evaluateGuess(rawInput, isAutoCheck = false) {
     state.targetPoiId = null;
   }
 
-  // CASE -1: POI QUIZ (Airports & Ports) — Gated by pack feature supportsPoiQuiz
+  // CASE -1: POI & CAPITAL QUIZ — Gated by pack features supportsPoiQuiz / supportsCapitalQuiz
   const isPoiQuizActive = Boolean(
-    features.supportsPoiQuiz &&
+    (features.supportsPoiQuiz || features.supportsCapitalQuiz) &&
     typeof hasAnyPoiQuizActive === "function" &&
     hasAnyPoiQuizActive()
   );
@@ -753,7 +753,11 @@ function evaluateGuess(rawInput, isAutoCheck = false) {
   const poiSuffixRe = /(機場|基地|航空站|桃機|松機|清泉崗|漁港|商港|工業港|天然氣港|接收港|接收站|港|碼頭|一接|二接|三接|水庫|攔河堰|人工湖|大壩|壩|湖|潭|池|埤|窟|水漾森林|天使的眼淚)$/;
   const normPoiWithSuffix = isPoiQuizActive && typeof normalizePoiText === "function" ? normalizePoiText(coreWithSuffix) : _normInput(coreWithSuffix);
   const normPoiCombined = isPoiQuizActive && typeof normalizePoiText === "function" ? normalizePoiText(combined) : _normInput(combined);
+  const looksLikeCapitalInput = isPoiQuizActive &&
+    typeof isActiveCapitalInput === "function" &&
+    (isActiveCapitalInput(coreWithSuffix) || (combined !== coreWithSuffix && isActiveCapitalInput(combined)));
   const looksLikePoiInput = isPoiQuizActive && (
+    looksLikeCapitalInput ||
     EXACT_POI_SUFFIXED_KEYS_SET.has(normPoiWithSuffix) ||
     EXACT_POI_SUFFIXED_KEYS_SET.has(normPoiCombined) ||
     poiSuffixRe.test(coreWithSuffix) ||
@@ -799,6 +803,7 @@ function evaluateGuess(rawInput, isAutoCheck = false) {
         const p = poiRes.poi;
         const displayCat = typeof getPoiDisplayCategory === "function" ? getPoiDisplayCategory(p) : p.category;
         const catMeta = POI_CATEGORY_META[displayCat] || { icon: "📍", label: "地標" };
+        const catLabel = typeof getPoiCategoryLabel === "function" ? getPoiCategoryLabel(displayCat) : catMeta.label;
         state.lastTargetLat = p.lat;
         state.lastTargetLng = p.lng;
         if (typeof refreshPoiMapLayer === "function") refreshPoiMapLayer();
@@ -833,10 +838,11 @@ function evaluateGuess(rawInput, isAutoCheck = false) {
         }
 
         const unlockedList = Array.isArray(poiRes.unlockedList) && poiRes.unlockedList.length > 1 ? poiRes.unlockedList : null;
-        const locHint = shouldHidePoiAdminLocationHint() ? "" : `（${p.countyName}${p.townName}）`;
+        const locStr = typeof formatPoiLocationText === "function" ? formatPoiLocationText(p) : `${p.countyName || ""}${p.townName || ""}`;
+        const locHint = (p.category !== "capital" && shouldHidePoiAdminLocationHint()) || !locStr ? "" : `（${locStr}）`;
         const unlockMsg = unlockedList
-          ? `${catMeta.icon} 同時解鎖 ${unlockedList.length} 處${catMeta.label}：${unlockedList.map((x) => x.name).join("、")}${bonusText}`
-          : `${catMeta.icon} 解鎖${catMeta.label}：${p.name}${locHint}${bonusText}`;
+          ? `${catMeta.icon} 同時解鎖 ${unlockedList.length} 處${catLabel}：${unlockedList.map((x) => x.name).join("、")}${bonusText}`
+          : `${catMeta.icon} 解鎖${catLabel}：${p.name}${locHint}${bonusText}`;
         onSuccessfulUnlock(unlockMsg, p.shortName, Boolean(isTargetingPoi));
         if (isTargetingPoi) {
           if (state.playMode === "target_random" || state.playMode === "satellite_quiz") {
@@ -1548,7 +1554,7 @@ function buildTargetQuizQueue(limit = state.targetQuestionLimit) {
   if (features.supportsTransportQuiz && typeof getActiveQuizStations === "function") {
     getActiveQuizStations().forEach((s) => pool.push({ kind: "station", id: s.key }));
   }
-  if (features.supportsPoiQuiz && typeof getActiveQuizPois === "function") {
+  if ((features.supportsPoiQuiz || features.supportsCapitalQuiz) && typeof getActiveQuizPois === "function") {
     getActiveQuizPois().forEach((p) => pool.push({ kind: "poi", id: p.id }));
   }
 
@@ -1572,7 +1578,7 @@ function _activateTargetEntry(entry) {
   const groupFocusZoom = Number.isFinite(mapView.groupFocusZoom) ? mapView.groupFocusZoom : 9;
   const targetMaxZoom = Number.isFinite(mapView.targetMaxZoom) ? mapView.targetMaxZoom : 12;
 
-  if (entry.kind === "poi" && features.supportsPoiQuiz && typeof getActiveQuizPois === "function") {
+  if (entry.kind === "poi" && (features.supportsPoiQuiz || features.supportsCapitalQuiz) && typeof getActiveQuizPois === "function") {
     const pickPoi = getActiveQuizPois().find((p) => p.id === entry.id);
     if (!pickPoi) return false;
     state.targetId = null;
@@ -1777,8 +1783,8 @@ function startQuestionCountdown(customSec = null) {
 }
 
 function resolveCurrentTargetReadableName() {
-  if (state.targetPoiId && typeof TAIWAN_POI_BY_ID !== "undefined") {
-    const p = TAIWAN_POI_BY_ID.get(state.targetPoiId);
+  if (state.targetPoiId) {
+    const p = typeof getPoiById === "function" ? getPoiById(state.targetPoiId) : (typeof TAIWAN_POI_BY_ID !== "undefined" ? TAIWAN_POI_BY_ID.get(state.targetPoiId) : null);
     if (p) return p.name || p.shortName || state.targetPoiId;
   }
   if (state.targetStationKey && typeof getActiveQuizStations === "function") {
@@ -1959,7 +1965,7 @@ function pickNextTargetRegion() {
       ? getActiveQuizStations().filter((s) => !state.unlockedStations.has(s.key) && !(state.passedTargetKeys && state.passedTargetKeys.has(`station:${s.key}`)))
       : [];
   const remainingPois =
-    features.supportsPoiQuiz && typeof getActiveQuizPois === "function"
+    (features.supportsPoiQuiz || features.supportsCapitalQuiz) && typeof getActiveQuizPois === "function"
       ? getActiveQuizPois().filter((p) => !state.unlockedPois.has(p.id) && !(state.passedTargetKeys && state.passedTargetKeys.has(`poi:${p.id}`)))
       : [];
   const scopeTowns = getScopeTowns();
@@ -2451,10 +2457,18 @@ function updateTargetBannerUI() {
         : `困難全名：請輸入完整「${groupLabel}+${itemLabel}」`;
   }
 
-  if (!vState.targetId) {
+  if (!vState.targetId && vState.targetPoiId) {
+    const targetPoi = typeof getPoiById === "function" ? getPoiById(vState.targetPoiId) : null;
+    const displayCat = targetPoi && typeof getPoiDisplayCategory === "function" ? getPoiDisplayCategory(targetPoi) : (targetPoi && targetPoi.category) || "capital";
+    const catLbl = typeof getPoiCategoryLabel === "function" ? getPoiCategoryLabel(displayCat) : "地標";
+    hintBadge.textContent = isSatellite
+      ? (state.satelliteOutlineRevealed ? "👁️ 已顯示輪廓" : state.satelliteViewportLocked ? "🔒 視野已鎖定" : "🛰️ 衛星盲猜中")
+      : `🏛️ ${catLbl}高亮目標`;
+    descEl.textContent = `請輸入高亮標記的${catLbl}名稱`;
+  } else if (!vState.targetId && !vState.targetStationKey) {
     hintBadge.textContent = "等待點選目標";
     descEl.textContent = isClick
-      ? (isTwPack ? "請點擊地圖區塊/車站，或按右側 ←↑↓→ 鍵切換目標！" : `請點擊地圖${itemLabel}，或按右側 ←↑↓→ 鍵切換目標！`)
+      ? (isTwPack ? "請點擊地圖區塊/車站，或按右側 ←↑↓→ 鍵切換目標！" : `請點擊地圖${itemLabel}或標記，或按右側 ←↑↓→ 鍵切換目標！`)
       : "請點擊右側「🎲 隨機下個」抽取下一個目標！";
   } else if (isSatellite) {
     hintBadge.textContent = state.satelliteOutlineRevealed
@@ -2503,13 +2517,16 @@ function giveTargetHint() {
       }
       return;
     }
-    if (features.supportsPoiQuiz && state.targetPoiId && typeof TAIWAN_POI_BY_ID !== "undefined") {
-      const p = TAIWAN_POI_BY_ID.get(state.targetPoiId);
+    if ((features.supportsPoiQuiz || features.supportsCapitalQuiz) && state.targetPoiId) {
+      const p = typeof getPoiById === "function" ? getPoiById(state.targetPoiId) : (typeof TAIWAN_POI_BY_ID !== "undefined" ? TAIWAN_POI_BY_ID.get(state.targetPoiId) : null);
       if (p) {
+        const displayCat = typeof getPoiDisplayCategory === "function" ? getPoiDisplayCategory(p) : p.category;
+        const catLbl = typeof getPoiCategoryLabel === "function" ? getPoiCategoryLabel(displayCat) : "地標";
+        const locStr = typeof formatPoiLocationText === "function" ? formatPoiLocationText(p) : `${p.countyName || ""}${p.townName || ""}`;
         if (state.hintLevel === 2) {
-          setFeedback(`💡 衛星提示 2：此地標位於「${p.countyName || ""}${p.townName || ""}」`, "warn");
+          setFeedback(`💡 衛星提示 2：此${catLbl}位於「${locStr}」`, "warn");
         } else {
-          setFeedback(`💡 衛星提示 3：位於「${p.countyName || ""}」，地標首字為「${(p.shortName || p.name)[0]}...」`, "warn");
+          setFeedback(`💡 衛星提示 3：位於「${locStr}」，${catLbl}首字為「${(p.shortName || p.name)[0]}...」`, "warn");
         }
       }
       return;
@@ -2571,6 +2588,21 @@ function giveTargetHint() {
         setFeedback(`💡 車站提示 1：所屬路線為「${st.lineName}」`, "warn");
       } else {
         setFeedback(`💡 車站提示 2：隸屬「${st.lineName}」，站名首字為「${st.displayName[0]}...」`, "warn");
+      }
+    }
+    return;
+  }
+  if ((features.supportsPoiQuiz || features.supportsCapitalQuiz) && state.targetPoiId) {
+    const p = typeof getPoiById === "function" ? getPoiById(state.targetPoiId) : null;
+    if (p) {
+      state.hintLevel++;
+      const displayCat = typeof getPoiDisplayCategory === "function" ? getPoiDisplayCategory(p) : p.category;
+      const catLbl = typeof getPoiCategoryLabel === "function" ? getPoiCategoryLabel(displayCat) : "地標";
+      const locStr = typeof formatPoiLocationText === "function" ? formatPoiLocationText(p) : `${p.countyName || ""}${p.townName || ""}`;
+      if (state.hintLevel === 1) {
+        setFeedback(`💡 ${catLbl}提示 1：所屬為「${locStr}」`, "warn");
+      } else {
+        setFeedback(`💡 ${catLbl}提示 2：所屬「${locStr}」，首字為「${(p.shortName || p.name)[0]}...」`, "warn");
       }
     }
     return;

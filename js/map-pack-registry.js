@@ -373,6 +373,8 @@ function buildCompositeMapPack(rawPackIds) {
     features: {
       supportsTransportQuiz: memberIds.includes("tw_modern"),
       supportsPoiQuiz: memberIds.includes("tw_modern"),
+      supportsCapitalQuiz: members.some((m) => Boolean(m.features && m.features.supportsCapitalQuiz)),
+      capitalLabel: (members.find((m) => m.features && m.features.capitalLabel)?.features.capitalLabel) || "",
       supportsMasterHierarchy: false,
       supportsSuffixDifficulty: true,
       supportsHistoricalBasemap: memberIds.includes("roc_1949"),
@@ -591,6 +593,8 @@ function normalizeMapPackDefinition(raw) {
   const features = {
     supportsTransportQuiz: Boolean(rawFeatures.supportsTransportQuiz),
     supportsPoiQuiz: Boolean(rawFeatures.supportsPoiQuiz),
+    supportsCapitalQuiz: Boolean(rawFeatures.supportsCapitalQuiz),
+    capitalLabel: typeof rawFeatures.capitalLabel === "string" ? rawFeatures.capitalLabel : "",
     supportsMasterHierarchy: Boolean(rawFeatures.supportsMasterHierarchy),
     supportsSuffixDifficulty: Boolean(rawFeatures.supportsSuffixDifficulty),
     supportsHistoricalBasemap: Boolean(rawFeatures.supportsHistoricalBasemap),
@@ -1135,6 +1139,8 @@ const BUILT_IN_LAZY_MAP_PACK_STUBS = [
     features: {
       supportsTransportQuiz: false,
       supportsPoiQuiz: false,
+      supportsCapitalQuiz: true,
+      capitalLabel: "省會",
       supportsMasterHierarchy: false,
       supportsSuffixDifficulty: true,
       quickSuffixes: ["省", "市", "自治區", "特別行政區"],
@@ -1175,6 +1181,8 @@ const BUILT_IN_LAZY_MAP_PACK_STUBS = [
     features: {
       supportsTransportQuiz: false,
       supportsPoiQuiz: false,
+      supportsCapitalQuiz: true,
+      capitalLabel: "省會",
       supportsMasterHierarchy: false,
       supportsSuffixDifficulty: true,
       supportsHistoricalBasemap: true,
@@ -1215,6 +1223,8 @@ const BUILT_IN_LAZY_MAP_PACK_STUBS = [
     features: {
       supportsTransportQuiz: false,
       supportsPoiQuiz: false,
+      supportsCapitalQuiz: true,
+      capitalLabel: "首都",
       supportsMasterHierarchy: false,
       supportsSuffixDifficulty: false,
       quickSuffixes: [],
@@ -1321,6 +1331,9 @@ async function switchActiveMapPack(packIdInput, options = {}) {
       state.lakeQuizEnabled = false;
       state.settlementQuizEnabled = false;
     }
+    if (!features.supportsCapitalQuiz) {
+      state.capitalQuizEnabled = false;
+    }
 
     const hasAnyTopic =
       state.regionQuizEnabled ||
@@ -1330,7 +1343,8 @@ async function switchActiveMapPack(packIdInput, options = {}) {
           state.portQuizEnabled ||
           state.reservoirQuizEnabled ||
           state.lakeQuizEnabled ||
-          state.settlementQuizEnabled));
+          state.settlementQuizEnabled)) ||
+      (features.supportsCapitalQuiz && state.capitalQuizEnabled);
     if (!hasAnyTopic) {
       state.regionQuizEnabled = true;
     }

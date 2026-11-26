@@ -143,6 +143,8 @@
     features: {
       supportsTransportQuiz: false,
       supportsPoiQuiz: false,
+      supportsCapitalQuiz: true,
+      capitalLabel: "首都",
       supportsMasterHierarchy: false,
       supportsSuffixDifficulty: false,
       quickSuffixes: [],

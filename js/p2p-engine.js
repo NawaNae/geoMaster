@@ -96,7 +96,7 @@ function getLocalGrandCounts() {
   const activeSt = features.supportsTransportQuiz && typeof getActiveQuizStations === "function" ? getActiveQuizStations() : [];
   const stationTotal = activeSt.length;
   const stationCurrent = activeSt.filter((s) => state.unlockedStations.has(s.key)).length;
-  const activePois = features.supportsPoiQuiz && typeof getActiveQuizPois === "function" ? getActiveQuizPois() : [];
+  const activePois = (features.supportsPoiQuiz || features.supportsCapitalQuiz) && typeof getActiveQuizPois === "function" ? getActiveQuizPois() : [];
   const poiTotal = activePois.length;
   const poiCurrent = activePois.filter((p) => state.unlockedPois.has(p.id)).length;
   const macroProgress = {};
@@ -114,13 +114,15 @@ function getLocalGrandCounts() {
       }
     });
   }
-  if (features.supportsPoiQuiz && activePois.length > 0) {
+  if ((features.supportsPoiQuiz || features.supportsCapitalQuiz) && activePois.length > 0) {
+    const capMacroLbl = typeof getPoiCategoryLabel === "function" ? getPoiCategoryLabel("capital") : "首都";
     [
       ["airport", "機場"],
       ["port", "港口"],
       ["reservoir", "水庫"],
       ["lake", "湖泊"],
-      ["settlement", "傳統聚落"]
+      ["settlement", "傳統聚落"],
+      ["capital", capMacroLbl]
     ].forEach(([catKey, label]) => {
       const catList = typeof getActiveQuizPois === "function" ? getActiveQuizPois(catKey) : activePois.filter((p) => p.category === catKey);
       if (catList.length > 0) {
@@ -334,6 +336,7 @@ function getHostSyncConfig(isSettingChange = false, changeLabel = "", changeDeta
     reservoirQuizEnabled: Boolean(state.reservoirQuizEnabled),
     lakeQuizEnabled: Boolean(state.lakeQuizEnabled),
     settlementQuizEnabled: Boolean(state.settlementQuizEnabled),
+    capitalQuizEnabled: Boolean(state.capitalQuizEnabled),
     airportSubTypes: Array.from(state.airportSubTypes || []),
     portSubTypes: Array.from(state.portSubTypes || []),
     reservoirSubTypes: Array.from(state.reservoirSubTypes || []),
@@ -690,8 +693,8 @@ function renderRoomConciseSettingsSummary() {
     rows.push({ label: "車站：", text: `${stText}${filterSuffix}`, highlight: "text-pink-200" });
   }
 
-  // 3b. Airport & Port Lines (Only if supported and selected!)
-  if (features.supportsPoiQuiz && typeof getConcisePoiSummaryParts === "function") {
+  // 3b. POI & Capital Lines (Only if supported and selected!)
+  if ((features.supportsPoiQuiz || features.supportsCapitalQuiz) && typeof getConcisePoiSummaryParts === "function") {
     const poiParts = getConcisePoiSummaryParts();
     if (poiParts.length > 0) {
       const regNote = state.filterStationsByRegion && state.regionQuizEnabled && state.selectedCounties.size > 0
@@ -1615,7 +1618,10 @@ function buildProposedConfigFromPatch(patch) {
         base.lakeQuizEnabled = false;
         base.settlementQuizEnabled = false;
       }
-      if (!tf.supportsTransportQuiz && !tf.supportsPoiQuiz) {
+      if (!tf.supportsCapitalQuiz) {
+        base.capitalQuizEnabled = false;
+      }
+      if (!tf.supportsTransportQuiz && !tf.supportsPoiQuiz && !tf.supportsCapitalQuiz) {
         base.regionQuizEnabled = true;
         base.quizTargetMode = "region";
       }
@@ -1629,6 +1635,7 @@ function buildProposedConfigFromPatch(patch) {
   if (typeof patch.reservoirQuizEnabled === "boolean") base.reservoirQuizEnabled = patch.reservoirQuizEnabled;
   if (typeof patch.lakeQuizEnabled === "boolean") base.lakeQuizEnabled = patch.lakeQuizEnabled;
   if (typeof patch.settlementQuizEnabled === "boolean") base.settlementQuizEnabled = patch.settlementQuizEnabled;
+  if (typeof patch.capitalQuizEnabled === "boolean") base.capitalQuizEnabled = patch.capitalQuizEnabled;
   if (Array.isArray(patch.airportSubTypes)) base.airportSubTypes = patch.airportSubTypes.slice();
   if (Array.isArray(patch.portSubTypes)) base.portSubTypes = patch.portSubTypes.slice();
   if (Array.isArray(patch.reservoirSubTypes)) base.reservoirSubTypes = patch.reservoirSubTypes.slice();
@@ -3436,10 +3443,12 @@ function updateOpponentUI() {
     const isTw = _p2pIsTwModern();
     const stationMacroKeys = new Set(["台鐵", "高鐵", "捷運", "輕軌", "纜車", "林鐵", "糖鐵"]);
     const poiMacroKeys = new Set(["機場", "港口", "水庫", "湖泊", "傳統聚落"]);
+    const capMacroKeys = new Set(["首都", "省會", "首都／省會"]);
     const mp = state.opponent.macroProgress || {};
     const macroKeys = Object.keys(mp).filter((k) => {
       if (stationMacroKeys.has(k) && !features.supportsTransportQuiz) return false;
       if (poiMacroKeys.has(k) && !features.supportsPoiQuiz) return false;
+      if (capMacroKeys.has(k) && !features.supportsCapitalQuiz) return false;
       return true;
     });
     if (!isThreePlus && hasBattleOpponent && macroKeys.length > 0) {
@@ -3813,6 +3822,11 @@ function _applyRemoteSyncConfigAfterPack(cfg, fromCountdown = false) {
   } else if (!features.supportsPoiQuiz) {
     state.settlementQuizEnabled = false;
   }
+  if (typeof cfg.capitalQuizEnabled === "boolean") {
+    state.capitalQuizEnabled = features.supportsCapitalQuiz && cfg.capitalQuizEnabled;
+  } else if (!features.supportsCapitalQuiz) {
+    state.capitalQuizEnabled = false;
+  }
   if (Array.isArray(cfg.airportSubTypes)) {
     state.airportSubTypes = new Set(cfg.airportSubTypes);
   }
@@ -3850,7 +3864,8 @@ function _applyRemoteSyncConfigAfterPack(cfg, fromCountdown = false) {
           state.reservoirQuizEnabled ||
           state.lakeQuizEnabled ||
           state.settlementQuizEnabled)
-    );
+    ) ||
+    Boolean(features.supportsCapitalQuiz && state.capitalQuizEnabled);
   if (!hasAnyActiveTopic) {
     state.regionQuizEnabled = true;
     if (state.selectedTownIds.size === 0 && validItemIdSet.size > 0) {

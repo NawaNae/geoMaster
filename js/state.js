@@ -184,6 +184,7 @@ const state = {
   reservoirQuizEnabled: false,
   lakeQuizEnabled: false,
   settlementQuizEnabled: false,
+  capitalQuizEnabled: false,
   airportSubTypes: new Set(["intl", "domestic", "military"]),
   portSubTypes: new Set(["intl_commercial", "intl_aux", "fishery_cat1"]),
   reservoirSubTypes: new Set(["res_major"]),
@@ -287,7 +288,8 @@ function syncLegacyQuizTargetMode() {
   const hasRes = Boolean(state.reservoirQuizEnabled && state.reservoirSubTypes && state.reservoirSubTypes.size > 0);
   const hasLk = Boolean(state.lakeQuizEnabled && state.lakeSubTypes && state.lakeSubTypes.size > 0);
   const hasStl = Boolean(state.settlementQuizEnabled && state.settlementSubTypes && state.settlementSubTypes.size > 0);
-  const activeCount = (hasR ? 1 : 0) + (hasS ? 1 : 0) + (hasA ? 1 : 0) + (hasP ? 1 : 0) + (hasRes ? 1 : 0) + (hasLk ? 1 : 0) + (hasStl ? 1 : 0);
+  const hasCap = Boolean(state.capitalQuizEnabled);
+  const activeCount = (hasR ? 1 : 0) + (hasS ? 1 : 0) + (hasA ? 1 : 0) + (hasP ? 1 : 0) + (hasRes ? 1 : 0) + (hasLk ? 1 : 0) + (hasStl ? 1 : 0) + (hasCap ? 1 : 0);
   if (activeCount === 1 && hasR) {
     state.quizTargetMode = "region";
   } else if (activeCount === 1 && hasS) {

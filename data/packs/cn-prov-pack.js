@@ -1079,6 +1079,8 @@
     features: {
       supportsTransportQuiz: false,
       supportsPoiQuiz: false,
+      supportsCapitalQuiz: true,
+      capitalLabel: "省會",
       supportsMasterHierarchy: false,
       supportsSuffixDifficulty: true,
       quickSuffixes: ["省", "市", "自治區", "特別行政區"],

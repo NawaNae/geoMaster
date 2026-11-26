@@ -44,6 +44,8 @@
     features: {
       supportsTransportQuiz: false,
       supportsPoiQuiz: false,
+      supportsCapitalQuiz: true,
+      capitalLabel: "省會",
       supportsMasterHierarchy: false,
       supportsSuffixDifficulty: true,
       supportsHistoricalBasemap: true,

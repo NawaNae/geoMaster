@@ -308,10 +308,15 @@ function getDuplicateTownNameSet() {
 }
 
 function getDuplicatePoiNameSet() {
-  const pois =
+  const twPois =
     typeof TAIWAN_POI_DATA !== "undefined" && Array.isArray(TAIWAN_POI_DATA)
       ? TAIWAN_POI_DATA
       : [];
+  const capPois =
+    typeof getActiveCapitalPois === "function"
+      ? getActiveCapitalPois(false)
+      : [];
+  const pois = capPois.length > 0 ? twPois.concat(capPois) : twPois;
   const counts = new Map();
   for (let i = 0; i < pois.length; i++) {
     const n = String((pois[i] && pois[i].name) || "").trim();
@@ -419,9 +424,11 @@ function buildPinDropTargetFromPoi(p, dupPoiNames = null) {
       icon: "📍",
       label: "地標"
     };
+  const catLabel = typeof getPoiCategoryLabel === "function" ? getPoiCategoryLabel(displayCat) : catMeta.label;
   const dups = dupPoiNames instanceof Set ? dupPoiNames : getDuplicatePoiNameSet();
   const isDup = dups.has(String(p.name || "").trim());
-  const locPrefix = isDup && (p.countyName || p.townName) ? `${p.countyName || ""}${p.townName || ""} · ` : "";
+  const locStr = typeof formatPoiLocationText === "function" ? formatPoiLocationText(p) : `${p.countyName || ""}${p.townName || ""}`;
+  const locPrefix = isDup && locStr ? `${locStr} · ` : "";
   const displayName = `${locPrefix}${p.name}`;
   return {
     kind: "poi",
@@ -430,8 +437,8 @@ function buildPinDropTargetFromPoi(p, dupPoiNames = null) {
     rawId: p.id,
     promptTitle: `${catMeta.icon} 請在地圖上標出：${displayName}`,
     shortLabel: isDup ? displayName : (p.shortName || p.name),
-    categoryLabel: catMeta.label,
-    badgeText: `${catMeta.icon} ${catMeta.label}`,
+    categoryLabel: catLabel,
+    badgeText: `${catMeta.icon} ${catLabel}`,
     lat: Number(p.lat),
     lng: Number(p.lng),
     ref: p

@@ -830,6 +830,10 @@ input, select {
   --poi-accent: #a3e635;
   color: #d9f99d;
 }
+.tw-poi-capital {
+  --poi-accent: #f59e0b;
+  color: #fde68a;
+}
 
 /* States: Translucent Luminous Halo (lightweight border + tint, zero CSS filter blur) */
 /* Unlocked (Pass): Soft emerald tint + crisp 1.2px solid luminous ring */
