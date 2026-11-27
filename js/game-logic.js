@@ -735,9 +735,9 @@ function evaluateGuess(rawInput, isAutoCheck = false) {
     state.targetPoiId = null;
   }
 
-  // CASE -1: POI & CAPITAL QUIZ — Gated by pack features supportsPoiQuiz / supportsCapitalQuiz
+  // CASE -1: POI, CAPITAL & LANDMARK QUIZ — Gated by pack features supportsPoiQuiz / supportsCapitalQuiz / supportsLandmarkQuiz
   const isPoiQuizActive = Boolean(
-    (features.supportsPoiQuiz || features.supportsCapitalQuiz) &&
+    (features.supportsPoiQuiz || features.supportsCapitalQuiz || features.supportsLandmarkQuiz) &&
     typeof hasAnyPoiQuizActive === "function" &&
     hasAnyPoiQuizActive()
   );
@@ -847,7 +847,7 @@ function evaluateGuess(rawInput, isAutoCheck = false) {
         onSuccessfulUnlock(unlockMsg, p.shortName, Boolean(isTargetingPoi));
         if (isTargetingPoi) {
           if (state.playMode === "target_random" || state.playMode === "satellite_quiz") {
-            pickNextTargetRegion();
+            completeTargetQuestionSolve(p.shortName || p.name);
           } else {
             state.targetPoiId = null;
             updateTargetBannerUI();
@@ -937,7 +937,7 @@ function evaluateGuess(rawInput, isAutoCheck = false) {
           : `🎯 答對指定${groupLabel}：${targetCounty.name}！（可按方向鍵 ↑↓←→ 移至相鄰${groupLabel}或點選下一個）`;
         onSuccessfulUnlock(hitMsg, targetCounty.name, true);
         if (state.playMode === "target_random" || state.playMode === "satellite_quiz") {
-          pickNextTargetRegion();
+          completeTargetQuestionSolve(targetCounty.name);
         } else {
           state.targetId = null;
           updateTargetBannerUI();
@@ -1006,7 +1006,7 @@ function evaluateGuess(rawInput, isAutoCheck = false) {
         : (targetTown.fullCountyTown || targetTown.townName);
       onSuccessfulUnlock(`🎯 精準命中：${displayFull}！（按方向鍵 ↑↓←→ 可移至相鄰區塊，或直接點選地圖）`, displayShort, true);
       if (state.playMode === "target_random" || state.playMode === "satellite_quiz") {
-        pickNextTargetRegion();
+        completeTargetQuestionSolve(displayShort);
       } else {
         // In target_click mode: stay at original position! Do not jump randomly!
         state.targetId = null;
@@ -1555,7 +1555,7 @@ function buildTargetQuizQueue(limit = state.targetQuestionLimit) {
   if (features.supportsTransportQuiz && typeof getActiveQuizStations === "function") {
     getActiveQuizStations().forEach((s) => pool.push({ kind: "station", id: s.key }));
   }
-  if ((features.supportsPoiQuiz || features.supportsCapitalQuiz) && typeof getActiveQuizPois === "function") {
+  if ((features.supportsPoiQuiz || features.supportsCapitalQuiz || features.supportsLandmarkQuiz) && typeof getActiveQuizPois === "function") {
     getActiveQuizPois().forEach((p) => pool.push({ kind: "poi", id: p.id }));
   }
 
@@ -1579,7 +1579,7 @@ function _activateTargetEntry(entry) {
   const groupFocusZoom = Number.isFinite(mapView.groupFocusZoom) ? mapView.groupFocusZoom : 9;
   const targetMaxZoom = Number.isFinite(mapView.targetMaxZoom) ? mapView.targetMaxZoom : 12;
 
-  if (entry.kind === "poi" && (features.supportsPoiQuiz || features.supportsCapitalQuiz) && typeof getActiveQuizPois === "function") {
+  if (entry.kind === "poi" && (features.supportsPoiQuiz || features.supportsCapitalQuiz || features.supportsLandmarkQuiz) && typeof getActiveQuizPois === "function") {
     const pickPoi = getActiveQuizPois().find((p) => p.id === entry.id);
     if (!pickPoi) return false;
     state.targetId = null;
@@ -1646,10 +1646,262 @@ function _activateTargetEntry(entry) {
 }
 
 // =========================================================================
-// 7B. PER-QUESTION COUNTDOWN RUSH ENGINE (隨機 / 衛星 / 標座標 倒數搶答)
+// 7B. PER-QUESTION COUNTDOWN ENGINE (一般倒數 & 多人搶答倒數)
 // =========================================================================
 function isQuestionCountdownModeActive(pm = state.playMode) {
   return pm === "target_random" || pm === "satellite_quiz" || pm === "pin_drop";
+}
+
+function getEffectiveQuestionCountdownMode() {
+  return state.questionCountdownMode === "normal" ? "normal" : "rush";
+}
+
+function isMultiplayerRushSyncActive() {
+  if (!state.roomCode || !state.questionCountdownEnabled) return false;
+  if (getEffectiveQuestionCountdownMode() !== "rush") return false;
+  if (state.playMode !== "target_random" && state.playMode !== "satellite_quiz") return false;
+  const activePlayers =
+    typeof getActiveBattlePlayers === "function" ? getActiveBattlePlayers() : [];
+  return activePlayers.length >= 2;
+}
+
+// Pure, deterministic scoring formula for name-guessing countdown modes:
+// - Timeout / Pass -> 0 pts
+// - Normal countdown (一般倒數) -> full 1000 pts when answered before timeout
+// - Multiplayer Rush (搶答倒數):
+//   * First solver -> full 1000 pts
+//   * Slower solver before grace/countdown ends -> 400..900 pts (still scores!)
+function computeQuestionRushScore(opts = {}) {
+  const maxScore = Number.isFinite(Number(opts.maxScore)) && Number(opts.maxScore) > 0 ? Number(opts.maxScore) : 1000;
+  if (opts.passed || opts.timedOut) return 0;
+  const mode = opts.mode === "normal" ? "normal" : "rush";
+  if (mode === "normal") return maxScore;
+  const isMultiplayer = Boolean(opts.isMultiplayer);
+  const isFirstSolver = opts.isFirstSolver !== false;
+  if (!isMultiplayer || isFirstSolver) return maxScore;
+  const totalMs = Math.max(1000, Number(opts.totalMs) || 15000);
+  const remMs = Math.max(0, Number(opts.remainingMs) || 0);
+  const ratio = Math.max(0, Math.min(1, remMs / totalMs));
+  return Math.max(Math.round(maxScore * 0.4), Math.min(Math.round(maxScore * 0.9), Math.round(maxScore * (0.4 + 0.5 * ratio))));
+}
+
+function getCurrentTargetSyncKey() {
+  if (state.targetPoiId) return `poi:${state.targetPoiId}`;
+  if (state.targetStationKey) return `station:${state.targetStationKey}`;
+  if (state.targetId) {
+    const isGroupMode = !_isSingleLayer() && state.difficulty === "county_only";
+    return isGroupMode ? `county:${state.targetId}` : `town:${state.targetId}`;
+  }
+  return "";
+}
+
+function resetMpQuestionSync(questionIndex = null, targetKey = null) {
+  const idx = questionIndex != null ? questionIndex : (state.targetQueueIndex || 0);
+  const tKey = targetKey != null ? targetKey : getCurrentTargetSyncKey();
+  state.mpQuestionSync = {
+    questionIndex: idx,
+    targetKey: tKey,
+    firstSolverId: null,
+    firstSolverName: "",
+    firstSolvedAt: 0,
+    graceTriggered: false,
+    localAnswered: false,
+    localScore: 0,
+    localPassed: false,
+    answersByPlayer: {}
+  };
+}
+
+function _areAllMultiplayerRushPlayersDone() {
+  if (!isMultiplayerRushSyncActive()) return true;
+  const mp = state.mpQuestionSync;
+  if (!mp || !mp.answersByPlayer) return false;
+  const activePlayers = typeof getActiveBattlePlayers === "function" ? getActiveBattlePlayers() : [];
+  if (activePlayers.length < 2) return true;
+  return activePlayers.every((p) => Boolean(mp.answersByPlayer[p.id]));
+}
+
+function completeTargetQuestionSolve(answerLabel = "") {
+  if (state.playMode !== "target_random" && state.playMode !== "satellite_quiz") return false;
+  const targetKey = getCurrentTargetSyncKey();
+  const isCountdown = Boolean(state.questionCountdownEnabled);
+  const mode = getEffectiveQuestionCountdownMode();
+  const isMpRush = isMultiplayerRushSyncActive();
+  const mp = state.mpQuestionSync || {};
+  const isFirstSolver = !isMpRush || !mp.firstSolverId || mp.firstSolverId === state.localInstanceId;
+  const remMs = getQuestionCountdownRemainingMs();
+  const totalMs = (state.questionTimer && Number(state.questionTimer.totalMs)) || ((parseInt(state.questionCountdownSec, 10) || 15) * 1000);
+
+  if (isCountdown) {
+    const earned = computeQuestionRushScore({
+      isFirstSolver,
+      remainingMs: remMs,
+      totalMs,
+      mode,
+      isMultiplayer: isMpRush,
+      maxScore: 1000
+    });
+    state.rushScore = (Number(state.rushScore) || 0) + earned;
+    if (!Array.isArray(state.rushQuestionHistory)) state.rushQuestionHistory = [];
+    state.rushQuestionHistory.push({
+      questionIndex: state.targetQueueIndex || 0,
+      targetKey,
+      answerLabel,
+      score: earned,
+      passed: false,
+      isFirstSolver
+    });
+
+    if (isMpRush) {
+      if (!state.mpQuestionSync) resetMpQuestionSync(state.targetQueueIndex || 0, targetKey);
+      const sync = state.mpQuestionSync;
+      if (!sync.firstSolverId) {
+        sync.firstSolverId = state.localInstanceId;
+        sync.firstSolverName = state.nickname || "你";
+        sync.firstSolvedAt = Date.now();
+      }
+      sync.localAnswered = true;
+      sync.localScore = earned;
+      sync.localPassed = false;
+      sync.answersByPlayer[state.localInstanceId] = {
+        id: state.localInstanceId,
+        name: state.nickname || "你",
+        score: earned,
+        passed: false,
+        isFirstSolver,
+        answeredAt: Date.now()
+      };
+
+      // Tighten local waiting countdown to grace window when first solver finishes so wait is snappy
+      const graceMs = Math.max(2, parseInt(state.rushGraceSec, 10) || 5) * 1000;
+      if (isFirstSolver && state.questionTimer && state.questionTimer.active) {
+        const curRem = getQuestionCountdownRemainingMs();
+        if (curRem > graceMs) {
+          state.questionTimer.deadlineAt = Date.now() + graceMs;
+          state.questionTimer.remainingMs = graceMs;
+          sync.graceTriggered = true;
+        }
+      }
+
+      if (typeof sendP2PMessage === "function") {
+        sendP2PMessage("SYNC_Q_SOLVED", {
+          questionIndex: sync.questionIndex,
+          targetKey,
+          name: state.nickname || "對手",
+          score: earned,
+          passed: false,
+          isFirstSolver,
+          graceSec: Math.max(2, parseInt(state.rushGraceSec, 10) || 5)
+        });
+      }
+
+      if (_areAllMultiplayerRushPlayersDone()) {
+        if (state.isHost && typeof sendP2PMessage === "function") {
+          sendP2PMessage("SYNC_Q_ADVANCE", {
+            nextQuestionIndex: (state.targetQueueIndex || 0) + 1,
+            reason: "all_answered"
+          });
+        }
+        if (Array.isArray(state.targetQueue) && state.targetQueue.length > 0) {
+          state.targetQueueIndex = Math.min(state.targetQueue.length, (state.targetQueueIndex || 0) + 1);
+        }
+        pickNextTargetRegion();
+        return true;
+      }
+
+      // Waiting for slower opponent(s) to still answer within grace countdown!
+      setFeedback(
+        isFirstSolver
+          ? `⚡ 搶答滿分 +${earned} 分！等待對手於剩餘倒數內作答…`
+          : `✅ 答對加分 +${earned} 分！等待其餘選手結束本題…`,
+        "tier"
+      );
+      syncQuestionCountdownUI();
+      if (typeof broadcastP2PState === "function") broadcastP2PState(answerLabel);
+      return true;
+    }
+
+    // Solo or Normal countdown: award points and immediately advance!
+    if (earned > 0 && answerLabel) {
+      const tag = mode === "normal" ? `⏳ +${earned} 分` : `⚡ +${earned} 分`;
+      setFeedback(`🎯 答對「${answerLabel}」（${tag} · 累計 ${state.rushScore.toLocaleString()} 分）`, "success");
+    }
+  }
+
+  pickNextTargetRegion();
+  return true;
+}
+
+function handleRemoteQuestionSolved(payload, senderId) {
+  if (!payload || !senderId || senderId === state.localInstanceId) return false;
+  if (!isMultiplayerRushSyncActive()) return false;
+  if (!state.mpQuestionSync) resetMpQuestionSync(state.targetQueueIndex || 0, getCurrentTargetSyncKey());
+  const sync = state.mpQuestionSync;
+  if (
+    typeof payload.questionIndex === "number" &&
+    payload.questionIndex !== sync.questionIndex &&
+    payload.targetKey &&
+    payload.targetKey !== sync.targetKey
+  ) {
+    return false;
+  }
+
+  sync.answersByPlayer[senderId] = {
+    id: senderId,
+    name: payload.name || "對手",
+    score: Number(payload.score) || 0,
+    passed: Boolean(payload.passed),
+    isFirstSolver: Boolean(payload.isFirstSolver),
+    answeredAt: Date.now()
+  };
+
+  if (!payload.passed && !sync.firstSolverId) {
+    sync.firstSolverId = senderId;
+    sync.firstSolverName = payload.name || "對手";
+    sync.firstSolvedAt = Date.now();
+    if (!sync.localAnswered && state.questionTimer && state.questionTimer.active) {
+      const graceSec = Math.max(2, parseInt(payload.graceSec || state.rushGraceSec, 10) || 5);
+      const graceMs = graceSec * 1000;
+      const curRem = getQuestionCountdownRemainingMs();
+      if (curRem > graceMs) {
+        state.questionTimer.deadlineAt = Date.now() + graceMs;
+        state.questionTimer.remainingMs = graceMs;
+      }
+      sync.graceTriggered = true;
+      const shownSec = Math.max(0.1, getQuestionCountdownRemainingMs() / 1000).toFixed(1);
+      setFeedback(
+        `⚡ 對手【${sync.firstSolverName}】已搶先答對！剩餘 ${shownSec} 秒作答仍可加分！`,
+        "warn"
+      );
+      if (typeof playTone === "function") playTone("tier");
+      syncQuestionCountdownUI();
+    }
+  }
+
+  if (_areAllMultiplayerRushPlayersDone()) {
+    if (state.isHost && typeof sendP2PMessage === "function") {
+      sendP2PMessage("SYNC_Q_ADVANCE", {
+        nextQuestionIndex: (state.targetQueueIndex || 0) + 1,
+        reason: "all_answered"
+      });
+    }
+    if (Array.isArray(state.targetQueue) && state.targetQueue.length > 0) {
+      state.targetQueueIndex = Math.min(state.targetQueue.length, (state.targetQueueIndex || 0) + 1);
+    }
+    pickNextTargetRegion();
+  }
+  return true;
+}
+
+function handleRemoteQuestionAdvance(payload) {
+  if (!payload || !isMultiplayerRushSyncActive()) return false;
+  const nextIdx = typeof payload.nextQuestionIndex === "number" ? payload.nextQuestionIndex : null;
+  if (nextIdx !== null && Array.isArray(state.targetQueue) && nextIdx > (state.targetQueueIndex || 0)) {
+    state.targetQueueIndex = Math.min(state.targetQueue.length, nextIdx);
+    pickNextTargetRegion();
+    return true;
+  }
+  return false;
 }
 
 function isQuestionCountdownPausedByModal() {
@@ -1696,8 +1948,12 @@ function syncQuestionCountdownUI() {
   const secVal = remMs / 1000;
 
   if (pill) {
-    pill.textContent = `⚡ ${secVal.toFixed(1)}s`;
-    if (secVal <= 3) {
+    const isNormalCd = getEffectiveQuestionCountdownMode() === "normal";
+    const mpSync = state.mpQuestionSync;
+    const isGrace = Boolean(isMultiplayerRushSyncActive() && mpSync && mpSync.graceTriggered);
+    const prefix = isNormalCd ? "⏳" : isGrace ? "🔥 搶答剩" : "⚡";
+    pill.textContent = `${prefix} ${secVal.toFixed(1)}s`;
+    if (secVal <= 3 || isGrace) {
       pill.className = "font-mono-num text-[11px] font-black px-2 py-0.5 rounded-lg bg-rose-500/25 text-rose-200 border border-rose-400/60 animate-pulse whitespace-nowrap";
     } else if (ratio <= 0.45) {
       pill.className = "font-mono-num text-[11px] font-black px-2 py-0.5 rounded-lg bg-amber-500/25 text-amber-200 border border-amber-400/50 whitespace-nowrap";
@@ -1816,6 +2072,30 @@ function handleQuestionCountdownTimeout() {
   if (!state.passedTargetKeys) state.passedTargetKeys = new Set();
 
   const answerLabel = resolveCurrentTargetReadableName();
+  const isNormalCd = getEffectiveQuestionCountdownMode() === "normal";
+  const isMpRush = isMultiplayerRushSyncActive();
+  const alreadySolvedLocally = Boolean(isMpRush && state.mpQuestionSync && state.mpQuestionSync.localAnswered);
+
+  if (alreadySolvedLocally) {
+    // Local player already answered correctly during multiplayer rush; grace timer expired for slower opponent -> advance!
+    if (Array.isArray(state.targetQueue) && state.targetQueue.length > 0) {
+      state.targetQueueIndex = Math.min(state.targetQueue.length, (state.targetQueueIndex || 0) + 1);
+    }
+    state.targetId = null;
+    state.targetStationKey = null;
+    state.targetPoiId = null;
+    if (state.isHost && typeof sendP2PMessage === "function") {
+      sendP2PMessage("SYNC_Q_ADVANCE", {
+        nextQuestionIndex: state.targetQueueIndex || 0,
+        reason: "grace_timeout"
+      });
+    }
+    pickNextTargetRegion();
+    const inp = document.getElementById("answer-input");
+    if (inp && !state.isGameOver) inp.focus({ preventScroll: true });
+    return true;
+  }
+
   let key = "";
   if (state.targetPoiId) {
     key = `poi:${state.targetPoiId}`;
@@ -1838,6 +2118,28 @@ function handleQuestionCountdownTimeout() {
     }
   }
 
+  if (!Array.isArray(state.rushQuestionHistory)) state.rushQuestionHistory = [];
+  state.rushQuestionHistory.push({
+    questionIndex: state.targetQueueIndex || 0,
+    targetKey: key,
+    answerLabel,
+    score: 0,
+    passed: true,
+    timedOut: true,
+    isFirstSolver: false
+  });
+  if (isMpRush && typeof sendP2PMessage === "function") {
+    sendP2PMessage("SYNC_Q_SOLVED", {
+      questionIndex: state.targetQueueIndex || 0,
+      targetKey: key,
+      name: state.nickname || "對手",
+      score: 0,
+      passed: true,
+      timedOut: true,
+      isFirstSolver: false
+    });
+  }
+
   if (state.stats) {
     state.stats.totalAttempts++;
     state.stats.wrongAttempts++;
@@ -1851,8 +2153,9 @@ function handleQuestionCountdownTimeout() {
   state.targetPoiId = null;
 
   clearCoreInput();
+  const timeoutLabel = isNormalCd ? "⌛ 倒數時間到（0 分，視同 Pass）" : "⌛ 搶答時間到（0 分，視同 Pass）";
   setFeedback(
-    answerLabel ? `⌛ 搶答時間到！正確答案：【${answerLabel}】` : "⌛ 搶答時間到！已進入下一題",
+    answerLabel ? `${timeoutLabel}！正確答案：【${answerLabel}】` : `${timeoutLabel}！已進入下一題`,
     "error"
   );
   playTone("error");
@@ -1948,6 +2251,7 @@ function pickNextTargetRegion() {
       return;
     }
     if (_activateTargetEntry(state.targetQueue[idx])) {
+      resetMpQuestionSync(idx, getCurrentTargetSyncKey());
       if (state.questionCountdownEnabled) startQuestionCountdown();
       else stopQuestionCountdown();
       return;
@@ -1966,7 +2270,7 @@ function pickNextTargetRegion() {
       ? getActiveQuizStations().filter((s) => !state.unlockedStations.has(s.key) && !(state.passedTargetKeys && state.passedTargetKeys.has(`station:${s.key}`)))
       : [];
   const remainingPois =
-    (features.supportsPoiQuiz || features.supportsCapitalQuiz) && typeof getActiveQuizPois === "function"
+    (features.supportsPoiQuiz || features.supportsCapitalQuiz || features.supportsLandmarkQuiz) && typeof getActiveQuizPois === "function"
       ? getActiveQuizPois().filter((p) => !state.unlockedPois.has(p.id) && !(state.passedTargetKeys && state.passedTargetKeys.has(`poi:${p.id}`)))
       : [];
   const scopeTowns = getScopeTowns();
@@ -2519,7 +2823,7 @@ function giveTargetHint() {
       }
       return;
     }
-    if ((features.supportsPoiQuiz || features.supportsCapitalQuiz) && state.targetPoiId) {
+    if ((features.supportsPoiQuiz || features.supportsCapitalQuiz || features.supportsLandmarkQuiz) && state.targetPoiId) {
       const p = typeof getPoiById === "function" ? getPoiById(state.targetPoiId) : (typeof TAIWAN_POI_BY_ID !== "undefined" ? TAIWAN_POI_BY_ID.get(state.targetPoiId) : null);
       if (p) {
         const displayCat = typeof getPoiDisplayCategory === "function" ? getPoiDisplayCategory(p) : p.category;
@@ -2594,7 +2898,7 @@ function giveTargetHint() {
     }
     return;
   }
-  if ((features.supportsPoiQuiz || features.supportsCapitalQuiz) && state.targetPoiId) {
+  if ((features.supportsPoiQuiz || features.supportsCapitalQuiz || features.supportsLandmarkQuiz) && state.targetPoiId) {
     const p = typeof getPoiById === "function" ? getPoiById(state.targetPoiId) : null;
     if (p) {
       state.hintLevel++;

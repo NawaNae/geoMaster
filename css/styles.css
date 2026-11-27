@@ -878,6 +878,20 @@ input, select {
   box-shadow: 0 0 2px rgba(2, 6, 23, 0.78);
 }
 
+.tw-poi-landmark {
+  --poi-accent: #fb7185;
+  color: #fda4af;
+}
+.tw-poi-landmark.tw-poi-state-unlocked {
+  color: #34d399;
+}
+.tw-poi-landmark.tw-poi-state-missed {
+  color: #fb7185;
+}
+.tw-poi-landmark.tw-poi-state-target {
+  color: #fde047;
+}
+
 /* States: Translucent Luminous Halo (lightweight border + tint, zero CSS filter blur) */
 /* Unlocked (Pass): Soft emerald tint + crisp 1.2px solid luminous ring */
 .tw-poi-state-unlocked {

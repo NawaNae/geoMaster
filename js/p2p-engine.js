@@ -337,6 +337,7 @@ function getHostSyncConfig(isSettingChange = false, changeLabel = "", changeDeta
     lakeQuizEnabled: Boolean(state.lakeQuizEnabled),
     settlementQuizEnabled: Boolean(state.settlementQuizEnabled),
     capitalQuizEnabled: Boolean(state.capitalQuizEnabled),
+    landmarkQuizEnabled: Boolean(state.landmarkQuizEnabled),
     airportSubTypes: Array.from(state.airportSubTypes || []),
     portSubTypes: Array.from(state.portSubTypes || []),
     reservoirSubTypes: Array.from(state.reservoirSubTypes || []),
@@ -358,7 +359,9 @@ function getHostSyncConfig(isSettingChange = false, changeLabel = "", changeDeta
     allowPass: state.allowPass !== false,
     hideGuessedOthers: Boolean(state.hideGuessedOthers),
     questionCountdownEnabled: Boolean(state.questionCountdownEnabled),
+    questionCountdownMode: state.questionCountdownMode === "normal" ? "normal" : "rush",
     questionCountdownSec: Math.max(3, parseInt(state.questionCountdownSec, 10) || 15),
+    rushGraceSec: Math.max(2, parseInt(state.rushGraceSec, 10) || 5),
     sharedTargetQueue:
       includeTargetQueue &&
       (state.playMode === "target_random" || state.playMode === "satellite_quiz") &&
@@ -423,7 +426,9 @@ function getConciseDifficultySummaryText() {
   const hideStr = state.hideGuessedOthers ? " · 隱藏已猜區塊" : "";
   const rushStr =
     isRnd && state.questionCountdownEnabled
-      ? ` · ⚡ 倒數搶答 ${Math.max(3, parseInt(state.questionCountdownSec, 10) || 15)}秒`
+      ? state.questionCountdownMode === "normal"
+        ? ` · ⏳ 每題倒數 ${Math.max(3, parseInt(state.questionCountdownSec, 10) || 15)}秒`
+        : ` · ⚡ 倒數搶答 ${Math.max(3, parseInt(state.questionCountdownSec, 10) || 15)}秒`
       : "";
   const timerStr =
     state.timerMode === "down"
@@ -1563,9 +1568,13 @@ function describeConfigDiff(patch) {
     lines.push(patch.hideGuessedOthers ? "隱藏已猜區塊" : "顯示已猜區塊");
   }
   if (typeof patch.questionCountdownEnabled === "boolean" && patch.questionCountdownEnabled !== Boolean(state.questionCountdownEnabled)) {
-    lines.push(patch.questionCountdownEnabled ? `開啟倒數搶答 (${patch.questionCountdownSec || state.questionCountdownSec || 15}秒)` : "關閉倒數搶答");
+    const modeLbl = (patch.questionCountdownMode || state.questionCountdownMode) === "normal" ? "每題倒數" : "倒數搶答";
+    lines.push(patch.questionCountdownEnabled ? `開啟${modeLbl} (${patch.questionCountdownSec || state.questionCountdownSec || 15}秒)` : `關閉${modeLbl}`);
+  } else if (typeof patch.questionCountdownMode === "string" && patch.questionCountdownMode !== state.questionCountdownMode) {
+    lines.push(patch.questionCountdownMode === "normal" ? "切換為一般每題倒數" : "切換為多人搶答倒數");
   } else if (typeof patch.questionCountdownSec === "number" && patch.questionCountdownSec !== (parseInt(state.questionCountdownSec, 10) || 15)) {
-    lines.push(`倒數搶答 ${patch.questionCountdownSec} 秒`);
+    const modeLbl = state.questionCountdownMode === "normal" ? "每題倒數" : "倒數搶答";
+    lines.push(`${modeLbl} ${patch.questionCountdownSec} 秒`);
   }
   if (patch.timerMode) {
     const newTimerDesc = patch.timerMode === "up" ? "正計時" : `倒數 ${Math.round((patch.countdownTotalSec || state.countdownTotalSec) / 60)} 分鐘`;
@@ -1621,7 +1630,10 @@ function buildProposedConfigFromPatch(patch) {
       if (!tf.supportsCapitalQuiz) {
         base.capitalQuizEnabled = false;
       }
-      if (!tf.supportsTransportQuiz && !tf.supportsPoiQuiz && !tf.supportsCapitalQuiz) {
+      if (!tf.supportsLandmarkQuiz) {
+        base.landmarkQuizEnabled = false;
+      }
+      if (!tf.supportsTransportQuiz && !tf.supportsPoiQuiz && !tf.supportsCapitalQuiz && !tf.supportsLandmarkQuiz) {
         base.regionQuizEnabled = true;
         base.quizTargetMode = "region";
       }
@@ -1636,6 +1648,7 @@ function buildProposedConfigFromPatch(patch) {
   if (typeof patch.lakeQuizEnabled === "boolean") base.lakeQuizEnabled = patch.lakeQuizEnabled;
   if (typeof patch.settlementQuizEnabled === "boolean") base.settlementQuizEnabled = patch.settlementQuizEnabled;
   if (typeof patch.capitalQuizEnabled === "boolean") base.capitalQuizEnabled = patch.capitalQuizEnabled;
+  if (typeof patch.landmarkQuizEnabled === "boolean") base.landmarkQuizEnabled = patch.landmarkQuizEnabled;
   if (Array.isArray(patch.airportSubTypes)) base.airportSubTypes = patch.airportSubTypes.slice();
   if (Array.isArray(patch.portSubTypes)) base.portSubTypes = patch.portSubTypes.slice();
   if (Array.isArray(patch.reservoirSubTypes)) base.reservoirSubTypes = patch.reservoirSubTypes.slice();
@@ -1647,7 +1660,9 @@ function buildProposedConfigFromPatch(patch) {
   if (typeof patch.allowPass === "boolean") base.allowPass = patch.allowPass;
   if (typeof patch.hideGuessedOthers === "boolean") base.hideGuessedOthers = patch.hideGuessedOthers;
   if (typeof patch.questionCountdownEnabled === "boolean") base.questionCountdownEnabled = patch.questionCountdownEnabled;
+  if (typeof patch.questionCountdownMode === "string") base.questionCountdownMode = patch.questionCountdownMode === "normal" ? "normal" : "rush";
   if (typeof patch.questionCountdownSec === "number") base.questionCountdownSec = patch.questionCountdownSec;
+  if (typeof patch.rushGraceSec === "number") base.rushGraceSec = patch.rushGraceSec;
   if (patch.satelliteStyle) base.satelliteStyle = patch.satelliteStyle;
   if (typeof patch.satelliteLockViewport === "boolean") {
     base.satelliteLockViewport = patch.satelliteLockViewport;
@@ -2153,6 +2168,17 @@ function dispatchP2PMessage(msg, sourceConn = null) {
     broadcastRosterFromHost();
     updateP2PLobbyUI();
     updateOpponentUI();
+  } else if (msg.type === "SYNC_Q_SOLVED") {
+    if (typeof handleRemoteQuestionSolved === "function") {
+      handleRemoteQuestionSolved(msg.payload, msg.senderId);
+    }
+    if (state.isHost) {
+      sendP2PMessage("SYNC_Q_SOLVED", { ...msg.payload, senderId: msg.senderId }, null, msg.senderId);
+    }
+  } else if (msg.type === "SYNC_Q_ADVANCE") {
+    if (!state.isHost && typeof handleRemoteQuestionAdvance === "function") {
+      handleRemoteQuestionAdvance(msg.payload);
+    }
   } else if (msg.type === "SYNC_STATE") {
     handleIncomingP2PData(msg.payload, msg.senderId);
     if (state.isHost) {
@@ -3737,8 +3763,14 @@ function _applyRemoteSyncConfigAfterPack(cfg, fromCountdown = false) {
   if (typeof cfg.questionCountdownEnabled === "boolean") {
     state.questionCountdownEnabled = cfg.questionCountdownEnabled;
   }
+  if (cfg.questionCountdownMode === "normal" || cfg.questionCountdownMode === "rush") {
+    state.questionCountdownMode = cfg.questionCountdownMode;
+  }
   if (typeof cfg.questionCountdownSec !== "undefined") {
     state.questionCountdownSec = Math.max(3, Math.min(120, parseInt(cfg.questionCountdownSec, 10) || 15));
+  }
+  if (typeof cfg.rushGraceSec !== "undefined") {
+    state.rushGraceSec = Math.max(2, Math.min(30, parseInt(cfg.rushGraceSec, 10) || 5));
   }
   const hasSharedQueue = Array.isArray(cfg.sharedTargetQueue) && cfg.sharedTargetQueue.length > 0;
   if (hasSharedQueue) {
@@ -3827,6 +3859,11 @@ function _applyRemoteSyncConfigAfterPack(cfg, fromCountdown = false) {
   } else if (!features.supportsCapitalQuiz) {
     state.capitalQuizEnabled = false;
   }
+  if (typeof cfg.landmarkQuizEnabled === "boolean") {
+    state.landmarkQuizEnabled = features.supportsLandmarkQuiz && cfg.landmarkQuizEnabled;
+  } else if (!features.supportsLandmarkQuiz) {
+    state.landmarkQuizEnabled = false;
+  }
   if (Array.isArray(cfg.airportSubTypes)) {
     state.airportSubTypes = new Set(cfg.airportSubTypes);
   }
@@ -3865,7 +3902,8 @@ function _applyRemoteSyncConfigAfterPack(cfg, fromCountdown = false) {
           state.lakeQuizEnabled ||
           state.settlementQuizEnabled)
     ) ||
-    Boolean(features.supportsCapitalQuiz && state.capitalQuizEnabled);
+    Boolean(features.supportsCapitalQuiz && state.capitalQuizEnabled) ||
+    Boolean(features.supportsLandmarkQuiz && state.landmarkQuizEnabled);
   if (!hasAnyActiveTopic) {
     state.regionQuizEnabled = true;
     if (state.selectedTownIds.size === 0 && validItemIdSet.size > 0) {

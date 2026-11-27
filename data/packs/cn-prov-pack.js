@@ -1077,9 +1077,10 @@
       fullScopeLabel: "全部 33 省級區"
     },
     features: {
-      supportsTransportQuiz: false,
+      supportsTransportQuiz: true,
       supportsPoiQuiz: false,
       supportsCapitalQuiz: true,
+      supportsLandmarkQuiz: true,
       capitalLabel: "省會",
       supportsMasterHierarchy: false,
       supportsSuffixDifficulty: true,

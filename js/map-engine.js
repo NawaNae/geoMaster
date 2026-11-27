@@ -1598,13 +1598,42 @@ function setMapBaseLayer(layerKey, forceBypassLock = false) {
     mapEl.classList.add("basemap-no-spoiler");
   } else if (layerKey === "historical") {
     const activePack = typeof getActiveMapPack === "function" ? getActiveMapPack() : null;
-    const histCfg = activePack && activePack.historicalBasemap;
+    const rocFallbackPack =
+      typeof window !== "undefined" && window.GEOMASTER_PACKS ? window.GEOMASTER_PACKS.roc_1949 : null;
+    const histCfg =
+      (activePack && activePack.historicalBasemap) ||
+      (activePack && activePack.features && activePack.features.supportsHistoricalBasemap && rocFallbackPack && rocFallbackPack.historicalBasemap) ||
+      null;
     if (histCfg && histCfg.url) {
-      const histTile = L.tileLayer(histCfg.url, {
-        maxZoom: 10,
-        opacity: 0.88,
+      const tileOpts = {
+        minZoom: 2,
+        maxZoom: 18,
+        minNativeZoom: Number.isFinite(histCfg.minNativeZoom) ? histCfg.minNativeZoom : 3,
+        maxNativeZoom: Number.isFinite(histCfg.maxNativeZoom) ? histCfg.maxNativeZoom : 10,
+        opacity: 0.9,
+        crossOrigin: false,
         attribution: histCfg.attribution || "中央研究院人社中心 CCTS WMTS"
-      }).addTo(map);
+      };
+      if (Array.isArray(histCfg.bounds)) {
+        tileOpts.bounds = histCfg.bounds;
+      }
+      const histTile = L.tileLayer(histCfg.url, tileOpts);
+      if (histCfg.fallbackUrl && typeof histTile.on === "function") {
+        histTile.on("tileerror", (ev) => {
+          const tileEl = ev && ev.tile;
+          const coords = ev && ev.coords;
+          if (!tileEl || !coords || tileEl.dataset?.histFallbackTried === "1") return;
+          if (tileEl.dataset) tileEl.dataset.histFallbackTried = "1";
+          const fbSrc = histCfg.fallbackUrl
+            .replace("{z}", String(coords.z))
+            .replace("{x}", String(coords.x))
+            .replace("{y}", String(coords.y));
+          if (fbSrc && tileEl.src !== fbSrc) {
+            tileEl.src = fbSrc;
+          }
+        });
+      }
+      histTile.addTo(map);
       activeTileLayers.push(histTile);
       mapEl.classList.add("basemap-no-spoiler");
     }

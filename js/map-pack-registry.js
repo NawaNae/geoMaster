@@ -371,9 +371,10 @@ function buildCompositeMapPack(rawPackIds) {
       quickJumps
     },
     features: {
-      supportsTransportQuiz: memberIds.includes("tw_modern"),
+      supportsTransportQuiz: members.some((m) => Boolean(m.features && m.features.supportsTransportQuiz)),
       supportsPoiQuiz: memberIds.includes("tw_modern"),
       supportsCapitalQuiz: members.some((m) => Boolean(m.features && m.features.supportsCapitalQuiz)),
+      supportsLandmarkQuiz: members.some((m) => Boolean(m.features && m.features.supportsLandmarkQuiz)),
       capitalLabel: (() => {
         const lbls = [...new Set(members.map((m) => m.features && m.features.capitalLabel).filter(Boolean))];
         return lbls.length > 1 ? lbls.join("／") : (lbls[0] || "");
@@ -384,6 +385,7 @@ function buildCompositeMapPack(rawPackIds) {
       quickSuffixes,
       supportedDifficulties: ["casual", "hard_suffix"]
     },
+    historicalBasemap: rocMember && rocMember.historicalBasemap ? rocMember.historicalBasemap : null,
     disputedBordersGeo: rocMember && rocMember.disputedBordersGeo ? rocMember.disputedBordersGeo : null,
     regionFilters,
     normalizeInput(rawStr) {
@@ -597,6 +599,7 @@ function normalizeMapPackDefinition(raw) {
     supportsTransportQuiz: Boolean(rawFeatures.supportsTransportQuiz),
     supportsPoiQuiz: Boolean(rawFeatures.supportsPoiQuiz),
     supportsCapitalQuiz: Boolean(rawFeatures.supportsCapitalQuiz),
+    supportsLandmarkQuiz: Boolean(rawFeatures.supportsLandmarkQuiz),
     capitalLabel: typeof rawFeatures.capitalLabel === "string" ? rawFeatures.capitalLabel : "",
     supportsMasterHierarchy: Boolean(rawFeatures.supportsMasterHierarchy),
     supportsSuffixDifficulty: Boolean(rawFeatures.supportsSuffixDifficulty),
@@ -1101,9 +1104,10 @@ const BUILT_IN_LAZY_MAP_PACK_STUBS = [
       worldCopyJump: false
     },
     features: {
-      supportsTransportQuiz: false,
+      supportsTransportQuiz: true,
       supportsPoiQuiz: false,
       supportsCapitalQuiz: true,
+      supportsLandmarkQuiz: true,
       capitalLabel: "縣廳",
       supportsMasterHierarchy: false,
       supportsSuffixDifficulty: true,
@@ -1142,9 +1146,10 @@ const BUILT_IN_LAZY_MAP_PACK_STUBS = [
       worldCopyJump: false
     },
     features: {
-      supportsTransportQuiz: false,
+      supportsTransportQuiz: true,
       supportsPoiQuiz: false,
       supportsCapitalQuiz: true,
+      supportsLandmarkQuiz: true,
       capitalLabel: "省會",
       supportsMasterHierarchy: false,
       supportsSuffixDifficulty: true,
@@ -1169,6 +1174,16 @@ const BUILT_IN_LAZY_MAP_PACK_STUBS = [
       itemShort: "區",
       fullScopeLabel: "中華民國1945 全境 50 區"
     },
+    historicalBasemap: {
+      id: "ccts_1947",
+      label: "📜 歷史掛圖 (1947)",
+      url: "https://gis.sinica.edu.tw/ccts/file-exists.php?img=China_Map_1947-png-{z}-{x}-{y}",
+      fallbackUrl: "https://gis.sinica.edu.tw/ccts/file-exists.php?img=CM300M_1959-png-{z}-{x}-{y}",
+      minNativeZoom: 3,
+      maxNativeZoom: 10,
+      bounds: [[10.59, 59.654], [57.138, 153.41]],
+      attribution: "中華民國新地圖 (1947) &copy; 中央研究院人社中心 CCTS WMTS"
+    },
     mapView: {
       center: [36.5, 104.0],
       defaultZoom: 4,
@@ -1184,9 +1199,10 @@ const BUILT_IN_LAZY_MAP_PACK_STUBS = [
       worldCopyJump: false
     },
     features: {
-      supportsTransportQuiz: false,
+      supportsTransportQuiz: true,
       supportsPoiQuiz: false,
       supportsCapitalQuiz: true,
+      supportsLandmarkQuiz: true,
       capitalLabel: "省會",
       supportsMasterHierarchy: false,
       supportsSuffixDifficulty: true,
@@ -1229,6 +1245,7 @@ const BUILT_IN_LAZY_MAP_PACK_STUBS = [
       supportsTransportQuiz: false,
       supportsPoiQuiz: false,
       supportsCapitalQuiz: true,
+      supportsLandmarkQuiz: true,
       capitalLabel: "首都",
       supportsMasterHierarchy: false,
       supportsSuffixDifficulty: false,
@@ -1328,6 +1345,26 @@ async function switchActiveMapPack(packIdInput, options = {}) {
       state.transportMode = "off";
       state.showRailOverlay = false;
       state.filterStationsByRegion = false;
+    } else if (typeof getSelectableLinesForActivePack === "function") {
+      const packLines = getSelectableLinesForActivePack();
+      const validIds = new Set(packLines.map((l) => l.id));
+      state.selectedTransportLines = new Set(packLines.map((l) => l.id));
+      if (state.quizStationLines && typeof state.quizStationLines.forEach === "function") {
+        const kept = Array.from(state.quizStationLines).filter((id) => validIds.has(id));
+        if (kept.length > 0) {
+          state.quizStationLines = new Set(kept);
+        } else if (state.stationQuizEnabled) {
+          const railOnly = packLines.filter((l) => !l.isHighway).map((l) => l.id);
+          if (railOnly.length > 0) {
+            state.quizStationLines = new Set(railOnly);
+          } else {
+            state.stationQuizEnabled = false;
+            state.quizStationLines.clear();
+          }
+        } else {
+          state.quizStationLines.clear();
+        }
+      }
     }
     if (!features.supportsPoiQuiz) {
       state.airportQuizEnabled = false;
@@ -1339,6 +1376,9 @@ async function switchActiveMapPack(packIdInput, options = {}) {
     if (!features.supportsCapitalQuiz) {
       state.capitalQuizEnabled = false;
     }
+    if (!features.supportsLandmarkQuiz) {
+      state.landmarkQuizEnabled = false;
+    }
 
     const hasAnyTopic =
       state.regionQuizEnabled ||
@@ -1349,7 +1389,8 @@ async function switchActiveMapPack(packIdInput, options = {}) {
           state.reservoirQuizEnabled ||
           state.lakeQuizEnabled ||
           state.settlementQuizEnabled)) ||
-      (features.supportsCapitalQuiz && state.capitalQuizEnabled);
+      (features.supportsCapitalQuiz && state.capitalQuizEnabled) ||
+      (features.supportsLandmarkQuiz && state.landmarkQuizEnabled);
     if (!hasAnyTopic) {
       state.regionQuizEnabled = true;
     }
@@ -1365,8 +1406,8 @@ async function switchActiveMapPack(packIdInput, options = {}) {
     if (!supportedDiffs.includes(state.difficulty)) {
       state.difficulty = supportedDiffs[0];
     }
-    if (state.mapLayer === "historical" && !features.supportsHistoricalBasemap && typeof setMapLayer === "function") {
-      setMapLayer("vector", true);
+    if (state.mapLayer === "historical" && !features.supportsHistoricalBasemap && typeof setMapBaseLayer === "function") {
+      setMapBaseLayer("vector", true);
     }
 
     // 6. Re-initialize scope to the new pack's eligible groups & items (respects isItemEnabledByOptions)

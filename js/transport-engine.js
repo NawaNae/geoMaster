@@ -561,31 +561,82 @@ function isStationInSelectedRegion(st) {
   return true;
 }
 
+function getSelectableLinesForActivePack() {
+  const activePack = typeof getActiveMapPack === "function" ? getActiveMapPack() : null;
+  const twLines = typeof TAIWAN_SELECTABLE_LINES !== "undefined" ? TAIWAN_SELECTABLE_LINES : [];
+  if (!activePack || activePack.id === "tw_modern") return twLines;
+  const memberIds =
+    Array.isArray(activePack.memberPackIds) && activePack.memberPackIds.length > 0
+      ? activePack.memberPackIds
+      : [activePack.id];
+  const merged = [];
+  const seen = new Set();
+  for (let i = 0; i < memberIds.length; i++) {
+    const pid = memberIds[i];
+    const lines =
+      pid === "tw_modern"
+        ? twLines
+        : typeof getPackRailLines === "function"
+        ? getPackRailLines(pid)
+        : [];
+    for (let j = 0; j < lines.length; j++) {
+      const l = lines[j];
+      if (!l || seen.has(l.id)) continue;
+      seen.add(l.id);
+      merged.push(l);
+    }
+  }
+  return merged;
+}
+
 function buildStationsFromLineSet(activeSet, applyRegionFilter = false) {
   if (!activeSet || activeSet.size === 0) return [];
   const list = [];
   const byNearKey = [];
+  const selectableLines = getSelectableLinesForActivePack();
 
-  TAIWAN_SELECTABLE_LINES.forEach((line) => {
+  selectableLines.forEach((line) => {
     if (line.isHighway || !activeSet.has(line.id)) return;
-    const meta = LINE_DISPLAY_META[line.id] || { dotName: line.name, sysTotal: line.group, macro: "鐵道" };
-    const cleanLineName = typeof getLineDisplayName === "function" ? getLineDisplayName(meta.dotName || line.name) : (meta.dotName || line.name);
+    const isForeignPack = Boolean(line.packId && line.packId !== "tw_modern");
+    const meta = (typeof LINE_DISPLAY_META !== "undefined" && LINE_DISPLAY_META[line.id]) || {
+      dotName: line.shortName || line.name,
+      sysTotal: line.group || "鐵道幹線",
+      macro: line.group || "鐵道"
+    };
+    const cleanLineName =
+      typeof getLineDisplayName === "function" && !isForeignPack
+        ? getLineDisplayName(meta.dotName || line.name)
+        : (meta.dotName || line.shortName || line.name);
     line.stations.forEach((st, idx) => {
-      const [rawName, lat, lng] = st;
-      const base = cleanStationBaseName(rawName);
+      const [rawName, lat, lng, stParentId, stCountyName, stAliases] = st;
+      const base = isForeignPack
+        ? String(rawName || "").replace(/(車站|火車站|站)$/, "").trim() || String(rawName || "")
+        : cleanStationBaseName(rawName);
       const display = getDisplayStationName(rawName);
       const isTerminus = idx === 0 || idx === line.stations.length - 1;
-      const townInfo = typeof resolveStationTownInfo === "function"
+      const townInfo = isForeignPack
+        ? {
+            townId: stParentId || null,
+            countyName: stCountyName || null,
+            fullCountyTown: stCountyName || null,
+            townIds: stParentId ? [stParentId] : [],
+            countyNames: stCountyName ? [stCountyName] : []
+          }
+        : typeof resolveStationTownInfo === "function"
         ? resolveStationTownInfo(line.id, rawName, base, lat, lng)
         : { townId: null, countyName: null, fullCountyTown: null, townIds: [], countyNames: [] };
 
-      // Deduplicate same station shared by lines of the same system (e.g. 竹南, 彰化, 八堵, 大橋頭, 中正紀念堂) within ~1.8km
+      // Deduplicate same station shared by lines of the same system (e.g. 竹南, 彰化, 八堵, 大橋頭, 東京, 鄭州東)
+      const dedupThresh = isForeignPack ? 0.12 : 0.018;
       let existing = byNearKey.find(
-        (x) => x.stKind === line.stKind && x.baseName === base && Math.hypot(x.lat - lat, x.lng - lng) < 0.018
+        (x) => x.stKind === line.stKind && x.baseName === base && Math.hypot(x.lat - lat, x.lng - lng) < dedupThresh
       );
       if (existing) {
         if (!existing.lineIds.includes(line.id)) existing.lineIds.push(line.id);
         if (isTerminus) existing.isTerminus = true;
+        if (Array.isArray(stAliases) && stAliases.length > 0) {
+          existing.aliases = Array.from(new Set([...(existing.aliases || []), ...stAliases]));
+        }
         if (Array.isArray(townInfo.townIds)) {
           townInfo.townIds.forEach((tid) => {
             if (!existing.townIds.includes(tid)) existing.townIds.push(tid);
@@ -597,12 +648,16 @@ function buildStationsFromLineSet(activeSet, applyRegionFilter = false) {
           });
         }
       } else {
-        const stableKey = `${line.stKind}_${base}_${Math.round(lat * 5)}_${Math.round(lng * 5)}`;
+        const stableKey = isForeignPack
+          ? `${line.packId}_${line.stKind}_${base}_${Math.round(lat * 10)}_${Math.round(lng * 10)}`
+          : `${line.stKind}_${base}_${Math.round(lat * 5)}_${Math.round(lng * 5)}`;
         const obj = {
           key: stableKey,
+          packId: line.packId || "tw_modern",
           rawName,
           displayName: display,
           baseName: base,
+          aliases: Array.isArray(stAliases) ? [...stAliases] : [],
           lineName: cleanLineName,
           isTerminus,
           lineId: line.id,
@@ -711,6 +766,36 @@ function isStationMatch(st, core, comb, cNorm, combNorm, cStripped, combStripped
   if (aliases && aliases.some((a) => a === cStripped || a === combStripped || normTw(a) === cNorm || normTw(a) === combNorm)) {
     return true;
   }
+  // Support multi-pack multilingual station aliases (TC / SC / Kana / EN / historical names)
+  if (Array.isArray(st.aliases) && st.aliases.length > 0) {
+    const packNorm = (s) => {
+      if (typeof normalizeCapitalText === "function") return normalizeCapitalText(s);
+      return normTw(String(s || "")).toLowerCase().replace(/\s+/g, "");
+    };
+    const inC = packNorm(core);
+    const inComb = packNorm(comb);
+    const inCNoSt = inC.replace(/(車站|火車站|站)$/, "");
+    const inCombNoSt = inComb.replace(/(車站|火車站|站)$/, "");
+    if (
+      st.aliases.some((a) => {
+        const na = packNorm(a);
+        const naNoSt = na.replace(/(車站|火車站|站)$/, "");
+        return (
+          (na && (na === inC || na === inComb)) ||
+          (naNoSt && naNoSt.length >= 2 && (naNoSt === inCNoSt || naNoSt === inCombNoSt))
+        );
+      })
+    ) {
+      return true;
+    }
+  }
+  if (st.packId && st.packId !== "tw_modern") {
+    const packNorm = (s) => (typeof normalizeCapitalText === "function" ? normalizeCapitalText(s) : normTw(String(s || "")).toLowerCase());
+    const inC = packNorm(core).replace(/(車站|火車站|站)$/, "");
+    const inComb = packNorm(comb).replace(/(車站|火車站|站)$/, "");
+    const bNorm = packNorm(st.baseName).replace(/(車站|火車站|站)$/, "");
+    if (bNorm && (inC === bNorm || inComb === bNorm)) return true;
+  }
   return false;
 }
 
@@ -745,7 +830,11 @@ function tryMatchAndUnlockStation(core, combined, isAutoCheck) {
       updateRoadAndRailwayTileOverlays();
       onSuccessfulUnlock(`🚉 答對指定車站：${targetSt.displayName}（${targetSt.lineName}）！`, targetSt.displayName, true);
       if (state.playMode === "target_random" || state.playMode === "satellite_quiz") {
-        pickNextTargetRegion();
+        if (typeof completeTargetQuestionSolve === "function") {
+          completeTargetQuestionSolve(targetSt.displayName);
+        } else {
+          pickNextTargetRegion();
+        }
       } else {
         updateTargetBannerUI();
       }
@@ -868,16 +957,17 @@ function updateRoadAndRailwayTileOverlays() {
   }
   updateTransportZoomClass();
 
+  const selectableLines = getSelectableLinesForActivePack();
   const anyHighwaySelected =
     state.selectedTransportLines.has("hw_freeway") ||
     state.selectedTransportLines.has("hw_express") ||
     state.selectedTransportLines.has("hw_prov") ||
     state.selectedTransportLines.has("hw_county");
-  const anyRailSelected = TAIWAN_SELECTABLE_LINES.some(
+  const anyRailSelected = selectableLines.some(
     (l) => !l.isHighway && (state.selectedTransportLines.has(l.id) || state.quizStationLines.has(l.id))
   );
 
-  if (anyRailSelected && !osmTracksLoaded && !osmTracksLoading) {
+  if (anyRailSelected && !osmTracksLoaded && !osmTracksLoading && selectableLines.some((l) => !l.packId || l.packId === "tw_modern")) {
     loadOsmExactRailwayVectors();
   }
 
@@ -932,7 +1022,7 @@ function updateRoadAndRailwayTileOverlays() {
       ? new Set(getVisualOverlayStations().flatMap((s) => s.lineIds || [s.lineId]))
       : null;
 
-    TAIWAN_SELECTABLE_LINES.forEach((line) => {
+    selectableLines.forEach((line) => {
       if (line.isHighway || !activeLineSet.has(line.id)) return;
       if (regionStationLineIds && !regionStationLineIds.has(line.id)) return;
 
@@ -950,7 +1040,7 @@ function updateRoadAndRailwayTileOverlays() {
           renderer: railCanvasRenderer,
           pane: "roadRailVectorPane",
           color: "#020617",
-          weight: 4.4,
+          weight: line.packId && line.packId !== "tw_modern" ? 4.0 : 4.4,
           opacity: 0.78,
           interactive: false
         }).addTo(customGroup);
@@ -960,7 +1050,7 @@ function updateRoadAndRailwayTileOverlays() {
           renderer: railCanvasRenderer,
           pane: "roadRailVectorPane",
           color: line.color || (line.stKind === "tra" ? "#003b73" : "#38bdf8"),
-          weight: 2.6,
+          weight: line.packId && line.packId !== "tw_modern" ? 2.4 : 2.6,
           opacity: 0.96,
           dashArray: line.dash || null,
           interactive: true
@@ -1029,9 +1119,13 @@ function updateRoadAndRailwayTileOverlays() {
       L.DomEvent.stopPropagation(ev);
       const stLineIds = Array.isArray(st.lineIds) && st.lineIds.length > 0 ? st.lineIds : [st.lineId];
       const lineSummaries = stLineIds.map((lid) => {
-        const lineObj = TAIWAN_SELECTABLE_LINES.find((l) => l.id === lid);
+        const lineObj = selectableLines.find((l) => l.id === lid);
         const lName = lineObj
-          ? (typeof getLineDisplayName === "function" ? getLineDisplayName(lineObj) : lineObj.name)
+          ? (lineObj.packId && lineObj.packId !== "tw_modern"
+              ? (lineObj.shortName || lineObj.name)
+              : typeof getLineDisplayName === "function"
+              ? getLineDisplayName(lineObj)
+              : lineObj.name)
           : st.lineName;
         const lineStations = activeStations.filter((s) => (s.lineIds && s.lineIds.includes(lid)) || s.lineId === lid);
         const uCount = lineStations.filter((s) => vState.unlockedStations.has(s.key)).length;

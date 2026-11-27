@@ -102,9 +102,25 @@ const state = {
   targetQuestionLimit: 0,     // 0 = all/unlimited; >0 = N questions per round (target_random / satellite_quiz)
   allowPass: true,            // Allow Pass/Skip in target_random / satellite_quiz
   hideGuessedOthers: false,   // Hide already-guessed other regions/stations/POIs (defaults to true when N-question limit > 0)
-  questionCountdownEnabled: false, // 允許倒數搶答 (per-question countdown in target_random / satellite_quiz / pin_drop)
-  questionCountdownSec: 15,   // Per-question countdown duration in seconds (5 | 10 | 15 | 20 | 30)
-  pinDropCountdownBonus: true,// 標點模式倒數計分加成 (default ON; awards speed bonus when countdown rush is active)
+  questionCountdownEnabled: false, // 啟用每題倒數 (target_random / satellite_quiz / pin_drop)
+  questionCountdownMode: "rush",   // 'normal' (一般每題倒數, 超時0分Pass) | 'rush' (搶答倒數: 先答對滿分, 慢答對仍可加分)
+  questionCountdownSec: 15,        // Per-question countdown duration in seconds (5 | 10 | 15 | 20 | 30)
+  rushGraceSec: 5,                 // Multiplayer rush grace window (seconds) after first player answers correctly
+  pinDropCountdownBonus: true,     // 標點模式倒數計分加成 (default ON in rush mode; awards speed bonus)
+  rushScore: 0,                    // Cumulative per-question countdown/rush score in name-quiz modes
+  rushQuestionHistory: [],         // Per-question score records [{ questionIndex, targetKey, score, passed, isFirstSolver }]
+  mpQuestionSync: {
+    questionIndex: 0,
+    targetKey: "",
+    firstSolverId: null,
+    firstSolverName: "",
+    firstSolvedAt: 0,
+    graceTriggered: false,
+    localAnswered: false,
+    localScore: 0,
+    localPassed: false,
+    answersByPlayer: {}
+  },
   questionTimer: {
     active: false,
     totalMs: 15000,
@@ -185,6 +201,7 @@ const state = {
   lakeQuizEnabled: false,
   settlementQuizEnabled: false,
   capitalQuizEnabled: false,
+  landmarkQuizEnabled: false,
   airportSubTypes: new Set(["intl", "domestic", "military"]),
   portSubTypes: new Set(["intl_commercial", "intl_aux", "fishery_cat1"]),
   reservoirSubTypes: new Set(["res_major"]),
@@ -289,7 +306,8 @@ function syncLegacyQuizTargetMode() {
   const hasLk = Boolean(state.lakeQuizEnabled && state.lakeSubTypes && state.lakeSubTypes.size > 0);
   const hasStl = Boolean(state.settlementQuizEnabled && state.settlementSubTypes && state.settlementSubTypes.size > 0);
   const hasCap = Boolean(state.capitalQuizEnabled);
-  const activeCount = (hasR ? 1 : 0) + (hasS ? 1 : 0) + (hasA ? 1 : 0) + (hasP ? 1 : 0) + (hasRes ? 1 : 0) + (hasLk ? 1 : 0) + (hasStl ? 1 : 0) + (hasCap ? 1 : 0);
+  const hasLm = Boolean(state.landmarkQuizEnabled);
+  const activeCount = (hasR ? 1 : 0) + (hasS ? 1 : 0) + (hasA ? 1 : 0) + (hasP ? 1 : 0) + (hasRes ? 1 : 0) + (hasLk ? 1 : 0) + (hasStl ? 1 : 0) + (hasCap ? 1 : 0) + (hasLm ? 1 : 0);
   if (activeCount === 1 && hasR) {
     state.quizTargetMode = "region";
   } else if (activeCount === 1 && hasS) {

@@ -89,7 +89,7 @@ function getLimitedRoundStats(vStateArg = null, fallbackRaw = null) {
     const uStations = vState.unlockedStations || new Set();
     const uPois = vState.unlockedPois || state.unlockedPois || new Set();
     const activePois =
-      (_dashFeatures().supportsPoiQuiz || _dashFeatures().supportsCapitalQuiz) && typeof getActiveQuizPois === "function"
+      (_dashFeatures().supportsPoiQuiz || _dashFeatures().supportsCapitalQuiz || _dashFeatures().supportsLandmarkQuiz) && typeof getActiveQuizPois === "function"
         ? getActiveQuizPois()
         : [];
     const poiById = activePois.length > 0 ? new Map(activePois.map((p) => [p.id, p])) : null;
@@ -213,7 +213,7 @@ function updateScoreAndProgressUI() {
 
   const activeSt = features.supportsTransportQuiz && typeof getActiveQuizStations === "function" ? getActiveQuizStations() : [];
   const unlockedStCount = activeSt.filter((s) => vState.unlockedStations.has(s.key)).length;
-  const activePois = (features.supportsPoiQuiz || features.supportsCapitalQuiz) && typeof getActiveQuizPois === "function" ? getActiveQuizPois() : [];
+  const activePois = (features.supportsPoiQuiz || features.supportsCapitalQuiz || features.supportsLandmarkQuiz) && typeof getActiveQuizPois === "function" ? getActiveQuizPois() : [];
   const vUnlockedPois = vState.unlockedPois || state.unlockedPois || new Set();
   const unlockedPoiCount = activePois.filter((p) => vUnlockedPois.has(p.id)).length;
   const stAndPoiCurrent = unlockedStCount + unlockedPoiCount;
@@ -279,10 +279,10 @@ function updateScoreAndProgressUI() {
     document.getElementById("stat-town-bar").style.width = `${Math.min(100, parseFloat(stPct))}%`;
   } else if (regionTotal === 0 && activePois.length > 0 && activeSt.length === 0) {
     // Pure POI / Capital Mode
-    const activeCats = ["airport", "port", "reservoir", "lake", "settlement", "capital"]
+    const activeCats = ["airport", "port", "reservoir", "lake", "settlement", "capital", "landmark"]
       .map((cat) => ({ cat, items: typeof getActiveQuizPois === "function" ? getActiveQuizPois(cat) : [] }))
       .filter((entry) => entry.items.length > 0);
-    const poiUnitFor = (cat) => (cat === "capital" || cat === "settlement" ? "處" : "座");
+    const poiUnitFor = (cat) => (cat === "capital" || cat === "settlement" || cat === "landmark" ? "處" : "座");
 
     if (activeCats.length === 2) {
       const [c1, c2] = activeCats;
@@ -638,7 +638,7 @@ function renderCountyProgressSidebar() {
   const isTw = _dashIsTwModern();
   const singleLayer = _dashIsSingleLayer();
   const activeSt = features.supportsTransportQuiz && typeof getActiveQuizStations === "function" ? getActiveQuizStations() : [];
-  const activePois = (features.supportsPoiQuiz || features.supportsCapitalQuiz) && typeof getActiveQuizPois === "function" ? getActiveQuizPois() : [];
+  const activePois = (features.supportsPoiQuiz || features.supportsCapitalQuiz || features.supportsLandmarkQuiz) && typeof getActiveQuizPois === "function" ? getActiveQuizPois() : [];
   const vUnlockedPois = vState.unlockedPois || state.unlockedPois || new Set();
   const scopeCounties = getScopeCounties();
 
@@ -652,7 +652,7 @@ function renderCountyProgressSidebar() {
     titleEl.textContent = parts.length > 0 ? `${parts.join("與")}完成度明細` : "挑戰進度明細";
   }
 
-  if ((features.supportsPoiQuiz || features.supportsCapitalQuiz) && activePois.length > 0) {
+  if ((features.supportsPoiQuiz || features.supportsCapitalQuiz || features.supportsLandmarkQuiz) && activePois.length > 0) {
     const onlyCap = activePois.every((p) => p.category === "capital");
     const capIcon = typeof getPoiCategoryIcon === "function" ? getPoiCategoryIcon("capital") : "◎";
     const capLbl = typeof getPoiCategoryLabel === "function" ? getPoiCategoryLabel("capital") : "首都／省會";
@@ -661,13 +661,13 @@ function renderCountyProgressSidebar() {
     poiHeader.textContent = onlyCap ? `${capIcon} ${capLbl}完成度` : "📍 地標完成度（自動去重統計）";
     container.appendChild(poiHeader);
 
-    ["airport", "port", "reservoir", "lake", "settlement", "capital"].forEach((cat) => {
+    ["airport", "port", "reservoir", "lake", "settlement", "capital", "landmark"].forEach((cat) => {
       const catPois = typeof getActiveQuizPois === "function" ? getActiveQuizPois(cat) : activePois.filter((p) => p.category === cat);
       if (catPois.length === 0) return;
       const meta = POI_CATEGORY_META[cat];
       const icon = typeof getPoiCategoryIcon === "function" ? getPoiCategoryIcon(cat) : meta.icon;
       const lbl = typeof getPoiCategoryLabel === "function" ? getPoiCategoryLabel(cat) : meta.label;
-      const unitStr = cat === "capital" || cat === "settlement" ? "處" : "座";
+      const unitStr = cat === "capital" || cat === "settlement" || cat === "landmark" ? "處" : "座";
       const unlockedCnt = catPois.filter((p) => vUnlockedPois.has(p.id)).length;
       const pctP = ((unlockedCnt / catPois.length) * 100).toFixed(1);
       const isDone = unlockedCnt === catPois.length;
@@ -889,7 +889,7 @@ function checkVictoryCondition() {
           return t && (typeof isTownInScope === "function" ? isTownInScope(t) : state.selectedCounties.has(t.countyName));
         }).length;
 
-  const activePois = (features.supportsPoiQuiz || features.supportsCapitalQuiz) && typeof getActiveQuizPois === "function" ? getActiveQuizPois() : [];
+  const activePois = (features.supportsPoiQuiz || features.supportsCapitalQuiz || features.supportsLandmarkQuiz) && typeof getActiveQuizPois === "function" ? getActiveQuizPois() : [];
   const unlockedPoiCount = activePois.filter((p) => state.unlockedPois.has(p.id)).length;
   const total = adminTotal + activeSt.length + activePois.length;
   const current = adminCurrent + unlockedStCount + unlockedPoiCount;
@@ -952,7 +952,7 @@ function finishGame(reason = "victory") {
           }
         });
       }
-      if ((features.supportsPoiQuiz || features.supportsCapitalQuiz) && typeof getActiveQuizPois === "function") {
+      if ((features.supportsPoiQuiz || features.supportsCapitalQuiz || features.supportsLandmarkQuiz) && typeof getActiveQuizPois === "function") {
         getActiveQuizPois().forEach((p) => {
           if (!state.unlockedPois.has(p.id)) {
             state.missedPois.add(p.id);
@@ -969,7 +969,7 @@ function finishGame(reason = "victory") {
 
   const activeSt = features.supportsTransportQuiz && typeof getActiveQuizStations === "function" ? getActiveQuizStations() : [];
   const rawUnlockedStCount = activeSt.filter((s) => state.unlockedStations.has(s.key)).length;
-  const activePois = (features.supportsPoiQuiz || features.supportsCapitalQuiz) && typeof getActiveQuizPois === "function" ? getActiveQuizPois() : [];
+  const activePois = (features.supportsPoiQuiz || features.supportsCapitalQuiz || features.supportsLandmarkQuiz) && typeof getActiveQuizPois === "function" ? getActiveQuizPois() : [];
   const rawUnlockedPoiCount = activePois.filter((p) => state.unlockedPois.has(p.id)).length;
   const scopeCounties = getScopeCounties();
   const scopeTowns = getScopeTowns();
@@ -1004,8 +1004,8 @@ function finishGame(reason = "victory") {
   const maxStreak = (state.stats && state.stats.maxStreak) || 0;
   const poiBreakdown = limitedStats ? limitedStats.poiBreakdown : {};
   if (!limitedStats) {
-    ["airport", "port", "reservoir", "lake", "settlement", "capital"].forEach((cat) => {
-      if ((features.supportsPoiQuiz || features.supportsCapitalQuiz) && typeof isPoiCategoryActive === "function" && isPoiCategoryActive(cat) && typeof getActiveQuizPois === "function") {
+    ["airport", "port", "reservoir", "lake", "settlement", "capital", "landmark"].forEach((cat) => {
+      if ((features.supportsPoiQuiz || features.supportsCapitalQuiz || features.supportsLandmarkQuiz) && typeof isPoiCategoryActive === "function" && isPoiCategoryActive(cat) && typeof getActiveQuizPois === "function") {
         const list = getActiveQuizPois(cat);
         const unlocked = list.filter((p) => state.unlockedPois.has(p.id)).length;
         poiBreakdown[cat] = { current: unlocked, total: list.length };
@@ -1111,7 +1111,11 @@ function computeClearedBlocksStats(scopeCountiesArg, scopeTownsArg, activeStArg)
   let completedLines = 0;
   let totalScopeLines = 0;
   if (features.supportsTransportQuiz && activeSt.length > 0 && state.quizStationLines instanceof Set && state.quizStationLines.size > 0) {
-    TAIWAN_SELECTABLE_LINES.forEach((line) => {
+    const selectableLines =
+      typeof getSelectableLinesForActivePack === "function"
+        ? getSelectableLinesForActivePack()
+        : TAIWAN_SELECTABLE_LINES;
+    selectableLines.forEach((line) => {
       if (line.isHighway || !state.quizStationLines.has(line.id)) return;
       const lineSt = activeSt.filter((s) => s.lineIds && s.lineIds.includes(line.id));
       if (lineSt.length > 0) {
@@ -1127,9 +1131,10 @@ function computeClearedBlocksStats(scopeCountiesArg, scopeTownsArg, activeStArg)
   let totalScopePoiCats = 0;
   const clearedPoiLabels = [];
   const capCatName = typeof getPoiCategoryLabel === "function" ? getPoiCategoryLabel("capital") : "首都／省會";
-  const poiCatNames = { airport: "機場", port: "港口", reservoir: "水庫", lake: "湖泊", settlement: "傳統聚落", capital: capCatName };
-  if ((features.supportsPoiQuiz || features.supportsCapitalQuiz) && typeof isPoiCategoryActive === "function" && typeof getActiveQuizPois === "function") {
-    ["airport", "port", "reservoir", "lake", "settlement", "capital"].forEach((cat) => {
+  const lmCatName = typeof getPoiCategoryLabel === "function" ? getPoiCategoryLabel("landmark") : "著名地標";
+  const poiCatNames = { airport: "機場", port: "港口", reservoir: "水庫", lake: "湖泊", settlement: "傳統聚落", capital: capCatName, landmark: lmCatName };
+  if ((features.supportsPoiQuiz || features.supportsCapitalQuiz || features.supportsLandmarkQuiz) && typeof isPoiCategoryActive === "function" && typeof getActiveQuizPois === "function") {
+    ["airport", "port", "reservoir", "lake", "settlement", "capital", "landmark"].forEach((cat) => {
       if (!isPoiCategoryActive(cat)) return;
       const list = getActiveQuizPois(cat);
       if (list.length > 0) {
@@ -1679,10 +1684,15 @@ function formatBreakdownSummary(stats, verbose = false) {
 
 function detectPoiThemeProfile() {
   const feats = _dashFeatures();
-  if (!feats.supportsPoiQuiz && !feats.supportsCapitalQuiz) return null;
+  if (!feats.supportsPoiQuiz && !feats.supportsCapitalQuiz && !feats.supportsLandmarkQuiz) return null;
   if (typeof isPoiCategoryActive !== "function") return null;
-  const activeCats = ["airport", "port", "reservoir", "lake", "settlement", "capital"].filter((c) => isPoiCategoryActive(c));
+  const activeCats = ["airport", "port", "reservoir", "lake", "settlement", "capital", "landmark"].filter((c) => isPoiCategoryActive(c));
   if (activeCats.length === 0) return null;
+
+  if (activeCats.length === 1 && activeCats[0] === "landmark") {
+    const lmTitle = typeof getPoiCategoryLabel === "function" ? getPoiCategoryLabel("landmark") : "著名地標";
+    return makeTierTitles(lmTitle, `🏛️ ${lmTitle}最高大宗師`, `🏛️ ${lmTitle}極速巡禮王`, `🏛️ ${lmTitle}通關大師`, `🏛️ ${lmTitle}地理專家`, `🏛️ ${lmTitle}達人`, "🏛️ 地標見習旅人", "🏛️ 巡禮啟程旅人");
+  }
 
   if (activeCats.length === 1 && activeCats[0] === "capital") {
     const pack = typeof getActiveMapPack === "function" ? getActiveMapPack() : null;
@@ -2077,9 +2087,10 @@ function showSettlementModal() {
     }
   }
   if (activeSt.length > 0) scopeParts.push(`${activeSt.length}站`);
-  if ((features.supportsPoiQuiz || features.supportsCapitalQuiz) && typeof isPoiCategoryActive === "function" && typeof getActiveQuizPois === "function") {
+  if ((features.supportsPoiQuiz || features.supportsCapitalQuiz || features.supportsLandmarkQuiz) && typeof isPoiCategoryActive === "function" && typeof getActiveQuizPois === "function") {
     const capShortLbl = typeof getPoiCategoryLabel === "function" ? getPoiCategoryLabel("capital") : "首都";
-    [["airport", "機場"], ["port", "港"], ["reservoir", "水庫"], ["lake", "湖"], ["settlement", "聚落"], ["capital", capShortLbl]].forEach(([cat, lbl]) => {
+    const lmShortLbl = typeof getPoiCategoryLabel === "function" ? getPoiCategoryLabel("landmark") : "地標";
+    [["airport", "機場"], ["port", "港"], ["reservoir", "水庫"], ["lake", "湖"], ["settlement", "聚落"], ["capital", capShortLbl], ["landmark", lmShortLbl]].forEach(([cat, lbl]) => {
       if (isPoiCategoryActive(cat)) {
         const cnt = getActiveQuizPois(cat).length;
         if (cnt > 0) scopeParts.push(`${cnt}${lbl}`);
@@ -2714,6 +2725,11 @@ function resetGame(options = {}) {
   state.targetId = null;
   state.hintLevel = 0;
   state.satelliteOutlineRevealed = false;
+  state.rushScore = 0;
+  state.rushQuestionHistory = [];
+  if (typeof resetMpQuestionSync === "function") {
+    resetMpQuestionSync(0, "");
+  }
   if (typeof clearSatelliteTargetMarker === "function") {
     clearSatelliteTargetMarker();
   }

@@ -42,9 +42,10 @@
       fullScopeLabel: "中華民國1945 全境 50 區"
     },
     features: {
-      supportsTransportQuiz: false,
+      supportsTransportQuiz: true,
       supportsPoiQuiz: false,
       supportsCapitalQuiz: true,
+      supportsLandmarkQuiz: true,
       capitalLabel: "省會",
       supportsMasterHierarchy: false,
       supportsSuffixDifficulty: true,
@@ -56,6 +57,10 @@
       id: "ccts_1947",
       label: "📜 歷史掛圖 (1947)",
       url: "https://gis.sinica.edu.tw/ccts/file-exists.php?img=China_Map_1947-png-{z}-{x}-{y}",
+      fallbackUrl: "https://gis.sinica.edu.tw/ccts/file-exists.php?img=CM300M_1959-png-{z}-{x}-{y}",
+      minNativeZoom: 3,
+      maxNativeZoom: 10,
+      bounds: [[10.59, 59.654], [57.138, 153.41]],
       attribution: "中華民國新地圖 (1947) &copy; 中央研究院人社中心 CCTS WMTS"
     },
     mapView: {

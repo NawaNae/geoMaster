@@ -51,6 +51,13 @@ const POI_CATEGORY_META = {
     icon: "◎",
     accent: "#f59e0b",
     badgeClass: "bg-amber-500/20 text-amber-300 border-amber-400/40"
+  },
+  landmark: {
+    id: "landmark",
+    label: "著名地標",
+    icon: "🏛️",
+    accent: "#fb7185",
+    badgeClass: "bg-rose-500/20 text-rose-300 border-rose-400/40"
   }
 };
 

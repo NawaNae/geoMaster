@@ -1527,9 +1527,10 @@
       fullScopeLabel: "全日本 47 都道府縣"
     },
     features: {
-      supportsTransportQuiz: false,
+      supportsTransportQuiz: true,
       supportsPoiQuiz: false,
       supportsCapitalQuiz: true,
+      supportsLandmarkQuiz: true,
       capitalLabel: "縣廳",
       supportsMasterHierarchy: false,
       supportsSuffixDifficulty: true,

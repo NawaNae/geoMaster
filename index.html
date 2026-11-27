@@ -961,23 +961,32 @@
                     <input id="chk-pindrop-hide-county" type="checkbox" class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-fuchsia-500 accent-fuchsia-400 cursor-pointer" />
                     <span class="font-bold text-fuchsia-200">🔥 隱藏縣市（困難）</span>
                   </label>
-                  <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="開啟後每題限時倒數搶答，時間到自動送出預覽圖釘或記為超時 0 分">
+                  <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="開啟後每題限時倒數（可選一般倒數或搶答倒數），超時未標記記 0 分並視同 Pass">
                     <input id="chk-pindrop-countdown-rush" type="checkbox" class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-emerald-500 accent-emerald-400 cursor-pointer" />
-                    <span class="font-bold text-emerald-200">⚡ 允許倒數搶答</span>
+                    <span class="font-bold text-emerald-200">⏱️ 每題倒數</span>
                   </label>
-                  <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="預設開啟：啟用倒數搶答時，剩餘時間越多可獲得最高 +20% (+1,000 分) 速度加成">
+                  <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="預設開啟：搶答倒數下依 GeoGuessr 距離分數再加最高 +20% (+1,000 分) 速度加成">
                     <input id="chk-pindrop-countdown-bonus" type="checkbox" checked class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-orange-500 accent-orange-400 cursor-pointer" />
                     <span class="font-bold text-orange-200">🔥 倒數計分加成</span>
                   </label>
                 </div>
-                <div id="pindrop-countdown-sec-row" class="hidden flex flex-wrap items-center justify-between gap-1.5 pt-1 border-t border-slate-800/80">
-                  <span class="text-[11px] font-extrabold text-emerald-300">⚡ 每題搶答秒數</span>
-                  <div class="flex flex-wrap items-center gap-1">
-                    <button type="button" data-qcd-sec="5" class="question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">5 秒</button>
-                    <button type="button" data-qcd-sec="10" class="question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">10 秒</button>
-                    <button type="button" data-qcd-sec="15" class="question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border transition bg-emerald-500/25 border-emerald-400 text-emerald-200 shadow">15 秒</button>
-                    <button type="button" data-qcd-sec="20" class="question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">20 秒</button>
-                    <button type="button" data-qcd-sec="30" class="question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">30 秒</button>
+                <div id="pindrop-countdown-sec-row" class="hidden space-y-1.5 pt-1 border-t border-slate-800/80">
+                  <div class="flex flex-wrap items-center justify-between gap-1.5">
+                    <span class="text-[11px] font-extrabold text-sky-300">倒數模式</span>
+                    <div class="inline-flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-700/80 gap-0.5">
+                      <button type="button" data-qcd-mode="normal" class="question-countdown-mode-btn px-2 py-0.5 rounded-md text-[11px] font-bold border border-transparent text-slate-300 hover:text-white transition" data-tip="每題固定限時 N 秒，純依 GeoGuessr 距離計分（0–5,000 分），超時未標記 0 分算 Pass">⏳ 一般倒數</button>
+                      <button type="button" data-qcd-mode="rush" class="question-countdown-mode-btn px-2 py-0.5 rounded-md text-[11px] font-bold border transition bg-emerald-500/25 border-emerald-400 text-emerald-200 shadow" data-tip="GeoGuessr 距離計分＋搶答速度加成；超時未標記 0 分算 Pass">⚡ 搶答倒數</button>
+                    </div>
+                  </div>
+                  <div class="flex flex-wrap items-center justify-between gap-1.5">
+                    <span class="text-[11px] font-extrabold text-emerald-300">⏱️ 每題限時秒數</span>
+                    <div class="flex flex-wrap items-center gap-1">
+                      <button type="button" data-qcd-sec="5" class="question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">5 秒</button>
+                      <button type="button" data-qcd-sec="10" class="question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">10 秒</button>
+                      <button type="button" data-qcd-sec="15" class="question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border transition bg-emerald-500/25 border-emerald-400 text-emerald-200 shadow">15 秒</button>
+                      <button type="button" data-qcd-sec="20" class="question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">20 秒</button>
+                      <button type="button" data-qcd-sec="30" class="question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">30 秒</button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1028,19 +1037,28 @@
                     <input id="chk-target-hide-guessed" type="checkbox" class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-purple-500 accent-purple-400 cursor-pointer" />
                     <span class="font-bold text-purple-200">🙈 隱藏已猜區塊</span>
                   </label>
-                  <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="開啟後每題限時倒數搶答，時間到自動公佈答案並進入下一題">
+                  <label class="inline-flex items-center gap-1.5 text-slate-200 cursor-pointer select-none" data-tip="開啟後每題限時倒數（可選一般倒數或多人搶答倒數），時間到記 0 分視同 Pass 並進下一題">
                     <input id="chk-target-countdown-rush" type="checkbox" class="w-3.5 h-3.5 rounded bg-slate-950 border-slate-600 text-emerald-500 accent-emerald-400 cursor-pointer" />
-                    <span class="font-bold text-emerald-200">⚡ 允許倒數搶答</span>
+                    <span class="font-bold text-emerald-200">⏱️ 每題倒數</span>
                   </label>
                 </div>
-                <div id="target-countdown-sec-row" class="hidden flex flex-wrap items-center justify-between gap-1.5 pt-1 border-t border-slate-800/80">
-                  <span class="text-[11px] font-extrabold text-emerald-300">⚡ 每題搶答秒數</span>
-                  <div class="flex flex-wrap items-center gap-1">
-                    <button type="button" data-qcd-sec="5" class="question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">5 秒</button>
-                    <button type="button" data-qcd-sec="10" class="question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">10 秒</button>
-                    <button type="button" data-qcd-sec="15" class="question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border transition bg-emerald-500/25 border-emerald-400 text-emerald-200 shadow">15 秒</button>
-                    <button type="button" data-qcd-sec="20" class="question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">20 秒</button>
-                    <button type="button" data-qcd-sec="30" class="question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">30 秒</button>
+                <div id="target-countdown-sec-row" class="hidden space-y-1.5 pt-1 border-t border-slate-800/80">
+                  <div class="flex flex-wrap items-center justify-between gap-1.5">
+                    <span class="text-[11px] font-extrabold text-sky-300">倒數模式</span>
+                    <div class="inline-flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-700/80 gap-0.5">
+                      <button type="button" data-qcd-mode="normal" class="question-countdown-mode-btn px-2 py-0.5 rounded-md text-[11px] font-bold border border-transparent text-slate-300 hover:text-white transition" data-tip="一般每題倒數：每人每題獨立限時 N 秒，答對得滿分，超時 0 分算 Pass">⏳ 一般倒數</button>
+                      <button type="button" data-qcd-mode="rush" class="question-countdown-mode-btn px-2 py-0.5 rounded-md text-[11px] font-bold border transition bg-emerald-500/25 border-emerald-400 text-emerald-200 shadow" data-tip="多人搶答倒數：先答對得滿分並觸發緩衝倒數，對手慢答對仍可加分，超時才 0 分算 Pass">⚡ 搶答倒數</button>
+                    </div>
+                  </div>
+                  <div class="flex flex-wrap items-center justify-between gap-1.5">
+                    <span class="text-[11px] font-extrabold text-emerald-300">⏱️ 每題限時秒數</span>
+                    <div class="flex flex-wrap items-center gap-1">
+                      <button type="button" data-qcd-sec="5" class="question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">5 秒</button>
+                      <button type="button" data-qcd-sec="10" class="question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">10 秒</button>
+                      <button type="button" data-qcd-sec="15" class="question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border transition bg-emerald-500/25 border-emerald-400 text-emerald-200 shadow">15 秒</button>
+                      <button type="button" data-qcd-sec="20" class="question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">20 秒</button>
+                      <button type="button" data-qcd-sec="30" class="question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition">30 秒</button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1165,6 +1183,14 @@
                     <span class="geo-union-pill topic-check">+</span>
                   </button>
                 </div>
+                <div data-topic="landmark" data-accent="rose" data-state="off" class="topic-chip-btn geo-select-card hidden" data-tip="猜著名地標、歷史古蹟與自然奇觀（點左單選 / 點右複選）">
+                  <button type="button" class="geo-solo-btn" aria-label="單選🏛️ 地標">
+                    <span class="landmark-topic-label text-xs font-extrabold text-rose-300">🏛️ 地標</span>
+                  </button>
+                  <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false" aria-label="複選切換🏛️ 地標">
+                    <span class="geo-union-pill topic-check">+</span>
+                  </button>
+                </div>
               </div>
               <div id="mixed-region-rail-switch-bar" class="hidden mt-2 pt-2 border-t border-slate-800/90 flex flex-wrap items-center justify-between gap-2">
                 <label class="inline-flex items-center gap-2 text-xs font-extrabold text-amber-200 cursor-pointer select-none" data-tip="開啟後僅出題位於所選行政區境內的車站與地標">
@@ -1279,7 +1305,7 @@
                     <button type="button" data-scope-action="clear" data-scope-target="station" class="scope-bulk-btn px-2 py-0.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-[11px] font-bold transition">清除</button>
                   </div>
                 </div>
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                <div id="simple-tw-station-presets" class="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                   <div data-simple-station="tpemrt" data-accent="pink" data-state="off" class="simple-station-btn geo-select-card" data-tip="北捷：淡水信義、板南、松山新店、中和新蘆、文湖、環狀線">
                     <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🚇 北捷</span></button>
                     <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
@@ -1317,6 +1343,7 @@
                     <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
                   </div>
                 </div>
+                <div id="simple-pack-rail-checklist" class="hidden space-y-2"></div>
               </div>
 
               <!-- Simple Airport Box -->
@@ -2375,8 +2402,10 @@
   <script src="data/admin-data.js"></script>
   <script src="data/railisland-shapes.js"></script>
   <script src="data/transport-data.js"></script>
+  <script src="data/pack-rail-data.js"></script>
   <script src="data/poi-data.js"></script>
   <script src="data/capital-data.js"></script>
+  <script src="data/landmark-data.js"></script>
 
   <!-- 1.5 MapPack Core Registry & Lifecycle (TRACK-M0) -->
   <script src="js/map-pack-registry.js"></script>

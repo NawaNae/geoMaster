@@ -144,6 +144,7 @@
       supportsTransportQuiz: false,
       supportsPoiQuiz: false,
       supportsCapitalQuiz: true,
+      supportsLandmarkQuiz: true,
       capitalLabel: "首都",
       supportsMasterHierarchy: false,
       supportsSuffixDifficulty: false,

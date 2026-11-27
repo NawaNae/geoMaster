@@ -40,6 +40,9 @@ function getPoiById(poiId) {
   if (typeof CAPITAL_POI_BY_ID !== "undefined" && CAPITAL_POI_BY_ID.has(poiId)) {
     return CAPITAL_POI_BY_ID.get(poiId);
   }
+  if (typeof LANDMARK_POI_BY_ID !== "undefined" && LANDMARK_POI_BY_ID.has(poiId)) {
+    return LANDMARK_POI_BY_ID.get(poiId);
+  }
   return null;
 }
 
@@ -52,6 +55,9 @@ function getPoiCategoryIcon(category, poi = null) {
       return getCapitalTopicIconForPack(getActiveMapPack());
     }
     return "◎";
+  }
+  if (category === "landmark") {
+    return "🏛️";
   }
   if (typeof POI_CATEGORY_META !== "undefined" && POI_CATEGORY_META[category]) {
     return POI_CATEGORY_META[category].icon;
@@ -66,6 +72,12 @@ function getPoiCategoryLabel(category) {
     }
     return "首都／省會";
   }
+  if (category === "landmark") {
+    if (typeof getLandmarkTopicLabelForPack === "function" && typeof getActiveMapPack === "function") {
+      return getLandmarkTopicLabelForPack(getActiveMapPack());
+    }
+    return "著名地標";
+  }
   if (typeof POI_CATEGORY_META !== "undefined" && POI_CATEGORY_META[category]) {
     return POI_CATEGORY_META[category].label;
   }
@@ -74,7 +86,7 @@ function getPoiCategoryLabel(category) {
 
 function formatPoiLocationText(poi) {
   if (!poi) return "";
-  if (poi.category === "capital") {
+  if (poi.category === "capital" || poi.category === "landmark") {
     return poi.townName || poi.countyName || "";
   }
   return `${poi.countyName || ""}${poi.townName || ""}`;
@@ -91,7 +103,7 @@ function shouldFilterPoisByRegion() {
 
 function isPoiInSelectedRegion(poi) {
   if (!poi) return false;
-  if (poi.category === "capital" && poi.parentItemId) {
+  if ((poi.category === "capital" || poi.category === "landmark") && poi.parentItemId) {
     if (state.selectedTownIds && state.selectedTownIds.has(poi.parentItemId)) return true;
     return false;
   }
@@ -146,6 +158,11 @@ function isPoiCategoryActive(category) {
     if (feats && !feats.supportsCapitalQuiz) return false;
     return Boolean(state.capitalQuizEnabled);
   }
+  if (category === "landmark") {
+    const feats = typeof getActivePackFeatures === "function" ? getActivePackFeatures() : null;
+    if (feats && !feats.supportsLandmarkQuiz) return false;
+    return Boolean(state.landmarkQuizEnabled);
+  }
   return false;
 }
 
@@ -156,7 +173,8 @@ function hasAnyPoiQuizActive() {
     isPoiCategoryActive("reservoir") ||
     isPoiCategoryActive("lake") ||
     isPoiCategoryActive("settlement") ||
-    isPoiCategoryActive("capital")
+    isPoiCategoryActive("capital") ||
+    isPoiCategoryActive("landmark")
   );
 }
 
@@ -235,17 +253,49 @@ function getActiveCapitalPois(applyRegionFilter = true) {
   return out;
 }
 
+function getActiveLandmarkPois(applyRegionFilter = true) {
+  if (typeof getLandmarkPoisForPack !== "function") return [];
+  const activePack = typeof getActiveMapPack === "function" ? getActiveMapPack() : null;
+  if (!activePack) return [];
+  const memberIds =
+    Array.isArray(activePack.memberPackIds) && activePack.memberPackIds.length > 0
+      ? activePack.memberPackIds
+      : [activePack.id];
+  const eligibleItems =
+    typeof getPackEligibleItems === "function"
+      ? getPackEligibleItems(activePack, typeof state !== "undefined" ? state : null)
+      : (typeof activePack.getItems === "function" ? activePack.getItems() : []);
+  const eligibleIdSet = new Set(eligibleItems.map((it) => it && it.id).filter(Boolean));
+  const useRegion = applyRegionFilter && shouldFilterPoisByRegion();
+  const out = [];
+  const seen = new Set();
+  for (let i = 0; i < memberIds.length; i++) {
+    const list = getLandmarkPoisForPack(memberIds[i]);
+    for (let j = 0; j < list.length; j++) {
+      const poi = list[j];
+      if (!poi || seen.has(poi.id)) continue;
+      if (eligibleIdSet.size > 0 && poi.parentItemId && !eligibleIdSet.has(poi.parentItemId)) continue;
+      if (useRegion && !isPoiInSelectedRegion(poi)) continue;
+      seen.add(poi.id);
+      out.push(poi);
+    }
+  }
+  return out;
+}
+
 // Returns deduplicated array of active quiz POIs (optionally filtered to one category)
 function getActiveQuizPois(categoryFilter = null) {
-  const feats = typeof getActivePackFeatures === "function" ? getActivePackFeatures() : { supportsPoiQuiz: true, supportsCapitalQuiz: false };
-  if (!feats.supportsPoiQuiz && !feats.supportsCapitalQuiz) {
+  const feats = typeof getActivePackFeatures === "function"
+    ? getActivePackFeatures()
+    : { supportsPoiQuiz: true, supportsCapitalQuiz: false, supportsLandmarkQuiz: false };
+  if (!feats.supportsPoiQuiz && !feats.supportsCapitalQuiz && !feats.supportsLandmarkQuiz) {
     return [];
   }
   const result = [];
   const seen = new Set();
   const useRegion = shouldFilterPoisByRegion();
 
-  if (feats.supportsPoiQuiz && (!categoryFilter || categoryFilter !== "capital")) {
+  if (feats.supportsPoiQuiz && (!categoryFilter || (categoryFilter !== "capital" && categoryFilter !== "landmark"))) {
     for (const poi of TAIWAN_POI_DATA) {
       const cats = typeof getPoiCategories === "function" ? getPoiCategories(poi) : [poi.category];
       if (categoryFilter && !cats.includes(categoryFilter)) continue;
@@ -277,6 +327,16 @@ function getActiveQuizPois(categoryFilter = null) {
       result.push(poi);
     }
   }
+
+  if (feats.supportsLandmarkQuiz && isPoiCategoryActive("landmark") && (!categoryFilter || categoryFilter === "landmark")) {
+    const lmList = getActiveLandmarkPois(true);
+    for (let i = 0; i < lmList.length; i++) {
+      const poi = lmList[i];
+      if (seen.has(poi.id)) continue;
+      seen.add(poi.id);
+      result.push(poi);
+    }
+  }
   return result;
 }
 
@@ -292,7 +352,7 @@ const EXACT_TOWN_BASE_NAMES = new Set(
 
 function buildPoiMatchKeys(poi, allowBareStem, requireSuffix = false) {
   const keys = new Set();
-  if (poi && poi.category === "capital") {
+  if (poi && (poi.category === "capital" || poi.category === "landmark")) {
     const minLen = poi.allowSingleChar ? 1 : 2;
     const addCapKey = (s) => {
       const n = normalizeCapitalText(s);
@@ -303,12 +363,14 @@ function buildPoiMatchKeys(poi, allowBareStem, requireSuffix = false) {
     if (Array.isArray(poi.aliases)) {
       poi.aliases.forEach((a) => addCapKey(a));
     }
-    const normName = normalizeCapitalText(poi.name);
-    if (normName.endsWith("市") || normName.endsWith("城")) {
-      const stem = normName.slice(0, -1);
-      if (stem.length >= minLen) keys.add(stem);
-    } else if (Array.isArray(poi.subTypes) && (poi.subTypes.includes("prov_capital") || poi.subTypes.includes("pref_capital"))) {
-      keys.add(`${normName}市`);
+    if (poi.category === "capital") {
+      const normName = normalizeCapitalText(poi.name);
+      if (normName.endsWith("市") || normName.endsWith("城")) {
+        const stem = normName.slice(0, -1);
+        if (stem.length >= minLen) keys.add(stem);
+      } else if (Array.isArray(poi.subTypes) && (poi.subTypes.includes("prov_capital") || poi.subTypes.includes("pref_capital"))) {
+        keys.add(`${normName}市`);
+      }
     }
     return keys;
   }
@@ -395,20 +457,30 @@ function buildPoiMatchKeys(poi, allowBareStem, requireSuffix = false) {
 
 function matchSinglePoi(poi, normInput, allowBareStem, requireSuffix = false, normCapInput = null) {
   const keys = buildPoiMatchKeys(poi, allowBareStem, requireSuffix);
-  if (poi && poi.category === "capital") {
+  if (poi && (poi.category === "capital" || poi.category === "landmark")) {
     return keys.has(normCapInput !== null ? normCapInput : normalizeCapitalText(normInput));
   }
   return keys.has(normInput);
 }
 
 function isActiveCapitalInput(rawInput) {
-  if (!isPoiCategoryActive("capital")) return false;
+  const hasCap = isPoiCategoryActive("capital");
+  const hasLm = isPoiCategoryActive("landmark");
+  if (!hasCap && !hasLm) return false;
   const normCap = normalizeCapitalText(rawInput);
   if (!normCap || normCap.length < 1) return false;
-  const activeCaps = getActiveQuizPois("capital");
-  for (let i = 0; i < activeCaps.length; i++) {
-    if (normCap.length < 2 && !activeCaps[i].allowSingleChar) continue;
-    if (matchSinglePoi(activeCaps[i], normCap, true, false, normCap)) return true;
+  if (hasCap) {
+    const activeCaps = getActiveQuizPois("capital");
+    for (let i = 0; i < activeCaps.length; i++) {
+      if (normCap.length < 2 && !activeCaps[i].allowSingleChar) continue;
+      if (matchSinglePoi(activeCaps[i], normCap, true, false, normCap)) return true;
+    }
+  }
+  if (hasLm && normCap.length >= 2) {
+    const activeLms = getActiveQuizPois("landmark");
+    for (let i = 0; i < activeLms.length; i++) {
+      if (matchSinglePoi(activeLms[i], normCap, true, false, normCap)) return true;
+    }
   }
   return false;
 }
@@ -434,7 +506,7 @@ function tryMatchAndUnlockPoi(rawInput, isAutoCheck = false) {
     const targetPoi = getPoiById(state.targetPoiId);
     if (targetPoi && activePois.some((p) => p.id === targetPoi.id)) {
       if (matchSinglePoi(targetPoi, normInput, !requireSuffix, requireSuffix, normCapInput)) {
-        if (targetPoi.category !== "capital" && typeof isPoiOrStationCountyUnlocked === "function" && !isPoiOrStationCountyUnlocked(targetPoi.countyName)) {
+        if (targetPoi.category !== "capital" && targetPoi.category !== "landmark" && typeof isPoiOrStationCountyUnlocked === "function" && !isPoiOrStationCountyUnlocked(targetPoi.countyName)) {
           return { matched: false, lockedCounty: true, poi: targetPoi };
         }
         if (state.unlockedPois.has(targetPoi.id)) {
@@ -452,7 +524,7 @@ function tryMatchAndUnlockPoi(rawInput, isAutoCheck = false) {
   const allMatched = activePois.filter((p) => matchSinglePoi(p, normInput, allowBareStem, requireSuffix, normCapInput));
   if (allMatched.length === 0) return { matched: false };
   const candidates = allMatched.filter((p) =>
-    p.category === "capital"
+    p.category === "capital" || p.category === "landmark"
       ? true
       : (typeof isPoiOrStationCountyUnlocked === "function" ? isPoiOrStationCountyUnlocked(p.countyName) : true)
   );
@@ -517,6 +589,7 @@ function getPoiGlyphForCategory(cat) {
   if (cat === "lake") return "🏞";
   if (cat === "settlement") return "🪧";
   if (cat === "capital") return "◎";
+  if (cat === "landmark") return "🏛";
   return "📍";
 }
 
@@ -768,6 +841,12 @@ function getConcisePoiSummaryParts() {
     const capIcon = getPoiCategoryIcon("capital");
     const capLbl = getPoiCategoryLabel("capital");
     parts.push(`${capIcon} ${capLbl}(${cnt}處)`);
+  }
+  if (isPoiCategoryActive("landmark")) {
+    const cnt = getActiveQuizPois("landmark").length;
+    const lmIcon = getPoiCategoryIcon("landmark");
+    const lmLbl = getPoiCategoryLabel("landmark");
+    parts.push(`${lmIcon} ${lmLbl}(${cnt}處)`);
   }
   return parts;
 }

@@ -203,6 +203,68 @@ function computePinDropScore(distanceKm, scaleKm = 25, perfectRadiusKm = 0) {
   return Math.max(0, Math.min(5000, Math.round(raw)));
 }
 
+// Official GeoGuessr map-size diagonal & distance scoring algorithm:
+// score = round(5000 * exp(-10 * distanceKm / mapDiagonalKm))
+function computeGeoGuessrMapDiagonalKm(boundsPair = null) {
+  let b = boundsPair;
+  if (!b && typeof getActiveMapPack === "function") {
+    const pack = getActiveMapPack();
+    b = pack && pack.mapView ? pack.mapView.fullViewBounds : null;
+  }
+  if (Array.isArray(b) && b.length >= 2 && Array.isArray(b[0]) && Array.isArray(b[1])) {
+    const diag = haversineDistanceKm(Number(b[0][0]), Number(b[0][1]), Number(b[1][0]), Number(b[1][1]));
+    if (Number.isFinite(diag) && diag > 1) return diag;
+  }
+  // Default Taiwan full-view diagonal (~420 km)
+  return 420;
+}
+
+function computeGeoGuessrDistanceScore(distanceKm, mapDiagonalKm = null, perfectRadiusKm = 0) {
+  const d = Number(distanceKm);
+  if (!Number.isFinite(d) || d < 0) return 0;
+  const pRad = Number.isFinite(Number(perfectRadiusKm)) && Number(perfectRadiusKm) >= 0 ? Number(perfectRadiusKm) : 0;
+  if (d <= pRad) return 5000;
+  const diag = Number.isFinite(Number(mapDiagonalKm)) && Number(mapDiagonalKm) > 1
+    ? Number(mapDiagonalKm)
+    : computeGeoGuessrMapDiagonalKm();
+  // GeoGuessr official exponential decay: 5000 * e^(-10 * d / D)
+  const raw = 5000 * Math.exp((-10 * (d - pRad)) / diag);
+  return Math.max(0, Math.min(5000, Math.round(raw)));
+}
+
+function computeMultiplayerPinDropRoundScore(opts = {}) {
+  const timedOut = Boolean(opts.timedOut);
+  const hasPin = opts.hasPin !== false;
+  if (timedOut && !hasPin) {
+    return { baseScore: 0, speedBonus: 0, score: 0, passed: true, timedOut: true };
+  }
+  const distanceKm = Number(opts.distanceKm);
+  const inside = Boolean(opts.inside);
+  const perfectRadiusKm = Number(opts.perfectRadiusKm) || 0;
+  const baseScore = inside
+    ? 5000
+    : Number.isFinite(Number(opts.mapDiagonalKm)) && Number(opts.mapDiagonalKm) > 1
+    ? computeGeoGuessrDistanceScore(distanceKm, Number(opts.mapDiagonalKm), perfectRadiusKm)
+    : computePinDropScore(distanceKm, Number(opts.scaleKm) || 25, perfectRadiusKm);
+
+  const mode = opts.countdownMode === "normal" ? "normal" : "rush";
+  const bonusEnabled = opts.bonusEnabled !== false;
+  const isFirstPlacer = opts.isFirstPlacer !== false;
+  let speedBonus = 0;
+  if (!timedOut && mode === "rush" && bonusEnabled && baseScore > 0) {
+    const rawBonus = computePinDropCountdownBonus(baseScore, opts.remainingMs, opts.totalMs, true);
+    // First accurate placer earns full speed bonus; slower accurate placers STILL earn full GeoGuessr distance score + 60% time bonus
+    speedBonus = isFirstPlacer ? rawBonus : Math.round(rawBonus * 0.6);
+  }
+  return {
+    baseScore,
+    speedBonus,
+    score: baseScore + speedBonus,
+    passed: false,
+    timedOut
+  };
+}
+
 function computePinDropCountdownBonus(baseScore, remainingMs, totalMs, enabled = true) {
   if (!enabled) return 0;
   const base = Number(baseScore);
@@ -218,6 +280,7 @@ function isPinDropCountdownBonusActive() {
   return Boolean(
     typeof state !== "undefined" &&
       state.questionCountdownEnabled &&
+      state.questionCountdownMode !== "normal" &&
       state.pinDropCountdownBonus !== false
   );
 }
@@ -1150,8 +1213,11 @@ function beginPinDropRound() {
     updateScoreAndProgressUI();
   }
   if (typeof setFeedback === "function") {
+    const isNormalCd = state.questionCountdownMode === "normal";
     const rushNote = state.questionCountdownEnabled
-      ? `（⚡ ${state.questionCountdownSec || 15}秒倒數搶答${state.pinDropCountdownBonus !== false ? " · 越快越多加成" : ""}）`
+      ? isNormalCd
+        ? `（⏳ ${state.questionCountdownSec || 15}秒一般倒數 · GeoGuessr 距離計分）`
+        : `（⚡ ${state.questionCountdownSec || 15}秒倒數搶答${state.pinDropCountdownBonus !== false ? " · 越快越多加成" : ""}）`
       : "";
     setFeedback(`📍 第 ${state.pinDrop.currentRound} 題：點擊地圖放預覽圖釘或雙擊直接送出${rushNote}`, "info");
   }
@@ -1239,7 +1305,8 @@ function handlePinDropCountdownTimeout() {
   updatePinDropBannerAndDockUI();
   if (typeof updateScoreAndProgressUI === "function") updateScoreAndProgressUI();
   if (typeof setFeedback === "function") {
-    setFeedback(`⌛ 搶答時間到！未標記座標 · +0 分（目標：【${target.shortLabel}】）`, "error");
+    const modePrefix = state.questionCountdownMode === "normal" ? "⌛ 倒數時間到" : "⌛ 搶答時間到";
+    setFeedback(`${modePrefix}！未標記座標 · 0 分（視同 Pass，目標：【${target.shortLabel}】）`, "error");
   }
   schedulePinDropAutoNext(2000);
   return true;

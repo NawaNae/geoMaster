@@ -584,11 +584,35 @@ function applyActivePackFeatureGatingUI() {
   const supportsTransport = Boolean(features.supportsTransportQuiz);
   const supportsPoi = Boolean(features.supportsPoiQuiz);
   const supportsCapital = Boolean(features.supportsCapitalQuiz);
+  const supportsLandmark = Boolean(features.supportsLandmarkQuiz);
   const capTopicLabel = typeof getCapitalTopicLabelForPack === "function" ? getCapitalTopicLabelForPack(pack) : (features.capitalLabel || "首都／省會");
   const capTopicIcon = typeof getCapitalTopicIconForPack === "function" ? getCapitalTopicIconForPack(pack) : "◎";
+  const lmTopicLabel = typeof getLandmarkTopicLabelForPack === "function" ? getLandmarkTopicLabelForPack(pack) : "著名地標";
 
   document.querySelectorAll('.topic-chip-btn[data-topic="station"]').forEach((el) => {
     el.classList.toggle("hidden", !supportsTransport);
+    const stSpan = el.querySelector(".geo-solo-btn span");
+    if (stSpan) {
+      stSpan.textContent = isTw
+        ? "🚉 車站"
+        : pack && pack.id === "jp_pref"
+        ? "🚄 鐵路"
+        : pack && pack.id === "cn_prov"
+        ? "🚄 高鐵／鐵路"
+        : pack && pack.id === "roc_1949"
+        ? "🚂 歷史鐵路"
+        : "🚉 鐵路";
+    }
+    const stTip = isTw
+      ? "猜台鐵、高鐵、捷運與輕軌車站"
+      : pack && pack.id === "jp_pref"
+      ? "猜日本新幹線與主要 JR 鐵路車站（點左單選 / 點右複選）"
+      : pack && pack.id === "cn_prov"
+      ? "猜中國現代高鐵八縱八橫幹線與青藏鐵路車站（點左單選 / 點右複選）"
+      : pack && pack.id === "roc_1949"
+      ? "猜中華民國1945平漢、津浦、京滬、粵漢、隴海、中長等歷史鐵路車站（點左單選 / 點右複選）"
+      : "猜各國鐵路與軌道幹線車站（點左單選 / 點右複選）";
+    el.setAttribute("data-tip", stTip);
   });
   document.getElementById("map-rail-control-pill")?.classList.toggle("hidden", !supportsTransport);
   document.getElementById("p2p-rail-rule-wrap")?.classList.toggle("hidden", !supportsTransport);
@@ -618,6 +642,25 @@ function applyActivePackFeatureGatingUI() {
     el.setAttribute("data-tip", tipText);
   });
 
+  document.querySelectorAll('.topic-chip-btn[data-topic="landmark"]').forEach((el) => {
+    el.classList.toggle("hidden", !supportsLandmark);
+    const lblSpan = el.querySelector(".landmark-topic-label");
+    if (lblSpan) lblSpan.textContent = `🏛️ ${lmTopicLabel}`;
+    const soloBtn = el.querySelector(".geo-solo-btn");
+    if (soloBtn) soloBtn.setAttribute("aria-label", `單選🏛️ ${lmTopicLabel}`);
+    const unionBtn = el.querySelector(".geo-union-btn");
+    if (unionBtn) unionBtn.setAttribute("aria-label", `複選切換🏛️ ${lmTopicLabel}`);
+    const lmTip =
+      pack && pack.id === "world_countries"
+        ? "猜世界著名地標、歷史古蹟與自然奇觀（點左單選 / 點右複選）"
+        : pack && pack.id === "jp_pref"
+        ? "猜日本富士山、東京鐵塔、清水寺、姬路城等著名地標（點左單選 / 點右複選）"
+        : pack && pack.id === "roc_1949"
+        ? "猜中華民國1945中山陵、黃鶴樓、故宮、長城、莫高窟等歷史地標（點左單選 / 點右複選）"
+        : "猜中國現代與經典地標：故宮、長城、東方明珠、兵馬俑、三峽大壩、廣州塔等（點左單選 / 點右複選）";
+    el.setAttribute("data-tip", lmTip);
+  });
+
   document.querySelectorAll('.topic-chip-btn[data-topic="region"]').forEach((el) => {
     const regionLblSpan = el.querySelector(".geo-solo-btn span");
     if (regionLblSpan) {
@@ -625,7 +668,7 @@ function applyActivePackFeatureGatingUI() {
     }
   });
 
-  document.getElementById("topic-selector-card")?.classList.toggle("hidden", !supportsTransport && !supportsPoi && !supportsCapital);
+  document.getElementById("topic-selector-card")?.classList.toggle("hidden", !supportsTransport && !supportsPoi && !supportsCapital && !supportsLandmark);
 
   const topicRegionMeta = document.getElementById("topic-region-meta");
   if (topicRegionMeta) {
@@ -727,6 +770,7 @@ function syncConfigButtonsUI() {
   const supportsTransport = Boolean(features.supportsTransportQuiz);
   const supportsPoi = Boolean(features.supportsPoiQuiz);
   const supportsCapital = Boolean(features.supportsCapitalQuiz);
+  const supportsLandmark = Boolean(features.supportsLandmarkQuiz);
   const hasR = Boolean(state.regionQuizEnabled);
   const hasS = supportsTransport && Boolean(state.stationQuizEnabled);
   const hasA = supportsPoi && Boolean(state.airportQuizEnabled);
@@ -735,8 +779,9 @@ function syncConfigButtonsUI() {
   const hasLk = supportsPoi && Boolean(state.lakeQuizEnabled);
   const hasStl = supportsPoi && Boolean(state.settlementQuizEnabled);
   const hasCap = supportsCapital && Boolean(state.capitalQuizEnabled);
+  const hasLm = supportsLandmark && Boolean(state.landmarkQuizEnabled);
 
-  const topicMap = { region: hasR, station: hasS, airport: hasA, port: hasP, reservoir: hasRes, lake: hasLk, settlement: hasStl, capital: hasCap };
+  const topicMap = { region: hasR, station: hasS, airport: hasA, port: hasP, reservoir: hasRes, lake: hasLk, settlement: hasStl, capital: hasCap, landmark: hasLm };
 
   document.querySelectorAll(".topic-chip-btn").forEach((card) => {
     const t = card.getAttribute("data-topic");
@@ -778,7 +823,7 @@ function syncConfigButtonsUI() {
   if (simpleLkBox) simpleLkBox.classList.toggle("hidden", !hasLk);
   if (simpleStlBox) simpleStlBox.classList.toggle("hidden", !hasStl);
 
-  const showRegionFilterSwitch = hasR && (hasS || hasA || hasP || hasRes || hasLk || hasStl || hasCap);
+  const showRegionFilterSwitch = hasR && (hasS || hasA || hasP || hasRes || hasLk || hasStl || hasCap || hasLm);
   const mixedSwitchBar = document.getElementById("mixed-region-rail-switch-bar");
   const wrapSimpleFilter = document.getElementById("wrap-simple-filter-st-region");
   const wrapAdvFilter = document.getElementById("wrap-adv-filter-st-region");
@@ -1015,6 +1060,16 @@ function syncConfigButtonsUI() {
       ? "question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border transition bg-emerald-500/25 border-emerald-400 text-emerald-200 shadow"
       : "question-countdown-sec-btn px-2 py-0.5 rounded-lg text-[11px] font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 transition";
   });
+  const curQcdMode = state.questionCountdownMode === "normal" ? "normal" : "rush";
+  document.querySelectorAll(".question-countdown-mode-btn").forEach((btn) => {
+    const mode = btn.getAttribute("data-qcd-mode");
+    const isCur = mode === curQcdMode;
+    btn.className = isCur
+      ? (mode === "normal"
+          ? "question-countdown-mode-btn px-2 py-0.5 rounded-md text-[11px] font-bold border transition bg-sky-500/25 border-sky-400 text-sky-200 shadow"
+          : "question-countdown-mode-btn px-2 py-0.5 rounded-md text-[11px] font-bold border transition bg-emerald-500/25 border-emerald-400 text-emerald-200 shadow")
+      : "question-countdown-mode-btn px-2 py-0.5 rounded-md text-[11px] font-bold border border-transparent text-slate-300 hover:text-white transition";
+  });
 
   // Target hints toggle is ONLY relevant in target_random / target_click / satellite_quiz!
   const showTargetHintsToggle =
@@ -1215,20 +1270,45 @@ function setQuestionCountdownEnabled(enabled) {
 function setQuestionCountdownSec(sec) {
   const parsed = Math.max(3, Math.min(120, parseInt(sec, 10) || 15));
   if (!canLocalModifyGameConfig()) {
-    setFeedback("🔒 僅房主可調整倒數搶答秒數！", "error");
+    setFeedback("🔒 僅房主可調整倒數秒數！", "error");
     playTone("error");
     syncConfigButtonsUI();
     return;
   }
   if (state.isHost && state.roomCode) {
     if (parsed === (parseInt(state.questionCountdownSec, 10) || 15)) return;
-    requestOrApplyConfigChange({ questionCountdownSec: parsed }, "搶答秒數");
+    requestOrApplyConfigChange({ questionCountdownSec: parsed }, "倒數秒數");
     return;
   }
   state.questionCountdownSec = parsed;
   syncConfigButtonsUI();
   if (state.questionCountdownEnabled && typeof startQuestionCountdown === "function") {
     startQuestionCountdown();
+  }
+  if (typeof renderRoomConciseSettingsSummary === "function") renderRoomConciseSettingsSummary();
+}
+
+function setQuestionCountdownMode(mode) {
+  const nextMode = mode === "normal" ? "normal" : "rush";
+  if (!canLocalModifyGameConfig()) {
+    setFeedback("🔒 僅房主可切換倒數模式！", "error");
+    playTone("error");
+    syncConfigButtonsUI();
+    return;
+  }
+  if (state.isHost && state.roomCode) {
+    if (nextMode === (state.questionCountdownMode === "normal" ? "normal" : "rush")) return;
+    requestOrApplyConfigChange({ questionCountdownMode: nextMode }, "倒數模式");
+    return;
+  }
+  state.questionCountdownMode = nextMode;
+  syncConfigButtonsUI();
+  if (state.questionCountdownEnabled && typeof startQuestionCountdown === "function") {
+    startQuestionCountdown();
+  }
+  if (state.playMode === "pin_drop" && typeof updatePinDropBannerAndDockUI === "function") {
+    updatePinDropBannerAndDockUI();
+    if (typeof updateScoreAndProgressUI === "function") updateScoreAndProgressUI();
   }
   if (typeof renderRoomConciseSettingsSummary === "function") renderRoomConciseSettingsSummary();
 }
@@ -1371,8 +1451,12 @@ function renderLineChecklistView(containerEl, selectedSet, includeHighways, acce
   if (!containerEl) return;
   containerEl.replaceChildren();
 
+  const selectableLines =
+    typeof getSelectableLinesForActivePack === "function"
+      ? getSelectableLinesForActivePack()
+      : TAIWAN_SELECTABLE_LINES;
   const groups = new Map();
-  TAIWAN_SELECTABLE_LINES.forEach((l) => {
+  selectableLines.forEach((l) => {
     if (!includeHighways && l.isHighway) return;
     if (!groups.has(l.group)) groups.set(l.group, []);
     groups.get(l.group).push(l);
@@ -1480,6 +1564,13 @@ const SIMPLE_STATION_MAP = {
 };
 
 function getDefaultStationQuizLines() {
+  const selectableLines =
+    typeof getSelectableLinesForActivePack === "function"
+      ? getSelectableLinesForActivePack()
+      : TAIWAN_SELECTABLE_LINES;
+  if (!_uiIsTaiwanModernPack()) {
+    return selectableLines.filter((l) => !l.isHighway).map((l) => l.id);
+  }
   const traMain = [...SIMPLE_STATION_MAP.tra_west_main(), ...SIMPLE_STATION_MAP.tra_east_main()];
   const allMrt = TAIWAN_SELECTABLE_LINES
     .filter((l) => !l.isHighway && l.id.startsWith("mrt_"))
@@ -1831,6 +1922,36 @@ function renderScopeModalGrid() {
     });
   }
 
+  const simpleTwPresets = document.getElementById("simple-tw-station-presets");
+  const simplePackRailList = document.getElementById("simple-pack-rail-checklist");
+  const isTwPackNow = _uiIsTaiwanModernPack();
+  if (simpleTwPresets) simpleTwPresets.classList.toggle("hidden", !isTwPackNow);
+  if (simplePackRailList) {
+    simplePackRailList.classList.toggle("hidden", isTwPackNow || !features.supportsTransportQuiz);
+    if (!isTwPackNow && features.supportsTransportQuiz) {
+      renderLineChecklistView(simplePackRailList, state.quizStationLines, false, "pink", (lineIds, shouldAdd) => {
+        if (!canLocalModifyGameConfig()) {
+          setFeedback("🔒 僅房主可調整車站路線！", "warn");
+          return;
+        }
+        const nextLines = new Set(state.quizStationLines);
+        lineIds.forEach((id) => {
+          if (shouldAdd) nextLines.add(id);
+          else nextLines.delete(id);
+        });
+        if (state.isHost && state.roomCode) {
+          requestOrApplyConfigChange({ quizStationLines: Array.from(nextLines) }, "車站題庫路線");
+          return;
+        }
+        state.quizStationLines = nextLines;
+        state.stationQuizEnabled = state.quizStationLines.size > 0;
+        renderScopeModalGrid();
+        if (typeof updateRoadAndRailwayTileOverlays === "function") updateRoadAndRailwayTileOverlays();
+        if (state.isHost && state.roomCode) onHostSettingChange("車站題庫路線");
+      });
+    }
+  }
+
   const totalTowns = getScopeTowns().length;
   const totalStations = features.supportsTransportQuiz ? countUniqueStationsForLines(state.quizStationLines, true) : 0;
   const unFilteredStations = features.supportsTransportQuiz ? countUniqueStationsForLines(state.quizStationLines, false) : 0;
@@ -1905,6 +2026,12 @@ function renderScopeModalGrid() {
     const capIcon = typeof getPoiCategoryIcon === "function" ? getPoiCategoryIcon("capital") : "◎";
     const capLbl = typeof getPoiCategoryLabel === "function" ? getPoiCategoryLabel("capital") : "首都／省會";
     counterParts.push(`${capIcon} ${capLbl} (${capCnt} 處)`);
+  }
+  if (features.supportsLandmarkQuiz && typeof isPoiCategoryActive === "function" && isPoiCategoryActive("landmark")) {
+    const lmCnt = getActiveQuizPois("landmark").length;
+    const lmIcon = typeof getPoiCategoryIcon === "function" ? getPoiCategoryIcon("landmark") : "🏛️";
+    const lmLbl = typeof getPoiCategoryLabel === "function" ? getPoiCategoryLabel("landmark") : "著名地標";
+    counterParts.push(`${lmIcon} ${lmLbl} (${lmCnt} 處)`);
   }
   const fullCounterText = counterParts.length > 0 ? `題庫：${counterParts.join(" ＋ ")}` : "請至少選擇一項題庫";
   if (counterEl) {
@@ -2246,7 +2373,11 @@ function bindAllUIEvents() {
 
     const sumEl = document.getElementById("transport-selected-summary");
     if (sumEl) {
-      sumEl.textContent = `已勾選 ${state.selectedTransportLines.size} / ${TAIWAN_SELECTABLE_LINES.length} 條路線與系統`;
+      const selectableLines =
+        typeof getSelectableLinesForActivePack === "function"
+          ? getSelectableLinesForActivePack()
+          : TAIWAN_SELECTABLE_LINES;
+      sumEl.textContent = `已勾選 ${state.selectedTransportLines.size} / ${selectableLines.length} 條路線與系統`;
     }
   }
 
@@ -2437,13 +2568,17 @@ function bindAllUIEvents() {
   });
 
   // Transport Preset Buttons
+  const _getActiveTransportLines = () =>
+    typeof getSelectableLinesForActivePack === "function"
+      ? getSelectableLinesForActivePack()
+      : TAIWAN_SELECTABLE_LINES;
   document.getElementById("btn-tpreset-all").addEventListener("click", () => {
-    state.selectedTransportLines = new Set(TAIWAN_SELECTABLE_LINES.map((l) => l.id));
+    state.selectedTransportLines = new Set(_getActiveTransportLines().map((l) => l.id));
     if (state.transportMode === "off") state.transportMode = "lines_and_stations";
     renderTransportModalChecklist();
   });
   document.getElementById("btn-tpreset-pure-rail")?.addEventListener("click", () => {
-    state.selectedTransportLines = new Set(TAIWAN_SELECTABLE_LINES.filter((l) => !l.isHighway).map((l) => l.id));
+    state.selectedTransportLines = new Set(_getActiveTransportLines().filter((l) => !l.isHighway).map((l) => l.id));
     state.transportMode = "rail_only";
     renderTransportModalChecklist();
     updateRoadAndRailwayTileOverlays();
@@ -2451,7 +2586,7 @@ function bindAllUIEvents() {
     setFeedback("🚄 已套用「純軌道路網」預設組合", "info");
   });
   document.getElementById("btn-tpreset-rail-all").addEventListener("click", () => {
-    state.selectedTransportLines = new Set(TAIWAN_SELECTABLE_LINES.filter((l) => !l.isHighway).map((l) => l.id));
+    state.selectedTransportLines = new Set(_getActiveTransportLines().filter((l) => !l.isHighway).map((l) => l.id));
     if (state.transportMode === "off") state.transportMode = "lines_and_stations";
     renderTransportModalChecklist();
   });
@@ -2633,6 +2768,9 @@ function bindAllUIEvents() {
   });
   document.querySelectorAll(".question-countdown-sec-btn").forEach((btn) => {
     btn.addEventListener("click", () => setQuestionCountdownSec(btn.getAttribute("data-qcd-sec")));
+  });
+  document.querySelectorAll(".question-countdown-mode-btn").forEach((btn) => {
+    btn.addEventListener("click", () => setQuestionCountdownMode(btn.getAttribute("data-qcd-mode")));
   });
   document.getElementById("btn-target-pass")?.addEventListener("click", () => {
     if (typeof passCurrentTarget === "function") passCurrentTarget();
@@ -2896,6 +3034,7 @@ function bindAllUIEvents() {
     let nextLk = Boolean(state.lakeQuizEnabled);
     let nextStl = Boolean(state.settlementQuizEnabled);
     let nextCap = Boolean(state.capitalQuizEnabled);
+    let nextLm = Boolean(state.landmarkQuizEnabled);
     let nextCounties = new Set(state.selectedCounties);
     let nextTownIds = new Set(state.selectedTownIds);
     let nextLines = new Set(state.quizStationLines);
@@ -2915,6 +3054,7 @@ function bindAllUIEvents() {
       else if (topic === "lake") nextLk = !nextLk;
       else if (topic === "settlement") nextStl = !nextStl;
       else if (topic === "capital") nextCap = !nextCap;
+      else if (topic === "landmark") nextLm = !nextLm;
     } else {
       nextR = topic === "region";
       nextS = topic === "station";
@@ -2924,9 +3064,10 @@ function bindAllUIEvents() {
       nextLk = topic === "lake";
       nextStl = topic === "settlement";
       nextCap = topic === "capital";
+      nextLm = topic === "landmark";
     }
 
-    if (!nextR && !nextS && !nextA && !nextP && !nextRes && !nextLk && !nextStl && !nextCap) {
+    if (!nextR && !nextS && !nextA && !nextP && !nextRes && !nextLk && !nextStl && !nextCap && !nextLm) {
       setFeedback("至少需保留 1 種挑戰題庫！", "warn");
       return;
     }
@@ -2971,6 +3112,7 @@ function bindAllUIEvents() {
           lakeQuizEnabled: nextLk,
           settlementQuizEnabled: nextStl,
           capitalQuizEnabled: nextCap,
+          landmarkQuizEnabled: nextLm,
           filterStationsByRegion: nextFilterByRegion,
           selectedCounties: nextR ? Array.from(nextCounties) : [],
           selectedTownIds: nextR ? Array.from(nextTownIds) : [],
@@ -2994,6 +3136,7 @@ function bindAllUIEvents() {
     state.lakeQuizEnabled = nextLk;
     state.settlementQuizEnabled = nextStl;
     state.capitalQuizEnabled = nextCap;
+    state.landmarkQuizEnabled = nextLm;
     state.filterStationsByRegion = nextFilterByRegion;
     state.selectedCounties = nextCounties;
     state.selectedTownIds = nextTownIds;
@@ -3003,8 +3146,13 @@ function bindAllUIEvents() {
     state.reservoirSubTypes = nextResSubs;
     state.lakeSubTypes = nextLkSubs;
     state.settlementSubTypes = nextStlSubs;
+    if (nextS && nextLines.size > 0 && state.transportMode === "off" && state.p2pRailRule !== "ban_rail") {
+      state.transportMode = "rail_only";
+      state.showRailOverlay = true;
+    }
     if (typeof syncLegacyQuizTargetMode === "function") syncLegacyQuizTargetMode();
     renderScopeModalGrid();
+    if (typeof updateRoadAndRailwayTileOverlays === "function") updateRoadAndRailwayTileOverlays();
     if (typeof refreshPoiMapLayer === "function") refreshPoiMapLayer();
   };
 
@@ -3283,8 +3431,12 @@ function bindAllUIEvents() {
         return;
       }
       if (target === "station") {
+        const selectableLines =
+          typeof getSelectableLinesForActivePack === "function"
+            ? getSelectableLinesForActivePack()
+            : TAIWAN_SELECTABLE_LINES;
         const allLines = action === "select-all"
-          ? TAIWAN_SELECTABLE_LINES.filter((l) => !l.isHighway).map((l) => l.id)
+          ? selectableLines.filter((l) => !l.isHighway).map((l) => l.id)
           : [];
         applyStationScopeSelection(allLines, false);
         return;
