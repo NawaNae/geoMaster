@@ -95,7 +95,7 @@ body.perf-lite .apple-glass-pill {
     display: none !important;
   }
   body.mobile-kb-open header {
-    padding-top: 3px !important;
+    padding-top: max(3px, env(safe-area-inset-top)) !important;
     padding-bottom: 3px !important;
   }
   body.mobile-kb-open #input-dock-card {
@@ -1302,6 +1302,8 @@ body.perf-lite .tw-poi-state-missed {
 /* Mobile touch responsiveness & tooltip click-suppression guard */
 #modal-scope button,
 #modal-scope label,
+#btn-fullscreen-toggle,
+#btn-pwa-install,
 .playmode-btn,
 .diff-btn,
 .settings-tab-btn,
@@ -1350,5 +1352,62 @@ body.perf-lite .tw-poi-state-missed {
   }
   #mappack-selector-grid button:active {
     transform: none;
+  }
+}
+
+/* Mobile PWA Standalone (No Address Bar) & Fullscreen Mode Support */
+body > header {
+  padding-top: max(0.375rem, env(safe-area-inset-top)) !important;
+  padding-left: max(0.5rem, env(safe-area-inset-left)) !important;
+  padding-right: max(0.5rem, env(safe-area-inset-right)) !important;
+}
+
+@media (min-width: 640px) {
+  body > header {
+    padding-top: max(0.5rem, env(safe-area-inset-top)) !important;
+    padding-left: max(1.25rem, env(safe-area-inset-left)) !important;
+    padding-right: max(1.25rem, env(safe-area-inset-right)) !important;
+  }
+}
+
+@media (max-width: 639px) {
+  body:not(.mobile-kb-open) #input-dock-card {
+    padding-bottom: max(0.625rem, env(safe-area-inset-bottom));
+  }
+}
+
+/* Fullscreen / Immersive Compact Viewport Layout (Mobile Portrait, Landscape & Desktop) */
+body.app-fullscreen,
+body.app-pseudo-fullscreen {
+  overscroll-behavior: none;
+}
+
+@media (max-width: 639px), (max-height: 540px) {
+  body.app-fullscreen,
+  body.app-pseudo-fullscreen {
+    overflow: hidden !important;
+  }
+  body.app-fullscreen #header-brand-block,
+  body.app-pseudo-fullscreen #header-brand-block,
+  body.app-fullscreen #below-fold-aside,
+  body.app-pseudo-fullscreen #below-fold-aside {
+    display: none !important;
+  }
+  body.app-fullscreen header,
+  body.app-pseudo-fullscreen header {
+    padding-top: max(4px, env(safe-area-inset-top)) !important;
+    padding-bottom: 4px !important;
+  }
+  body.app-fullscreen #map-container,
+  body.app-pseudo-fullscreen #map-container {
+    min-height: 150px;
+    border-radius: 0;
+  }
+}
+
+@media (min-width: 640px) and (min-height: 541px) {
+  body.app-fullscreen #map-container {
+    height: calc(100dvh - 82px);
+    min-height: 460px;
   }
 }

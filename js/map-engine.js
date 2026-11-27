@@ -655,6 +655,7 @@ function initMap() {
   // - When keyboard is CLOSED: restores full-screen 100% map + input dock height!
   let maxMobileUnkeyboardedH = window.innerHeight;
   let lastOrientationWidth = window.innerWidth;
+  let lastFullscreenActive = false;
   let kbSyncRaf = null;
   let wasMobileKbOpen = false;
   let kbSettleTimers = [];
@@ -686,9 +687,20 @@ function initMap() {
       const mainStageEl = document.querySelector("main");
       if (!mapContainerEl || !headerEl || !dockEl) return;
 
-      // Desktop / Tablet (>= 640px): clear mobile inline height overrides
-      if (window.innerWidth >= 640) {
+      const isFsActive = Boolean(
+        document.fullscreenElement ||
+        document.webkitFullscreenElement ||
+        document.body.classList.contains("app-fullscreen") ||
+        document.body.classList.contains("app-pseudo-fullscreen")
+      );
+      const isCompactViewport =
+        window.innerWidth < 640 ||
+        (window.innerWidth < 1024 && window.innerHeight <= 540);
+
+      // Desktop / Standard Tablet: clear mobile inline height overrides
+      if (!isCompactViewport) {
         wasMobileKbOpen = false;
+        lastFullscreenActive = isFsActive;
         document.body.classList.remove("mobile-kb-open");
         mapContainerEl.style.height = "";
         if (mainStageEl) mainStageEl.style.transform = "";
@@ -696,9 +708,10 @@ function initMap() {
         return;
       }
 
-      if (Math.abs(window.innerWidth - lastOrientationWidth) > 60) {
+      if (Math.abs(window.innerWidth - lastOrientationWidth) > 60 || isFsActive !== lastFullscreenActive) {
         lastOrientationWidth = window.innerWidth;
-        maxMobileUnkeyboardedH = window.innerHeight;
+        lastFullscreenActive = isFsActive;
+        maxMobileUnkeyboardedH = window.visualViewport ? window.visualViewport.height : window.innerHeight;
       }
 
       const vv = window.visualViewport;
@@ -724,7 +737,7 @@ function initMap() {
       // Measure actual header & dock height after class toggle and set exact remaining map height
       const headerH = headerEl.offsetHeight || 44;
       const dockH = dockEl.offsetHeight || 78;
-      const minMapH = isKbOpen ? 150 : 320;
+      const minMapH = isKbOpen || window.innerHeight <= 540 ? 150 : 320;
       const targetMapH = Math.max(minMapH, Math.floor(vHeight - headerH - dockH));
       mapContainerEl.style.height = `${targetMapH}px`;
 
@@ -767,7 +780,12 @@ function initMap() {
     mapResizeObserver.observe(mapContainerForObs);
   }
 
+  window.syncMobileViewportLayout = syncMobileKeyboardViewport;
   window.addEventListener("resize", syncMobileKeyboardViewport);
+  window.addEventListener("orientationchange", () => {
+    syncMobileKeyboardViewport();
+    setTimeout(() => syncMobileKeyboardViewport(false), 200);
+  });
   if (window.visualViewport) {
     window.visualViewport.addEventListener("resize", syncMobileKeyboardViewport);
     window.visualViewport.addEventListener("scroll", syncMobileKeyboardViewport);

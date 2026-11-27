@@ -3876,6 +3876,179 @@ function bindAllUIEvents() {
   document.getElementById("btn-close-info").addEventListener("click", () => {
     document.getElementById("modal-info").classList.add("hidden");
   });
+
+  initPwaAndFullscreenController();
+}
+
+function initPwaAndFullscreenController() {
+  const isStandalone = () =>
+    Boolean(
+      window.navigator.standalone === true ||
+      (window.matchMedia &&
+        (window.matchMedia("(display-mode: standalone)").matches ||
+          window.matchMedia("(display-mode: fullscreen)").matches))
+    );
+
+  const syncStandaloneClass = () => {
+    document.body.classList.toggle("pwa-standalone", isStandalone());
+  };
+  syncStandaloneClass();
+
+  if (window.matchMedia) {
+    ["(display-mode: standalone)", "(display-mode: fullscreen)"].forEach((query) => {
+      const mql = window.matchMedia(query);
+      if (typeof mql.addEventListener === "function") {
+        mql.addEventListener("change", syncStandaloneClass);
+      }
+    });
+  }
+
+  // Register minimal SW on HTTPS/localhost only (keeps file:// 100% error-free)
+  const canUseSw =
+    "serviceWorker" in navigator &&
+    (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1");
+  if (canUseSw) {
+    navigator.serviceWorker.register("./sw.js", { scope: "./" }).catch(() => {});
+  }
+
+  // Android / Desktop PWA Add-to-Home-Screen prompt
+  let deferredInstallPrompt = null;
+  const installBtn = document.getElementById("btn-pwa-install");
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    if (installBtn && !isStandalone()) {
+      installBtn.classList.remove("hidden");
+    }
+  });
+  window.addEventListener("appinstalled", () => {
+    deferredInstallPrompt = null;
+    if (installBtn) installBtn.classList.add("hidden");
+    syncStandaloneClass();
+    if (typeof setFeedback === "function") {
+      setFeedback("📲 已將 GeoMaster TW 加入主畫面（從桌面開啟無網址列）", "success");
+    }
+  });
+  if (installBtn) {
+    installBtn.addEventListener("click", async () => {
+      if (!deferredInstallPrompt) return;
+      deferredInstallPrompt.prompt();
+      try {
+        await deferredInstallPrompt.userChoice;
+      } catch (_) {}
+      deferredInstallPrompt = null;
+      installBtn.classList.add("hidden");
+    });
+  }
+
+  // Mobile & Desktop Fullscreen Mode Controller
+  const fsBtn = document.getElementById("btn-fullscreen-toggle");
+  if (!fsBtn) return;
+
+  const rootEl = document.documentElement;
+  const getNativeFullscreenEl = () =>
+    document.fullscreenElement || document.webkitFullscreenElement || null;
+  const hasNativeFullscreenApi = () =>
+    Boolean(
+      (document.fullscreenEnabled !== false && typeof rootEl.requestFullscreen === "function") ||
+      (document.webkitFullscreenEnabled !== false && typeof rootEl.webkitRequestFullscreen === "function")
+    );
+
+  const resyncViewportAfterFs = () => {
+    if (typeof window.syncMobileViewportLayout === "function") {
+      window.syncMobileViewportLayout(false);
+      setTimeout(() => window.syncMobileViewportLayout(false), 120);
+      setTimeout(() => window.syncMobileViewportLayout(false), 320);
+    }
+  };
+
+  const syncFullscreenUI = () => {
+    const nativeActive = Boolean(getNativeFullscreenEl());
+    const pseudoActive = document.body.classList.contains("app-pseudo-fullscreen");
+    const active = nativeActive || pseudoActive;
+
+    document.body.classList.toggle("app-fullscreen", nativeActive);
+    fsBtn.setAttribute("aria-pressed", active ? "true" : "false");
+    fsBtn.setAttribute(
+      "data-tip",
+      active ? "退出全螢幕模式" : "切換全螢幕模式（隱藏網址列並最大化地圖空間）"
+    );
+    fsBtn.className = active
+      ? "px-2 py-1 sm:py-1.5 rounded-xl bg-sky-500/25 hover:bg-sky-500/35 text-xs font-bold text-sky-300 border border-sky-400/50 flex items-center justify-center transition"
+      : "px-2 py-1 sm:py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-slate-700 flex items-center justify-center transition";
+
+    fsBtn.innerHTML = `<i id="fullscreen-toggle-icon" data-lucide="${active ? "minimize" : "maximize"}" class="w-3.5 h-3.5"></i>`;
+    if (window.lucide) lucide.createIcons();
+    resyncViewportAfterFs();
+  };
+
+  const togglePseudoFullscreen = () => {
+    const entering = !document.body.classList.contains("app-pseudo-fullscreen");
+    document.body.classList.toggle("app-pseudo-fullscreen", entering);
+    if (entering) {
+      window.scrollTo(0, 1);
+    }
+    syncFullscreenUI();
+    if (typeof setFeedback === "function") {
+      if (entering) {
+        setFeedback(
+          isStandalone()
+            ? "⛶ 已切換沉浸式全螢幕檢視（再按一次恢復）"
+            : "📱 已切換精簡全螢幕！iOS 可點「分享 ➔ 加入主畫面」完全隱藏網址列",
+          "info"
+        );
+      } else {
+        setFeedback("已恢復一般檢視模式", "info");
+      }
+    }
+  };
+
+  fsBtn.addEventListener("click", async () => {
+    const nativeEl = getNativeFullscreenEl();
+    if (nativeEl) {
+      try {
+        if (typeof document.exitFullscreen === "function") {
+          await document.exitFullscreen();
+        } else if (typeof document.webkitExitFullscreen === "function") {
+          document.webkitExitFullscreen();
+        }
+      } catch (_) {}
+      document.body.classList.remove("app-pseudo-fullscreen");
+      syncFullscreenUI();
+      return;
+    }
+
+    if (document.body.classList.contains("app-pseudo-fullscreen")) {
+      togglePseudoFullscreen();
+      return;
+    }
+
+    if (hasNativeFullscreenApi()) {
+      try {
+        if (typeof rootEl.requestFullscreen === "function") {
+          try {
+            await rootEl.requestFullscreen({ navigationUI: "hide" });
+          } catch (_) {
+            await rootEl.requestFullscreen();
+          }
+        } else if (typeof rootEl.webkitRequestFullscreen === "function") {
+          rootEl.webkitRequestFullscreen();
+        }
+        syncFullscreenUI();
+        if (typeof setFeedback === "function") {
+          setFeedback("⛶ 已進入全螢幕模式", "info");
+        }
+        return;
+      } catch (_) {
+        // Fall back to immersive pseudo-fullscreen when browser blocks native fullscreen (e.g. iOS Safari)
+      }
+    }
+
+    togglePseudoFullscreen();
+  });
+
+  document.addEventListener("fullscreenchange", syncFullscreenUI);
+  document.addEventListener("webkitfullscreenchange", syncFullscreenUI);
 }
 
 let _appBootstrapped = false;
