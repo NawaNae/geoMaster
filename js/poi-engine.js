@@ -761,9 +761,20 @@ function handlePoiMarkerClick(poi) {
   const locText = formatPoiLocationText(poi);
 
   if (state.role === "spectator" || state.isGameOver) {
+    const isLimitedRound = typeof isLimitedQuestionRoundActive === "function" && isLimitedQuestionRoundActive();
+    const missedSet = viewState.missedPois || state.missedPois;
+    const canRevealName =
+      !isLimitedRound ||
+      state.role === "spectator" ||
+      (unlockedSet && unlockedSet.has(poi.id)) ||
+      (missedSet && missedSet.has(poi.id));
     if (typeof setFeedback === "function") {
-      const subTxt = poi.category === "capital" ? catLabel : getPoiSubTypeLabelList(poi);
-      setFeedback(`${catIcon} ${poi.name}（${locText} · ${subTxt}）`, "info");
+      if (canRevealName) {
+        const subTxt = poi.category === "capital" ? catLabel : getPoiSubTypeLabelList(poi);
+        setFeedback(`${catIcon} ${poi.name}（${locText} · ${subTxt}）`, "info");
+      } else {
+        setFeedback("🔒 此地標不在本輪已作答題目中", "info");
+      }
     }
     return;
   }

@@ -48,9 +48,18 @@ function renderSmartLabelsAndLeaderLines() {
       : [0];
 
   if (state.difficulty === "county_only") {
+    const isLimitedRound = typeof isLimitedQuestionRoundActive === "function" && isLimitedQuestionRoundActive();
+    const missedCountyNames = new Set();
+    if (vState.missedTowns && vState.missedTowns.size > 0) {
+      activeItems.forEach((t) => {
+        if (vState.missedTowns.has(t.id)) missedCountyNames.add(t.countyName);
+      });
+    }
     activeGroups.forEach((c) => {
       if (!state.selectedCounties.has(c.name)) return;
-      if (!vState.unlockedCounties.has(c.name) && !vState.isGameOver) return;
+      const isUnlockedCounty = vState.unlockedCounties.has(c.name);
+      const isMissedCounty = !isUnlockedCounty && (missedCountyNames.has(c.name) || (!isLimitedRound && vState.isGameOver));
+      if (!isUnlockedCounty && !isMissedCounty) return;
       for (let oi = 0; oi < lngOffsets.length; oi++) {
         const lngWithOffset = c.lng + lngOffsets[oi];
         const pt = map.latLngToContainerPoint([c.lat, lngWithOffset]);
@@ -63,7 +72,7 @@ function renderSmartLabelsAndLeaderLines() {
           pt,
           pxWidth: zoom >= baseZoom ? 68 : 38,
           pxHeight: zoom >= baseZoom ? 30 : 18,
-          isMissed: !vState.unlockedCounties.has(c.name),
+          isMissed: !isUnlockedCounty,
           lat: c.lat,
           lng: lngWithOffset
         });

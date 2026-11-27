@@ -367,7 +367,7 @@
               <div id="pindrop-coord-status" class="text-xs sm:text-sm font-bold text-sky-300 truncate">
                 👆 請先在地圖上點擊放置預覽圖釘
               </div>
-              <div class="flex items-center gap-1.5 shrink-0">
+              <div class="flex flex-wrap items-center gap-1.5 shrink-0">
                 <button id="btn-pindrop-finish-endless" type="button" class="hidden px-3 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/35 text-amber-200 border border-amber-400/50 font-bold text-xs transition whitespace-nowrap">
                   🏁 結束並結算
                 </button>
@@ -376,6 +376,15 @@
                 </button>
                 <button id="btn-pindrop-next" type="button" class="hidden px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs sm:text-sm shadow-lg transition whitespace-nowrap">
                   ➡️ 下一題 (Space / Enter)
+                </button>
+                <button id="btn-pindrop-view-summary" type="button" class="hidden px-3 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/35 text-amber-200 border border-amber-400/50 font-bold text-xs transition whitespace-nowrap">
+                  🏆 查看結算
+                </button>
+                <button id="btn-pindrop-dock-reconfig" type="button" class="hidden px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition whitespace-nowrap">
+                  ⚙️ 重新設定
+                </button>
+                <button id="btn-pindrop-dock-replay" type="button" class="hidden px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs transition shadow-lg whitespace-nowrap">
+                  🔄 再玩一局
                 </button>
               </div>
             </div>
@@ -2119,6 +2128,10 @@
             <i data-lucide="settings-2" class="w-4 h-4"></i>
             <span id="return-lobby-btn-text">回到房間設定</span>
           </button>
+          <button id="btn-reconfig-settlement" type="button" class="px-3.5 sm:px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 transition shadow-lg shadow-indigo-600/20">
+            <i data-lucide="settings-2" class="w-4 h-4"></i>
+            <span>重新設定</span>
+          </button>
           <button id="btn-rematch-settlement" type="button" class="px-3.5 sm:px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition shadow-lg shadow-emerald-500/20">
             <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
             <span id="rematch-btn-text">再玩一局</span>
@@ -2133,52 +2146,82 @@
 
   <!-- MODAL 6B: PIN-DROP SUMMARY SCORECARD -->
   <div id="modal-pindrop-summary" class="hidden fixed inset-0 z-[675] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overscroll-contain">
-    <div class="apple-glass rounded-3xl max-w-lg w-full p-4 sm:p-6 border border-amber-500/45 shadow-2xl max-h-[90dvh] flex flex-col overflow-hidden space-y-4">
-      <div class="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
+    <div class="apple-glass rounded-3xl max-w-xl w-full p-4 sm:p-6 border border-amber-500/45 shadow-2xl max-h-[92dvh] flex flex-col overflow-hidden space-y-4">
+      <div class="flex items-start justify-between border-b border-slate-800 pb-3 shrink-0">
         <div class="flex items-center gap-2.5">
-          <div class="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-xl">
+          <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-500/20 text-white text-xl shrink-0">
             📍
           </div>
           <div>
-            <h3 class="text-base sm:text-lg font-black text-white">給地名標座標 · 挑戰結算</h3>
-            <p class="text-xs text-slate-400">GeoGuessr 風格最近邊界距離計分（單題滿分 5,000 分）</p>
+            <div class="flex flex-wrap items-center gap-1.5">
+              <span class="text-[10px] uppercase tracking-wider font-extrabold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                標座標挑戰成績單
+              </span>
+              <span id="pindrop-summary-mode-badge" class="text-[10px] font-semibold text-slate-400">
+                10 題挑戰 · 已完成 0 / 10 題
+              </span>
+            </div>
+            <h3 id="pindrop-summary-title" class="text-base sm:text-xl font-black text-white mt-0.5">給地名標座標 · 挑戰結算</h3>
           </div>
         </div>
-        <button id="btn-pindrop-close-summary" type="button" aria-label="關閉" class="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-bold">✕</button>
+        <button id="btn-pindrop-close-summary" type="button" aria-label="關閉" title="查看地圖" class="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-bold">✕</button>
       </div>
 
-      <div class="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3 shrink-0">
-        <div class="flex items-baseline justify-between gap-2">
-          <span class="text-xs font-bold text-slate-400">本局累積總分</span>
-          <div class="flex items-baseline gap-1.5">
-            <span id="pindrop-summary-total-score" class="text-2xl sm:text-3xl font-black text-amber-300 font-mono-num">0</span>
-            <span id="pindrop-summary-max-score" class="text-xs sm:text-sm font-bold text-slate-400 font-mono-num">/ 50,000 分</span>
+      <div class="p-4 rounded-2xl bg-gradient-to-br from-slate-900/90 via-slate-800/80 to-slate-900/90 border border-slate-700/80 space-y-3 shrink-0">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div class="text-xs font-semibold text-slate-400">本局累積得分</div>
+            <div class="flex items-baseline gap-1.5 mt-0.5">
+              <span id="pindrop-summary-total-score" class="text-2xl sm:text-4xl font-black text-amber-300 font-mono-num">0</span>
+              <span id="pindrop-summary-max-score" class="text-xs sm:text-sm font-bold text-slate-400 font-mono-num">/ 50,000 分</span>
+            </div>
+          </div>
+          <div id="pindrop-summary-grade-box" class="px-3.5 py-1.5 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-right">
+            <div class="text-[10px] font-bold text-amber-400 uppercase tracking-widest">得分率與評級</div>
+            <div class="flex items-baseline justify-end gap-2">
+              <span id="pindrop-summary-pct" class="text-sm sm:text-base font-extrabold text-sky-300 font-mono-num">0.0%</span>
+              <span id="pindrop-summary-grade" class="text-2xl sm:text-3xl font-black text-amber-300 font-mono-num">F</span>
+            </div>
           </div>
         </div>
-        <div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/80 text-xs">
-          <div class="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800">
-            <div class="text-[10px] text-slate-400 font-semibold">📏 平均誤差距離</div>
-            <div id="pindrop-summary-avg-dist" class="text-sm sm:text-base font-bold text-sky-300 font-mono-num mt-0.5">0.0 km</div>
+        <div class="grid grid-cols-3 gap-2 pt-2.5 border-t border-slate-700/70 text-xs">
+          <div class="p-2 rounded-xl bg-slate-950/70 border border-slate-800 text-center">
+            <div class="text-[10px] text-slate-400 font-semibold">⏱️ 總計耗時</div>
+            <div id="pindrop-summary-time" class="text-sm font-bold text-white font-mono-num mt-0.5">00:00</div>
           </div>
-          <div class="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800">
+          <div class="p-2 rounded-xl bg-slate-950/70 border border-slate-800 text-center">
+            <div class="text-[10px] text-slate-400 font-semibold">📏 平均誤差</div>
+            <div id="pindrop-summary-avg-dist" class="text-sm font-bold text-sky-300 font-mono-num mt-0.5">0.0 km</div>
+          </div>
+          <div class="p-2 rounded-xl bg-slate-950/70 border border-slate-800">
             <div class="text-[10px] text-slate-400 font-semibold">🎯 最準一題</div>
-            <div id="pindrop-summary-best-round" class="text-xs sm:text-sm font-bold text-emerald-300 break-words leading-snug mt-0.5">尚無紀錄</div>
+            <div id="pindrop-summary-best-round" class="text-[11px] sm:text-xs font-bold text-emerald-300 break-words leading-snug mt-0.5">尚無紀錄</div>
           </div>
         </div>
       </div>
 
       <div class="flex-1 min-h-0 flex flex-col space-y-1.5">
-        <div class="text-xs font-extrabold text-sky-300 px-1">📋 每題標記誤差與得分明細</div>
+        <div class="text-xs font-extrabold text-sky-300 px-1">📋 本局已作答題目誤差與得分明細</div>
         <div id="pindrop-summary-list" class="flex-1 overflow-y-auto overscroll-contain space-y-1.5 pr-1"></div>
       </div>
 
-      <div class="pt-3 border-t border-slate-800 flex flex-wrap items-center justify-end gap-2 shrink-0">
-        <button id="btn-pindrop-exit-mode" type="button" class="px-3.5 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/35 text-rose-300 border border-rose-500/40 font-bold text-xs transition">
-          ✕ 退出標座標模式
-        </button>
-        <button id="btn-pindrop-play-again" type="button" class="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs sm:text-sm shadow-lg transition">
-          🔄 再玩一局
-        </button>
+      <div class="pt-3 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2 shrink-0">
+        <div class="flex items-center gap-1.5">
+          <button id="btn-pindrop-share" type="button" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs border border-slate-700 flex items-center gap-1.5 transition">
+            <span>📋 複製分享</span>
+          </button>
+        </div>
+        <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
+          <button id="btn-pindrop-reconfig" type="button" class="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition shadow-lg shadow-indigo-600/20">
+            ⚙️ 重新設定
+          </button>
+          <button id="btn-pindrop-play-again" type="button" class="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs sm:text-sm shadow-lg transition">
+            🔄 再玩一局
+          </button>
+          <button id="btn-pindrop-review-map" type="button" class="px-3 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 font-medium text-xs transition">
+            查看地圖
+          </button>
+        </div>
       </div>
     </div>
   </div>

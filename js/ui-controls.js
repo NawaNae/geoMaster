@@ -2141,8 +2141,10 @@ function openUnlockedAndHelpModal(mode) {
     if (paneHelp) paneHelp.classList.add("hidden");
     if (paneList) paneList.classList.remove("hidden");
 
+    const isLimitedRound = typeof isLimitedQuestionRoundActive === "function" && isLimitedQuestionRoundActive();
     const unlockedList = getScopeTowns().filter((t) => vState.unlockedTowns.has(t.id));
     const remainingList = getScopeTowns().filter((t) => !vState.unlockedTowns.has(t.id));
+    const missedRoundList = getScopeTowns().filter((t) => vState.missedTowns && vState.missedTowns.has(t.id));
 
     const uTitle = document.getElementById("unlocked-list-title");
     const uChips = document.getElementById("unlocked-list-chips");
@@ -2167,20 +2169,33 @@ function openUnlockedAndHelpModal(mode) {
       }
     }
 
-    if (rTitle) rTitle.textContent = `🔒 尚未解鎖剩餘數量：${remainingList.length} ${unitLabels.itemShort}`;
+    if (rTitle) {
+      rTitle.textContent =
+        vState.isGameOver && isLimitedRound
+          ? `❌ 本輪未答出／已揭曉：${missedRoundList.length} ${unitLabels.itemShort}`
+          : `🔒 尚未解鎖剩餘數量：${remainingList.length} ${unitLabels.itemShort}`;
+    }
     if (rChips) {
       rChips.replaceChildren();
       if (vState.isGameOver) {
-        remainingList.forEach((t) => {
+        const listToReveal = isLimitedRound ? missedRoundList : remainingList;
+        if (listToReveal.length === 0 && isLimitedRound) {
           const sp = document.createElement("span");
-          sp.className = "inline-block m-0.5 px-2 py-0.5 rounded bg-rose-500/20 text-rose-200 text-xs";
-          sp.textContent = t.fullHierarchyName || t.fullCountyTown || t.townName;
+          sp.className = "text-emerald-300 text-xs";
+          sp.textContent = "本輪已作答題目全數答對！";
           rChips.appendChild(sp);
-        });
+        } else {
+          listToReveal.forEach((t) => {
+            const sp = document.createElement("span");
+            sp.className = "inline-block m-0.5 px-2 py-0.5 rounded bg-rose-500/20 text-rose-200 text-xs";
+            sp.textContent = t.fullHierarchyName || t.fullCountyTown || t.townName;
+            rChips.appendChild(sp);
+          });
+        }
       } else {
         rChips.textContent = isTw
-          ? "為避免洩漏未解鎖的縣市與鄉鎮答案，遊戲進行中不顯示未解鎖清單；點擊上方「結束看答案」即可全數揭曉。"
-          : `為避免洩漏未解鎖的${unitLabels.group}與${unitLabels.item}答案，遊戲進行中不顯示未解鎖清單；點擊上方「結束看答案」即可全數揭曉。`;
+          ? "為避免洩漏未解鎖的縣市與鄉鎮答案，遊戲進行中不顯示未解鎖清單；點擊上方「結束看答案」即可揭曉。"
+          : `為避免洩漏未解鎖的${unitLabels.group}與${unitLabels.item}答案，遊戲進行中不顯示未解鎖清單；點擊上方「結束看答案」即可揭曉。`;
       }
     }
   } else {
@@ -2703,20 +2718,41 @@ function bindAllUIEvents() {
     if (typeof nextPinDropRound === "function") nextPinDropRound();
   });
   document.getElementById("btn-pindrop-finish-endless")?.addEventListener("click", () => {
-    if (typeof finishPinDropGame === "function") finishPinDropGame();
+    if (typeof finishPinDropGame === "function") finishPinDropGame("giveup");
   });
   document.getElementById("btn-pindrop-play-again")?.addEventListener("click", () => {
     document.getElementById("modal-pindrop-summary")?.classList.add("hidden");
-    if (typeof startPinDropGame === "function") startPinDropGame();
+    if (typeof syncModalBodyScrollLock === "function") syncModalBodyScrollLock();
+    if (typeof resetGame === "function") resetGame();
+    else if (typeof startPinDropGame === "function") startPinDropGame();
   });
-  document.getElementById("btn-pindrop-close-summary")?.addEventListener("click", () => {
+  document.getElementById("btn-pindrop-dock-replay")?.addEventListener("click", () => {
+    if (typeof resetGame === "function") resetGame();
+    else if (typeof startPinDropGame === "function") startPinDropGame();
+  });
+  document.getElementById("btn-pindrop-view-summary")?.addEventListener("click", () => {
+    if (typeof reopenPinDropSummaryModal === "function") reopenPinDropSummaryModal();
+  });
+  document.getElementById("btn-pindrop-share")?.addEventListener("click", () => {
+    if (typeof sharePinDropSummary === "function") sharePinDropSummary();
+  });
+  const closePinDropSummaryToMap = () => {
+    document.getElementById("modal-pindrop-summary")?.classList.add("hidden");
+    if (state.pinDrop && state.pinDrop.phase === "finished") {
+      document.getElementById("btn-reopen-settlement")?.classList.remove("hidden");
+    }
+    if (typeof syncModalBodyScrollLock === "function") syncModalBodyScrollLock();
+  };
+  document.getElementById("btn-pindrop-close-summary")?.addEventListener("click", closePinDropSummaryToMap);
+  document.getElementById("btn-pindrop-review-map")?.addEventListener("click", closePinDropSummaryToMap);
+  const openReconfigFromPinDrop = () => {
     document.getElementById("modal-pindrop-summary")?.classList.add("hidden");
     if (typeof syncModalBodyScrollLock === "function") syncModalBodyScrollLock();
-  });
-  document.getElementById("btn-pindrop-exit-mode")?.addEventListener("click", () => {
-    document.getElementById("modal-pindrop-summary")?.classList.add("hidden");
-    if (typeof exitPinDropMode === "function") exitPinDropMode();
-  });
+    if (typeof openModeSettingsModal === "function") openModeSettingsModal("simple");
+  };
+  document.getElementById("btn-pindrop-reconfig")?.addEventListener("click", openReconfigFromPinDrop);
+  document.getElementById("btn-pindrop-dock-reconfig")?.addEventListener("click", openReconfigFromPinDrop);
+  document.getElementById("btn-pindrop-exit-mode")?.addEventListener("click", openReconfigFromPinDrop);
 
   document.querySelectorAll(".hub-timer-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -3736,17 +3772,28 @@ function bindAllUIEvents() {
       requestReturnToLobby();
     }
   });
+  document.getElementById("btn-reconfig-settlement")?.addEventListener("click", () => {
+    document.getElementById("modal-settlement")?.classList.add("hidden");
+    if (typeof syncModalBodyScrollLock === "function") syncModalBodyScrollLock();
+    if (typeof openModeSettingsModal === "function") openModeSettingsModal("simple");
+  });
   document.getElementById("btn-rematch-settlement")?.addEventListener("click", () => requestP2PRematch());
   document.getElementById("btn-close-settlement")?.addEventListener("click", () => {
     document.getElementById("modal-settlement")?.classList.add("hidden");
     if (state.isGameOver) document.getElementById("btn-reopen-settlement")?.classList.remove("hidden");
+    if (typeof syncModalBodyScrollLock === "function") syncModalBodyScrollLock();
   });
   document.getElementById("btn-review-map")?.addEventListener("click", () => {
     document.getElementById("modal-settlement")?.classList.add("hidden");
     if (state.isGameOver) document.getElementById("btn-reopen-settlement")?.classList.remove("hidden");
+    if (typeof syncModalBodyScrollLock === "function") syncModalBodyScrollLock();
   });
   document.getElementById("btn-reopen-settlement")?.addEventListener("click", () => {
-    showSettlementModal();
+    if (state.playMode === "pin_drop" && typeof reopenPinDropSummaryModal === "function") {
+      reopenPinDropSummaryModal();
+    } else {
+      showSettlementModal();
+    }
   });
 
   // Opponent Finished Choice Dialog

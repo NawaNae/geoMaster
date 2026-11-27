@@ -1096,6 +1096,9 @@ body.perf-lite .tw-poi-state-missed {
 .geo-select-card[data-accent="lime"][data-state="on"] { background: rgba(132, 204, 22, 0.22); border-color: #84cc16; }
 .geo-select-card[data-accent="lime"][data-state="partial"] { background: rgba(132, 204, 22, 0.10); border-color: rgba(132, 204, 22, 0.45); color: #d9f99d; }
 
+.geo-select-card[data-accent="rose"][data-state="on"] { background: rgba(244, 63, 94, 0.22); border-color: #fb7185; }
+.geo-select-card[data-accent="rose"][data-state="partial"] { background: rgba(244, 63, 94, 0.10); border-color: rgba(251, 113, 133, 0.45); color: #fecdd3; }
+
 /* ============================================================================
    SATELLITE QUIZ NIGHT BLEND & TARGET PIN MARKER
    ============================================================================ */

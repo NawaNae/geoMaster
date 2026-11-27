@@ -424,3 +424,12 @@ function isHideGuessedOthersActive(vState = state) {
         state.playMode === "pin_drop")
   );
 }
+
+function isLimitedQuestionRoundActive() {
+  return Boolean(
+    (state.playMode === "target_random" || state.playMode === "satellite_quiz") &&
+      Math.max(0, parseInt(state.targetQuestionLimit, 10) || 0) > 0 &&
+      Array.isArray(state.targetQueue) &&
+      state.targetQueue.length > 0
+  );
+}

@@ -652,10 +652,13 @@ function renderPinDropGuessedHistoryMarkers() {
   if (
     typeof state === "undefined" ||
     state.playMode !== "pin_drop" ||
-    state.pinDropHideGuessed !== false ||
     !state.pinDrop ||
     !Array.isArray(state.pinDrop.history)
   ) {
+    return;
+  }
+  const isFinished = state.pinDrop.phase === "finished";
+  if (state.pinDropHideGuessed !== false && !isFinished) {
     return;
   }
   const group = ensurePinDropHistoryLayerGroup();
@@ -665,24 +668,37 @@ function renderPinDropGuessedHistoryMarkers() {
       ? state.pinDrop.currentTarget.id
       : null;
   state.pinDrop.history.forEach((rec) => {
-    if (!rec || (rec.kind !== "poi" && rec.kind !== "station")) return;
+    if (!rec) return;
+    if (!isFinished && rec.kind !== "poi" && rec.kind !== "station") return;
     if (curTargetId && rec.targetId === curTargetId) return;
     if (!Number.isFinite(rec.nearestLat) || !Number.isFinite(rec.nearestLng)) return;
     const dot = document.createElement("div");
-    dot.className = "w-2.5 h-2.5 rounded-full bg-sky-400/80 border border-sky-200 shadow";
+    dot.className = isFinished
+      ? "w-3 h-3 rounded-full bg-amber-400 border-2 border-white shadow-md"
+      : "w-2.5 h-2.5 rounded-full bg-sky-400/80 border border-sky-200 shadow";
     dot.title = rec.title || "";
     const icon = L.divIcon({
       className: "pindrop-history-dot-wrapper",
       html: dot,
-      iconSize: [10, 10],
-      iconAnchor: [5, 5]
+      iconSize: isFinished ? [12, 12] : [10, 10],
+      iconAnchor: isFinished ? [6, 6] : [5, 5]
     });
-    L.marker([rec.nearestLat, rec.nearestLng], {
+    const marker = L.marker([rec.nearestLat, rec.nearestLng], {
       icon,
-      interactive: false,
+      interactive: isFinished,
       keyboard: false,
       zIndexOffset: 900
-    }).addTo(group);
+    });
+    if (isFinished) {
+      const distTxt = rec.distanceKm === null ? "超時" : `${Number(rec.distanceKm).toFixed(1)} km`;
+      marker.bindTooltip(`#${rec.round} ${rec.title} (${distTxt} · +${Number(rec.score || 0).toLocaleString()})`, {
+        permanent: state.pinDrop.history.length <= 20,
+        direction: "top",
+        offset: [0, -8],
+        className: "tw-st-tip-unlocked"
+      });
+    }
+    marker.addTo(group);
   });
 }
 
@@ -711,11 +727,13 @@ function isPinDropGuessedPolygon(townObj) {
   if (
     typeof state === "undefined" ||
     state.playMode !== "pin_drop" ||
-    state.pinDropHideGuessed !== false ||
     !state.pinDrop ||
     !Array.isArray(state.pinDrop.history) ||
     !townObj
   ) {
+    return false;
+  }
+  if (state.pinDropHideGuessed !== false && state.pinDrop.phase !== "finished") {
     return false;
   }
   const curTargetId =
@@ -1436,14 +1454,28 @@ function nextPinDropRound() {
   return beginPinDropRound();
 }
 
+function getPinDropGradeInfo(pctNum) {
+  const p = Number.isFinite(Number(pctNum)) ? Number(pctNum) : 0;
+  if (p >= 96) return { grade: "SSS", color: "text-amber-300" };
+  if (p >= 90) return { grade: "SS", color: "text-amber-300" };
+  if (p >= 82) return { grade: "S", color: "text-emerald-300" };
+  if (p >= 70) return { grade: "A", color: "text-sky-300" };
+  if (p >= 55) return { grade: "B", color: "text-indigo-300" };
+  if (p >= 40) return { grade: "C", color: "text-slate-200" };
+  if (p >= 25) return { grade: "D", color: "text-orange-300" };
+  return { grade: "F", color: "text-rose-400" };
+}
+
 function computePinDropSummaryStats() {
   const pd = (typeof state !== "undefined" && state.pinDrop) || { history: [], totalScore: 0, totalRounds: 10 };
   const history = Array.isArray(pd.history) ? pd.history : [];
   const roundsPlayed = history.length;
+  const totalRounds = Number(pd.totalRounds || 0);
   const totalScore = Number(pd.totalScore || 0);
   const totalSpeedBonus = history.reduce((acc, r) => acc + Number(r.speedBonus || 0), 0);
   const maxPerRound = getPinDropMaxRoundScore(history);
-  const maxPossibleScore = (pd.totalRounds > 0 ? pd.totalRounds : Math.max(1, roundsPlayed)) * maxPerRound;
+  const maxPossibleScore = (totalRounds > 0 ? totalRounds : Math.max(1, roundsPlayed)) * maxPerRound;
+  const pctNum = maxPossibleScore > 0 ? Math.min(100, (totalScore / maxPossibleScore) * 100) : 0;
   const validDistRounds = history.filter((r) => Number.isFinite(Number(r.distanceKm)) && r.distanceKm !== null);
   const avgDist =
     validDistRounds.length > 0
@@ -1464,35 +1496,108 @@ function computePinDropSummaryStats() {
   }
   return {
     roundsPlayed,
+    totalRounds,
     totalScore,
     totalSpeedBonus,
     maxPerRound,
     maxPossibleScore,
+    pctNum,
+    gradeInfo: getPinDropGradeInfo(pctNum),
+    elapsedSec: typeof state !== "undefined" ? Number(state.elapsedSec || 0) : 0,
     averageDistanceKm: avgDist,
     bestRound,
     history
   };
 }
 
-function finishPinDropGame() {
+function reopenPinDropSummaryModal() {
+  const modal = document.getElementById("modal-pindrop-summary");
+  if (modal) modal.classList.remove("hidden");
+  document.getElementById("btn-reopen-settlement")?.classList.add("hidden");
+  if (typeof syncModalBodyScrollLock === "function") syncModalBodyScrollLock();
+}
+
+function sharePinDropSummary() {
+  const stats = computePinDropSummaryStats();
+  const pack = typeof getActiveMapPack === "function" ? getActiveMapPack() : null;
+  const packName = (pack && (pack.displayName || pack.shortLabel)) || "台灣地理";
+  const roundText =
+    stats.totalRounds > 0
+      ? `${stats.roundsPlayed} / ${stats.totalRounds} 題`
+      : `無盡模式 ${stats.roundsPlayed} 題`;
+  const timeText = typeof formatTime === "function" ? formatTime(stats.elapsedSec) : `${stats.elapsedSec}s`;
+  const bestText = stats.bestRound
+    ? `${stats.bestRound.title} (${stats.bestRound.distanceKm === null ? "超時" : `${Number(stats.bestRound.distanceKm).toFixed(1)} km`} · +${stats.bestRound.score.toLocaleString()} 分)`
+    : "尚無紀錄";
+  const text = [
+    `📍 【GeoMaster Pro · ${packName} 標座標挑戰成績單】`,
+    `🏆 評級：【${stats.gradeInfo.grade}】(${stats.pctNum.toFixed(1)}%)`,
+    `📊 累積總分：${stats.totalScore.toLocaleString()} / ${stats.maxPossibleScore.toLocaleString()} 分 (${roundText})`,
+    `⏱️ 總計耗時：${timeText}`,
+    `📏 平均誤差：${stats.averageDistanceKm.toFixed(1)} km`,
+    `🎯 最準一題：${bestText}`
+  ].join("\n");
+  if (typeof copyToClipboard === "function") {
+    copyToClipboard(text);
+  } else if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+    navigator.clipboard.writeText(text).catch(() => {});
+  }
+}
+
+function finishPinDropGame(reason = "complete") {
   cancelPinDropAutoNext();
   if (typeof stopQuestionCountdown === "function") stopQuestionCountdown();
   if (typeof state === "undefined" || !state.pinDrop) return false;
   if (typeof stopTimer === "function") stopTimer();
+
+  const wasPlacing = state.pinDrop.phase === "placing";
   state.pinDrop.phase = "finished";
+  state.isGameOver = true;
+  state.finished = true;
+  if (wasPlacing) {
+    clearPinDropLayers();
+    state.pinDrop.guessLatLng = null;
+  }
 
   const stats = computePinDropSummaryStats();
   const modal = document.getElementById("modal-pindrop-summary");
+  const titleEl = document.getElementById("pindrop-summary-title");
+  const modeBadgeEl = document.getElementById("pindrop-summary-mode-badge");
   const scoreEl = document.getElementById("pindrop-summary-total-score");
   const maxEl = document.getElementById("pindrop-summary-max-score");
+  const pctEl = document.getElementById("pindrop-summary-pct");
+  const gradeEl = document.getElementById("pindrop-summary-grade");
+  const timeEl = document.getElementById("pindrop-summary-time");
   const avgEl = document.getElementById("pindrop-summary-avg-dist");
   const bestEl = document.getElementById("pindrop-summary-best-round");
   const listEl = document.getElementById("pindrop-summary-list");
 
+  if (titleEl) {
+    titleEl.textContent =
+      reason === "timeout"
+        ? "⏰ 時間到 · 標座標結算"
+        : reason === "giveup"
+        ? "🏁 標座標提前結算"
+        : "🏆 給地名標座標 · 挑戰結算";
+  }
+  if (modeBadgeEl) {
+    modeBadgeEl.textContent =
+      stats.totalRounds > 0
+        ? `${stats.totalRounds} 題挑戰 · 已完成 ${stats.roundsPlayed} / ${stats.totalRounds} 題`
+        : `無盡模式 · 已完成 ${stats.roundsPlayed} 題`;
+  }
   if (scoreEl) scoreEl.textContent = stats.totalScore.toLocaleString();
   if (maxEl) {
     const bonusNote = stats.totalSpeedBonus > 0 ? `（含⚡+${stats.totalSpeedBonus.toLocaleString()}）` : "";
     maxEl.textContent = `/ ${stats.maxPossibleScore.toLocaleString()} 分${bonusNote}`;
+  }
+  if (pctEl) pctEl.textContent = `${stats.pctNum.toFixed(1)}%`;
+  if (gradeEl) {
+    gradeEl.textContent = stats.gradeInfo.grade;
+    gradeEl.className = `text-2xl sm:text-3xl font-black font-mono-num ${stats.gradeInfo.color}`;
+  }
+  if (timeEl) {
+    timeEl.textContent = typeof formatTime === "function" ? formatTime(stats.elapsedSec) : "00:00";
   }
   if (avgEl) avgEl.textContent = `${stats.averageDistanceKm.toFixed(1)} km`;
   if (bestEl) {
@@ -1503,49 +1608,77 @@ function finishPinDropGame() {
 
   if (listEl) {
     listEl.replaceChildren();
-    const tpl = document.getElementById("tpl-pindrop-history-row");
-    stats.history.forEach((item) => {
-      const isPolyItem = item.kind === "town" || item.kind === "county";
-      const distLabel =
-        item.distanceKm === null
-          ? "⌛ 超時"
-          : item.inside
-          ? isPolyItem
-            ? "🎯 0.0 km (境內)"
-            : `🎯 ${Number(item.distanceKm).toFixed(2)} km (精準)`
-          : `${Number(item.distanceKm).toFixed(1)} km`;
-      const scoreLabel =
-        Number(item.speedBonus) > 0
-          ? `+${item.score.toLocaleString()} (⚡+${item.speedBonus})`
-          : `+${item.score.toLocaleString()} 分`;
-      let row;
-      if (tpl && tpl.content && tpl.content.firstElementChild) {
-        row = tpl.content.firstElementChild.cloneNode(true);
-        const rNum = row.querySelector(".pindrop-row-round");
-        const rTitle = row.querySelector(".pindrop-row-title");
-        const rDist = row.querySelector(".pindrop-row-dist");
-        const rScore = row.querySelector(".pindrop-row-score");
-        if (rNum) rNum.textContent = `#${item.round}`;
-        if (rTitle) rTitle.textContent = item.title;
-        if (rDist) rDist.textContent = distLabel;
-        if (rScore) rScore.textContent = scoreLabel;
-      } else {
-        row = document.createElement("div");
-        row.textContent = `#${item.round} ${item.title} · ${distLabel} · ${scoreLabel}`;
-      }
-      listEl.appendChild(row);
-    });
+    if (stats.history.length === 0) {
+      const emptyEl = document.createElement("div");
+      emptyEl.className = "text-xs text-slate-400 italic p-3 text-center rounded-xl bg-slate-950/60 border border-slate-800";
+      emptyEl.textContent = "本局尚未完成任何作答題目。";
+      listEl.appendChild(emptyEl);
+    } else {
+      const tpl = document.getElementById("tpl-pindrop-history-row");
+      stats.history.forEach((item) => {
+        const isPolyItem = item.kind === "town" || item.kind === "county";
+        const distLabel =
+          item.distanceKm === null
+            ? "⌛ 超時"
+            : item.inside
+            ? isPolyItem
+              ? "🎯 0.0 km (境內)"
+              : `🎯 ${Number(item.distanceKm).toFixed(2)} km (精準)`
+            : `${Number(item.distanceKm).toFixed(1)} km`;
+        const scoreLabel =
+          Number(item.speedBonus) > 0
+            ? `+${item.score.toLocaleString()} (⚡+${item.speedBonus})`
+            : `+${item.score.toLocaleString()} 分`;
+        let row;
+        if (tpl && tpl.content && tpl.content.firstElementChild) {
+          row = tpl.content.firstElementChild.cloneNode(true);
+          const rNum = row.querySelector(".pindrop-row-round");
+          const rTitle = row.querySelector(".pindrop-row-title");
+          const rDist = row.querySelector(".pindrop-row-dist");
+          const rScore = row.querySelector(".pindrop-row-score");
+          if (rNum) rNum.textContent = `#${item.round}`;
+          if (rTitle) rTitle.textContent = item.title;
+          if (rDist) rDist.textContent = distLabel;
+          if (rScore) rScore.textContent = scoreLabel;
+        } else {
+          row = document.createElement("div");
+          row.textContent = `#${item.round} ${item.title} · ${distLabel} · ${scoreLabel}`;
+        }
+        listEl.appendChild(row);
+      });
+    }
+  }
+
+  // Reveal ONLY already-guessed rounds on map for post-game review (never unseen queue items)
+  renderPinDropGuessedHistoryMarkers();
+  if (typeof refreshAllPolygonStyles === "function") {
+    refreshAllPolygonStyles();
+  }
+
+  if (typeof playTone === "function") {
+    playTone(reason === "complete" ? "tier" : "unlock");
   }
 
   if (modal) {
     modal.classList.remove("hidden");
   }
+  document.getElementById("btn-reopen-settlement")?.classList.add("hidden");
   if (typeof syncModalBodyScrollLock === "function") {
     syncModalBodyScrollLock();
   }
   updatePinDropBannerAndDockUI();
   if (typeof updateScoreAndProgressUI === "function") {
     updateScoreAndProgressUI();
+  }
+  if (typeof setFeedback === "function") {
+    const roundSummary =
+      stats.totalRounds > 0
+        ? `${stats.roundsPlayed}/${stats.totalRounds} 題`
+        : `${stats.roundsPlayed} 題`;
+    setFeedback(
+      `🏁 標座標挑戰結算完成！共完成 ${roundSummary}，總分 ${stats.totalScore.toLocaleString()} / ${stats.maxPossibleScore.toLocaleString()} 分 (${stats.pctNum.toFixed(1)}% · ${stats.gradeInfo.grade})`,
+      "tier"
+    );
   }
   return true;
 }
@@ -1566,7 +1699,8 @@ function setPinDropRounds(rounds) {
   state.pinDropRounds = r;
   if (typeof syncConfigButtonsUI === "function") syncConfigButtonsUI();
   if (state.playMode === "pin_drop") {
-    startPinDropGame();
+    if (typeof resetGame === "function") resetGame();
+    else startPinDropGame();
   }
 }
 
@@ -1680,7 +1814,16 @@ function updatePinDropBannerAndDockUI() {
     document.getElementById("btn-target-next")?.classList.add("hidden");
     document.getElementById("btn-target-hint")?.classList.add("hidden");
     document.getElementById("btn-target-reveal-outline")?.classList.add("hidden");
-    document.getElementById("btn-target-exit")?.classList.remove("hidden");
+    const exitBtn = document.getElementById("btn-target-exit");
+    if (exitBtn) {
+      const isFinished = pd.phase === "finished";
+      exitBtn.classList.toggle("hidden", isFinished);
+      exitBtn.textContent = "🏁 結束結算";
+      exitBtn.title = "結束本局標座標挑戰並計算得分";
+      if (typeof exitBtn.setAttribute === "function") {
+        exitBtn.setAttribute("data-tip", "結束本局標座標挑戰並計算得分（不會切回一般模式）");
+      }
+    }
 
     renderPinDropTargetOutlinePreview(target);
     if (titleEl) {
@@ -1754,9 +1897,14 @@ function updatePinDropBannerAndDockUI() {
   }
 
   if (finishEndlessBtn) {
-    const showEndlessFinish = pd.totalRounds === 0 && pd.history && pd.history.length > 0 && pd.phase !== "finished";
-    finishEndlessBtn.classList.toggle("hidden", !showEndlessFinish);
+    const showFinishBtn = pd.history && pd.history.length > 0 && pd.phase !== "finished";
+    finishEndlessBtn.classList.toggle("hidden", !showFinishBtn);
   }
+
+  const isFinished = pd.phase === "finished";
+  document.getElementById("btn-pindrop-view-summary")?.classList.toggle("hidden", !isFinished);
+  document.getElementById("btn-pindrop-dock-reconfig")?.classList.toggle("hidden", !isFinished);
+  document.getElementById("btn-pindrop-dock-replay")?.classList.toggle("hidden", !isFinished);
 }
 
 function renderPinDropDashboardUI() {

@@ -900,11 +900,19 @@ function checkVictoryCondition() {
 }
 
 function giveUpAndReveal() {
+  if (state.playMode === "pin_drop" && typeof finishPinDropGame === "function") {
+    finishPinDropGame("giveup");
+    return;
+  }
   finishGame("giveup");
 }
 
 function finishGame(reason = "victory") {
   if (state.role === "spectator") return;
+  if (state.playMode === "pin_drop" && typeof finishPinDropGame === "function") {
+    finishPinDropGame(reason);
+    return;
+  }
   stopTimer();
   state.isGameOver = true;
   state.finished = true;
@@ -916,15 +924,30 @@ function finishGame(reason = "victory") {
   const allItems = _dashItems();
   const features = _dashFeatures();
   const isLimitedQueueRound =
-    (state.playMode === "target_random" || state.playMode === "satellite_quiz") &&
-    Math.max(0, parseInt(state.targetQuestionLimit, 10) || 0) > 0 &&
-    Array.isArray(state.targetQueue) &&
-    state.targetQueue.length > 0;
+    typeof isLimitedQuestionRoundActive === "function"
+      ? isLimitedQuestionRoundActive()
+      : (state.playMode === "target_random" || state.playMode === "satellite_quiz") &&
+        Math.max(0, parseInt(state.targetQuestionLimit, 10) || 0) > 0 &&
+        Array.isArray(state.targetQueue) &&
+        state.targetQueue.length > 0;
+
+  // Clear active target highlight so current station/polygon/POI doesn't stay yellow after settlement
+  const hadActiveTarget = Boolean(state.targetId || state.targetStationKey || state.targetPoiId);
+  state.targetId = null;
+  state.targetStationKey = null;
+  state.targetPoiId = null;
 
   if (reason !== "victory") {
     if (isLimitedQueueRound) {
-      // Only reveal unanswered targets from this N-question round instead of flooding the entire map in red
-      state.targetQueue.forEach((entry) => {
+      // Only reveal encountered targets (already guessed/passed + current active question)
+      // instead of flooding the entire map or spoiling unseen future questions
+      const curIdx = Math.max(0, parseInt(state.targetQueueIndex, 10) || 0);
+      const revealLimit =
+        reason === "round_complete"
+          ? state.targetQueue.length
+          : Math.min(state.targetQueue.length, hadActiveTarget ? curIdx + 1 : curIdx);
+      const encounteredEntries = state.targetQueue.slice(0, revealLimit);
+      encounteredEntries.forEach((entry) => {
         if (!entry) return;
         if (entry.kind === "poi") {
           if (!state.unlockedPois.has(entry.id) && state.missedPois) state.missedPois.add(entry.id);
@@ -952,6 +975,13 @@ function finishGame(reason = "victory") {
           }
         });
       }
+      if (features.supportsTransportQuiz && typeof getActiveQuizStations === "function" && state.missedStations) {
+        getActiveQuizStations().forEach((s) => {
+          if (!state.unlockedStations.has(s.key)) {
+            state.missedStations.add(s.key);
+          }
+        });
+      }
       if ((features.supportsPoiQuiz || features.supportsCapitalQuiz || features.supportsLandmarkQuiz) && typeof getActiveQuizPois === "function") {
         getActiveQuizPois().forEach((p) => {
           if (!state.unlockedPois.has(p.id)) {
@@ -965,6 +995,7 @@ function finishGame(reason = "victory") {
   updateRoadAndRailwayTileOverlays();
   refreshAllPolygonStyles();
   if (typeof refreshPoiMapLayer === "function") refreshPoiMapLayer();
+  if (typeof updateTargetBannerUI === "function") updateTargetBannerUI();
   updateScoreAndProgressUI();
 
   const activeSt = features.supportsTransportQuiz && typeof getActiveQuizStations === "function" ? getActiveQuizStations() : [];
@@ -2043,9 +2074,13 @@ function showSettlementModal() {
   const oppOngoingBanner = document.getElementById("settlement-opp-ongoing-banner");
   const rematchBtnText = document.getElementById("rematch-btn-text");
   const returnLobbyBtn = document.getElementById("btn-return-lobby-settlement");
+  const reconfigBtn = document.getElementById("btn-reconfig-settlement");
 
   if (returnLobbyBtn) {
     returnLobbyBtn.classList.toggle("hidden", !isInRoomSession);
+  }
+  if (reconfigBtn) {
+    reconfigBtn.classList.toggle("hidden", isInRoomSession);
   }
 
   const allGroups = _dashGroups();
@@ -2748,9 +2783,11 @@ function resetGame(options = {}) {
   };
 
   document.getElementById("modal-settlement")?.classList.add("hidden");
+  document.getElementById("modal-pindrop-summary")?.classList.add("hidden");
   document.getElementById("modal-opponent-finished")?.classList.add("hidden");
   document.getElementById("modal-rematch-confirm")?.classList.add("hidden");
   document.getElementById("btn-reopen-settlement")?.classList.add("hidden");
+  if (typeof syncModalBodyScrollLock === "function") syncModalBodyScrollLock();
 
   const rematchBtn = document.getElementById("btn-rematch-settlement");
   const rematchText = document.getElementById("rematch-btn-text");

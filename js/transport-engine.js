@@ -1075,7 +1075,8 @@ function updateRoadAndRailwayTileOverlays() {
     const isMissed =
       !hideGuessed &&
       isStationQuizActive &&
-      ((vState.isGameOver && !isUnlocked) || (vState.missedStations && vState.missedStations.has(st.key)));
+      !isUnlocked &&
+      Boolean(vState.missedStations && vState.missedStations.has(st.key));
     const isTarget = isStationQuizActive && vState.targetStationKey === st.key;
 
     let radius = st.stKind === "thsr" ? 4.8 : 3.8;

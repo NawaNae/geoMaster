@@ -201,7 +201,15 @@ function syncScopeWithPackOptions(includeNewlyEnabledMicrostates = false) {
 
 function isCountyRevealed(countyName) {
   const vState = typeof getActiveViewState === "function" ? getActiveViewState() : state;
-  if (_isSingleLayer() || vState.isGameOver || state.difficulty === "casual" || state.difficulty === "hard_suffix") return true;
+  if (_isSingleLayer() || state.difficulty === "casual" || state.difficulty === "hard_suffix") return true;
+  if (vState.isGameOver) {
+    const isLimitedRound = typeof isLimitedQuestionRoundActive === "function" && isLimitedQuestionRoundActive();
+    if (!isLimitedRound) return true;
+    if (vState.unlockedCounties.has(countyName)) return true;
+    return _activeItems().some(
+      (t) => t.countyName === countyName && (vState.unlockedTowns.has(t.id) || (vState.missedTowns && vState.missedTowns.has(t.id)))
+    );
+  }
   if (vState.unlockedCounties.has(countyName)) return true;
   if (state.difficulty === "hard_full") {
     return _activeItems().some((t) => t.countyName === countyName && vState.unlockedTowns.has(t.id));
@@ -2382,7 +2390,24 @@ function pickNextTargetRegion() {
 }
 
 // Exit target/random/satellite mode back to normal free recall mode
+// In N-question mode or Pin-Drop mode, settle the current round instead of dropping into free typing mode
 function exitTargetQuizMode() {
+  if (state.playMode === "pin_drop") {
+    if (state.pinDrop && state.pinDrop.phase === "finished") {
+      if (typeof reopenPinDropSummaryModal === "function") reopenPinDropSummaryModal();
+    } else if (typeof finishPinDropGame === "function") {
+      finishPinDropGame("giveup");
+    }
+    return;
+  }
+  if (typeof isLimitedQuestionRoundActive === "function" && isLimitedQuestionRoundActive()) {
+    if (state.isGameOver) {
+      if (typeof showSettlementModal === "function") showSettlementModal();
+    } else if (typeof finishGame === "function") {
+      finishGame("giveup");
+    }
+    return;
+  }
   stopQuestionCountdown();
   if (state.playMode === "pin_drop" && typeof restorePinDropEnvironment === "function") {
     restorePinDropEnvironment();
@@ -2704,12 +2729,13 @@ function updateTargetBannerUI() {
 
   const hasLimit = Math.max(0, parseInt(state.targetQuestionLimit, 10) || 0) > 0;
   const allowPass = state.allowPass !== false;
+  const isFinishedLimited = Boolean(state.isGameOver && isRandom && hasLimit);
   if (dirGroup) dirGroup.classList.toggle("hidden", !isClick);
-  if (passBtn) passBtn.classList.toggle("hidden", !(isRandom && allowPass));
+  if (passBtn) passBtn.classList.toggle("hidden", !(isRandom && allowPass && !isFinishedLimited));
   if (nextBtn) nextBtn.classList.toggle("hidden", !(isRandom && !hasLimit && !allowPass));
-  if (hintBtn) hintBtn.classList.toggle("hidden", !(state.allowTargetHints || isSatellite));
+  if (hintBtn) hintBtn.classList.toggle("hidden", !(state.allowTargetHints || isSatellite) || isFinishedLimited);
   if (revealBtn) {
-    revealBtn.classList.toggle("hidden", !isSatellite);
+    revealBtn.classList.toggle("hidden", !isSatellite || isFinishedLimited);
     if (isSatellite) {
       revealBtn.textContent = state.satelliteOutlineRevealed ? "👁️ 已顯示輪廓" : "👁️ 顯示輪廓";
       revealBtn.className = state.satelliteOutlineRevealed
@@ -2717,7 +2743,31 @@ function updateTargetBannerUI() {
         : "px-2 py-1 rounded-lg bg-sky-500/20 hover:bg-sky-500/35 text-[11px] font-bold text-sky-200 border border-sky-400/50 transition whitespace-nowrap";
     }
   }
-  if (exitBtn) exitBtn.classList.remove("hidden");
+  if (exitBtn) {
+    if (isRandom && hasLimit) {
+      exitBtn.classList.toggle("hidden", Boolean(state.isGameOver));
+      exitBtn.textContent = "🏁 結束結算";
+      exitBtn.title = "結束本輪 N 題挑戰並計算得分";
+      if (typeof exitBtn.setAttribute === "function") {
+        exitBtn.setAttribute("data-tip", "結束本輪 N 題挑戰並計算得分（不會切回一般模式）");
+      }
+    } else {
+      exitBtn.classList.remove("hidden");
+      exitBtn.textContent = "✕ 退出";
+      exitBtn.title = "退出指定/隨機模式，切回一般自由輸入";
+      if (typeof exitBtn.setAttribute === "function") {
+        exitBtn.setAttribute("data-tip", "退出指定/隨機模式，切回一般自由作答模式");
+      }
+    }
+  }
+
+  if (isFinishedLimited) {
+    const qLen = Array.isArray(state.targetQueue) ? state.targetQueue.length : 0;
+    titleEl.textContent = isSatellite ? `🛰️ 衛星影像猜題 · 本輪結束 (${qLen} 題)` : `🎯 隨機抽題模式 · 本輪結束 (${qLen} 題)`;
+    hintBadge.textContent = "🏁 挑戰已結算";
+    descEl.textContent = "僅顯示本輪已作答／揭曉題目；可點右下角「🏆 查看結算成績單」或下方「重新開始」再玩一局！";
+    return;
+  }
 
   if (features.supportsTransportQuiz && vState.targetStationKey) {
     const targetSt = getActiveQuizStations().find((s) => s.key === vState.targetStationKey);
