@@ -1549,7 +1549,8 @@ const SIMPLE_REGION_MAP = {
 };
 
 const SIMPLE_STATION_MAP = {
-  tpemrt: () => TAIWAN_SELECTABLE_LINES.filter((l) => !l.isHighway && (l.id.startsWith("mrt_tpe_") || l.id === "mrt_ntpc_y")).map((l) => l.id),
+  tpemrt: () => TAIWAN_SELECTABLE_LINES.filter((l) => !l.isHighway && (l.id.startsWith("mrt_tpe_") || l.id.startsWith("mrt_ntpc_"))).map((l) => l.id),
+  tymrt: () => TAIWAN_SELECTABLE_LINES.filter((l) => !l.isHighway && l.id === "mrt_ty_a").map((l) => l.id),
   khmrt: () => TAIWAN_SELECTABLE_LINES.filter((l) => !l.isHighway && l.id.startsWith("mrt_kh_")).map((l) => l.id),
   tcmrt: () => TAIWAN_SELECTABLE_LINES.filter((l) => !l.isHighway && l.id === "mrt_tc_g").map((l) => l.id),
   thsr: () => TAIWAN_SELECTABLE_LINES.filter((l) => !l.isHighway && l.id === "thsr_main").map((l) => l.id),
@@ -1598,7 +1599,7 @@ const STATION_PRESETS = [
   { id: "btn-qst-tpemrt", getLineIds: SIMPLE_STATION_MAP.tpemrt },
   { id: "btn-qst-khmrt", getLineIds: SIMPLE_STATION_MAP.khmrt },
   { id: "btn-qst-tcmrt", getLineIds: SIMPLE_STATION_MAP.tcmrt },
-  { id: "btn-qst-tymrt", getLineIds: () => TAIWAN_SELECTABLE_LINES.filter((l) => !l.isHighway && l.id === "mrt_ty_a").map((l) => l.id) },
+  { id: "btn-qst-tymrt", getLineIds: SIMPLE_STATION_MAP.tymrt },
   { id: "btn-qst-allmrt", getLineIds: () => TAIWAN_SELECTABLE_LINES.filter((l) => !l.isHighway && l.id.startsWith("mrt_")).map((l) => l.id) },
   { id: "btn-qst-lrt", getLineIds: () => TAIWAN_SELECTABLE_LINES.filter((l) => !l.isHighway && l.id.startsWith("lrt_")).map((l) => l.id) },
   { id: "btn-qst-tra-coast", getLineIds: SIMPLE_STATION_MAP.tra_coast },

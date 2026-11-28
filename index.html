@@ -344,7 +344,15 @@
               <div class="relative flex-1 min-w-[140px]">
                 <input
                   id="answer-input"
-                  type="text"
+                  type="search"
+                  autocomplete="off"
+                  autocorrect="off"
+                  autocapitalize="off"
+                  spellcheck="false"
+                  enterkeyhint="send"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
+                  data-form-type="other"
                   placeholder="輸入行政區或車站名稱（注音選字Enter完成後自動判定）"
                   class="w-full bg-slate-900/95 text-white placeholder-slate-400 text-sm sm:text-base font-medium rounded-xl px-3.5 py-2.5 border border-slate-600/80 focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-500/25 transition"
                 />
@@ -354,7 +362,14 @@
               <div id="suffix-container" class="hidden flex items-center gap-1 shrink-0">
                 <input
                   id="suffix-input"
-                  type="text"
+                  type="search"
+                  autocomplete="off"
+                  autocorrect="off"
+                  autocapitalize="off"
+                  spellcheck="false"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
+                  data-form-type="other"
                   maxlength="4"
                   placeholder="後綴"
                   data-tip="預設補上後綴；若主輸入框已打完整名稱（如虎尾鎮、石岡壩）會自動智慧覆蓋"
@@ -1333,28 +1348,20 @@
                   </div>
                 </div>
                 <div id="simple-tw-station-presets" class="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                  <div data-simple-station="tpemrt" data-accent="pink" data-state="off" class="simple-station-btn geo-select-card" data-tip="北捷：淡水信義、板南、松山新店、中和新蘆、文湖、環狀線">
+                  <div data-simple-station="tpemrt" data-accent="pink" data-state="off" class="simple-station-btn geo-select-card" data-tip="雙北捷運：淡水信義、板南、松山新店、中和新蘆、文湖、環狀、三鶯線">
                     <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🚇 北捷</span></button>
                     <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
                   </div>
-                  <div data-simple-station="khmrt" data-accent="pink" data-state="off" class="simple-station-btn geo-select-card" data-tip="高捷：紅線、橘線">
-                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🚇 高捷</span></button>
+                  <div data-simple-station="tymrt" data-accent="pink" data-state="off" class="simple-station-btn geo-select-card" data-tip="桃園機場捷運 (A)">
+                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🚇 桃捷</span></button>
                     <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
                   </div>
                   <div data-simple-station="tcmrt" data-accent="pink" data-state="off" class="simple-station-btn geo-select-card" data-tip="中捷：綠線">
                     <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🚇 中捷</span></button>
                     <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
                   </div>
-                  <div data-simple-station="thsr" data-accent="pink" data-state="off" class="simple-station-btn geo-select-card" data-tip="台灣高鐵 12 座車站">
-                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🚄 高鐵</span></button>
-                    <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
-                  </div>
-                  <div data-simple-station="tra_coast" data-accent="pink" data-state="off" class="simple-station-btn geo-select-card" data-tip="台鐵海岸線（18站）">
-                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🌊 台鐵海線</span></button>
-                    <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
-                  </div>
-                  <div data-simple-station="tra_mountain" data-accent="pink" data-state="off" class="simple-station-btn geo-select-card" data-tip="台鐵臺中線山線（23站）">
-                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">⛰️ 台鐵山線</span></button>
+                  <div data-simple-station="khmrt" data-accent="pink" data-state="off" class="simple-station-btn geo-select-card" data-tip="高捷：紅線、橘線">
+                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🚇 高捷</span></button>
                     <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
                   </div>
                   <div data-simple-station="tra_west_main" data-accent="pink" data-state="off" class="simple-station-btn geo-select-card" data-tip="台鐵西部幹線（縱貫、山海、成追、屏東線）">
@@ -1365,7 +1372,19 @@
                     <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🚆 東部主線</span></button>
                     <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
                   </div>
-                  <div data-simple-station="all_main" data-accent="pink" data-state="off" class="simple-station-btn geo-select-card col-span-2 sm:col-span-4" data-tip="全台高鐵、台鐵、捷運、輕軌（不含纜車、林鐵、糖鐵）">
+                  <div data-simple-station="tra_coast" data-accent="pink" data-state="off" class="simple-station-btn geo-select-card" data-tip="台鐵海岸線（18站）">
+                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🌊 台鐵海線</span></button>
+                    <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
+                  </div>
+                  <div data-simple-station="tra_mountain" data-accent="pink" data-state="off" class="simple-station-btn geo-select-card" data-tip="台鐵臺中線山線（23站）">
+                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">⛰️ 台鐵山線</span></button>
+                    <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
+                  </div>
+                  <div data-simple-station="thsr" data-accent="pink" data-state="off" class="simple-station-btn geo-select-card col-span-2 sm:col-span-1" data-tip="台灣高鐵 12 座車站">
+                    <button type="button" class="geo-solo-btn"><span class="text-xs font-bold">🚄 高鐵</span></button>
+                    <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
+                  </div>
+                  <div data-simple-station="all_main" data-accent="pink" data-state="off" class="simple-station-btn geo-select-card col-span-2 sm:col-span-3" data-tip="全台高鐵、台鐵、捷運、輕軌（不含纜車、林鐵、糖鐵）">
                     <button type="button" class="geo-solo-btn"><span class="text-xs font-bold text-amber-200">✅ 全部主線（不含纜車觀光鐵道）</span></button>
                     <button type="button" class="geo-union-btn" role="checkbox" aria-checked="false"><span class="geo-union-pill">+</span></button>
                   </div>

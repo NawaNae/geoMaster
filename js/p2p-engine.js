@@ -575,11 +575,10 @@ function getConciseStationSummaryText() {
   const labels = [];
 
   const groupDefs = [
-    { label: "北捷", ids: ["mrt_tpe_r", "mrt_tpe_bl", "mrt_tpe_g", "mrt_tpe_o", "mrt_tpe_br", "mrt_ntpc_y"] },
+    { label: "北捷", ids: ["mrt_tpe_r", "mrt_tpe_bl", "mrt_tpe_g", "mrt_tpe_o", "mrt_tpe_br", "mrt_ntpc_y", "mrt_ntpc_lb"] },
     { label: "高捷", ids: ["mrt_kh_r", "mrt_kh_o"] },
     { label: "中捷綠線", ids: ["mrt_tc_g"] },
     { label: "桃捷", ids: ["mrt_ty_a"] },
-    { label: "三鶯線", ids: ["mrt_ntpc_lb"] },
     { label: "高鐵", ids: ["thsr_main"] },
     { label: "台鐵西部主線（山海）", ids: ["tra_west_n", "tra_mountain", "tra_coast", "tra_chengzhui", "tra_west_s", "tra_pingtung"] },
     { label: "台鐵東部主線", ids: ["tra_yilan", "tra_north_link", "tra_taitung", "tra_south_link"] },

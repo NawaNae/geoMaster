@@ -1411,3 +1411,9 @@ body.app-pseudo-fullscreen {
     min-height: 460px;
   }
 }
+
+#answer-input::-webkit-search-cancel-button,
+#suffix-input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
